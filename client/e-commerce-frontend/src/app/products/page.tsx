@@ -1,5 +1,6 @@
 
 import ProductList from "@/src/components/ProductList";
+import { Suspense } from "react";
 
 
 const ProductsPage = async ({
@@ -10,7 +11,9 @@ const ProductsPage = async ({
   
   return (
     <div className="">
+       <Suspense fallback={<div>Loading search...</div>}>
       <ProductList  params="products"/>
+      </Suspense>
     </div>
   );
 };
