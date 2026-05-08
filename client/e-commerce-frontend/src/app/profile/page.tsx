@@ -292,7 +292,7 @@ const formattedProduct = {
   id: item.product.id,
   name: item.product.name,
   price: item.price,
-
+  reference:item.reference,
   // ✅ BOTH REQUIRED
   description: item.product.description || "",
   shortDescription: item.product.description || "",
