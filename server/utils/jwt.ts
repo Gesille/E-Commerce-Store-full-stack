@@ -19,7 +19,7 @@ export const accessTokenOptions: ITokenOptions = {
   maxAge: accessTokenExpire * 60 * 60 * 1000,
   httpOnly: true,
   
-  sameSite: "none",  // ✅ works on IP over HTTP
+  sameSite: "lax",  // ✅ works on IP over HTTP
   secure: true,    // ✅ false for HTTP
 };
 
