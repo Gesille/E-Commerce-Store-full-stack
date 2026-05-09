@@ -12,19 +12,19 @@ export const isAuthenticated = CatchAsyncError(
     // ← يقرأ من header أو cookie
     const authHeader = req.headers.authorization;
   
-    const access_token = authHeader?.startsWith('Bearer ')
+    const ACCESS_TOKEN_SECRET = authHeader?.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
-      : req.cookies.access_token as string;
+      : req.cookies.ACCESS_TOKEN_SECRET as string;
 
-    if (!access_token) {
+    if (!ACCESS_TOKEN_SECRET) {
       return next(new ErrorHandler("Please login to access this resource", 401));
     }
-console.log("ACCESS TOKEN:", access_token);
+console.log("ACCESS TOKEN:", ACCESS_TOKEN_SECRET);
 
     try {
       const decoded = jwt.verify(
-        access_token,
-        process.env.ACCESS_TOKEN as string
+        ACCESS_TOKEN_SECRET,
+        process.env.ACCESS_TOKEN_SECRET as string
       ) as JwtPayload;
 
       const user = await userModel.findById(decoded.id);

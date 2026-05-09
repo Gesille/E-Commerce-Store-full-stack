@@ -107,11 +107,11 @@ userSchema.pre<IUser>("save", async function (next) {
 
 //sign access token
 userSchema.methods.SignAccessToken = function () {
-  const accessTokenSecret = process.env.ACCESS_TOKEN;
+  const accessTokenSecret = process.env.ACCESS_TOKEN_SECRET;
   if (!accessTokenSecret) {
-    throw new Error("ACCESS_TOKEN is not defined");
+    throw new Error("ACCESS_TOKEN_SECRET is not defined");
   }
-  return jwt.sign({ id: this._id }, accessTokenSecret, { expiresIn: "5m" });
+  return jwt.sign({ id: this._id }, accessTokenSecret, { expiresIn: "1h" });
 };
 
 //signrefresh token

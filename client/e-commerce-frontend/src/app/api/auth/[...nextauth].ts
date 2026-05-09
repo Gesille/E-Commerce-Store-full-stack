@@ -25,8 +25,8 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
       }
       // ✅ persist provider access token for social logins
-      if (account?.access_token) {
-        token.accessToken = account.access_token;
+      if (account?.ACCESS_TOKEN_SECRET) {
+        token.accessToken = account.ACCESS_TOKEN_SECRET;
       }
       return token;
     },

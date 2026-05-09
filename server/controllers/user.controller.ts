@@ -217,7 +217,7 @@ export const loginUser = CatchAsyncError(
 export const logoutUser = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.cookie("access_token", "", { maxAge: 1 });
+      res.cookie("ACCESS_TOKEN_SECRET", "", { maxAge: 1 });
       res.cookie("refresh_token", "", { maxAge: 1 });
       const userId = req.user?._id || "";
       
@@ -251,7 +251,7 @@ export const updateAccessToken = CatchAsyncError(
 
       const accessToken = jwt.sign(
         { id: user._id },
-        process.env.ACCESS_TOKEN as string,
+        process.env.ACCESS_TOKEN_SECRET as string,
         { expiresIn: "1h" }
       );
 
@@ -262,7 +262,7 @@ export const updateAccessToken = CatchAsyncError(
       );
 
       // ✅ set both cookies again
-      res.cookie("access_token", accessToken, accessTokenOptions);
+      res.cookie("ACCESS_TOKEN_SECRET", accessToken, accessTokenOptions);
       res.cookie("refresh_token", refreshToken, refreshTokenOptions);
 console.log("🔄 refresh_token:", req.cookies.refresh_token);
 console.log("🍪 All cookies:", req.cookies);

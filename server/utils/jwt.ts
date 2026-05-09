@@ -11,7 +11,7 @@ interface ITokenOptions {
   secure?: boolean;
 }
 
-const accessTokenExpire = parseInt(process.env.ACCESS_TOKEN_EXPIRE || '300', 10);
+const accessTokenExpire = parseInt(process.env.ACCESS_TOKEN_SECRET_EXPIRE || '300', 10);
 const refreshTokenExpire = parseInt(process.env.REFRESH_TOKEN_EXPIRE || '1200', 10);
 
 export const accessTokenOptions: ITokenOptions = {
@@ -41,7 +41,7 @@ export const sendToken = (user: IUser, statusCode: number, res: Response) => {
   }
 
   // ✅ both tokens in cookies like before
-  res.cookie("access_token", accessToken, accessTokenOptions);
+  res.cookie("ACCESS_TOKEN_SECRET", accessToken, accessTokenOptions);
   res.cookie("refresh_token", refreshToken, refreshTokenOptions);
 
   res.status(statusCode).json({

@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 import { startOrderExpiryJob } from "./cron/orderExpiry.job.js";
 
 dotenv.config();
-console.log(process.env.ACCESS_TOKEN); 
+console.log(process.env.ACCESS_TOKEN_SECRET); 
 console.log(process.env.REFRESH_TOKEN);
 const server = http.createServer(app);
 
