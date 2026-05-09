@@ -5,7 +5,7 @@ import { useGetProductsQuery } from "@/redux/product/productApi";
 import ProductCard from "@/src/components/ProductCard";
 import { useSearchParams } from "next/navigation";
 
-export default function SearchPage() {
+export default function SearchClient() {
   const params = useSearchParams();
   const query = params.get("q")?.toLowerCase() || "";
 
