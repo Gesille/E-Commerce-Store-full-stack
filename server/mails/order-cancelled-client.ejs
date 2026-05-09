@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Order Cancelled</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background-color: #0a0a0a; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
+    .wrapper { max-width: 620px; margin: 0 auto; padding: 40px 16px; }
+    .header { text-align: center; padding: 48px 32px 32px; background: linear-gradient(135deg, #1a1a1a 0%, #111111 100%); border-radius: 24px 24px 0 0; border-top: 3px solid #ef4444; position: relative; overflow: hidden; }
+    .header::before { content: ""; position: absolute; top: -60px; left: 50%; transform: translateX(-50%); width: 200px; height: 200px; background: radial-gradient(circle, #ef444422 0%, transparent 70%); }
+    .logo-circle { width: 72px; height: 72px; background: linear-gradient(135deg, #ef4444, #f87171); border-radius: 50%; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: 0 0 30px #ef444444; }
+    .header h1 { font-size: 26px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px; }
+    .header p { color: #888888; margin-top: 8px; font-size: 14px; }
+    .red-divider { height: 2px; background: linear-gradient(90deg, transparent, #ef4444, transparent); margin: 0; }
+    .body { background-color: #141414; padding: 32px; }
+    .status-badge { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #2e1a1a, #241616); border: 1px solid #ef444444; border-radius: 999px; padding: 8px 20px; margin-bottom: 28px; }
+    .status-dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; box-shadow: 0 0 8px #ef4444; }
+    .status-text { color: #ef4444; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .meta-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px; padding: 20px 24px; margin-bottom: 20px; }
+    .meta-card-title { color: #ef4444; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
+    .meta-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #222222; }
+    .meta-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .meta-label { color: #555555; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .meta-value { color: #e0e0e0; font-size: 14px; font-weight: 600; }
+    .items-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px; padding: 20px 24px; margin-bottom: 20px; }
+    .items-card-title { color: #ef4444; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { color: #444444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 0 0 12px; text-align: left; border-bottom: 1px solid #2a2a2a; }
+    thead th:last-child { text-align: right; }
+    tbody td { padding: 14px 0; border-bottom: 1px solid #1e1e1e; color: #cccccc; font-size: 14px; vertical-align: middle; }
+    tbody td:last-child { text-align: right; color: #e0e0e0; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: none; }
+    .variant-tag { display: inline-block; background: #1e1e1e; border: 1px solid #2a2a2a; border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #666; }
+    .total-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: linear-gradient(135deg, #1e0f0f, #1a0d0d); border: 1px solid #ef444433; border-radius: 12px; margin-top: 4px; }
+    .total-label { color: #ef4444; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .total-amount { color: #f87171; font-size: 22px; font-weight: 800; }
+    .notice { background: #1a1a1a; border: 1px solid #ef444433; border-radius: 12px; padding: 16px 20px; margin-top: 20px; text-align: center; }
+    .notice p { color: #888888; font-size: 13px; line-height: 1.6; }
+    .notice strong { color: #ef4444; }
+    .footer { background: #0f0f0f; border-radius: 0 0 24px 24px; padding: 28px 32px; text-align: center; border-top: 1px solid #1e1e1e; }
+    .footer p { color: #444444; font-size: 12px; line-height: 1.8; }
+    .footer a { color: #ef4444; text-decoration: none; }
+    .footer .brand { color: #333333; font-size: 11px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="logo-circle">✕</div>
+      <h1>Order Cancelled</h1>
+      <p>Your order has been cancelled. We're sorry to see you go.</p>
+    </div>
+
+    <div class="red-divider"></div>
+
+    <!-- BODY -->
+    <div class="body">
+
+      <!-- STATUS -->
+      <div style="text-align:center; margin-bottom: 24px;">
+        <div class="status-badge">
+          <div class="status-dot"></div>
+          <span class="status-text">Order Cancelled</span>
+        </div>
+      </div>
+
+      <!-- ORDER META -->
+      <div class="meta-card">
+        <div class="meta-card-title">Order Details</div>
+        <div class="meta-row">
+          <span class="meta-label">Order ID</span>
+          <span class="meta-value">#<%= order._id %></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Date</span>
+          <span class="meta-value"><%= order.date %></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Status</span>
+          <span class="meta-value" style="color:#ef4444;">✕ Cancelled</span>
+        </div>
+      </div>
+
+      <!-- ITEMS -->
+      <div class="items-card">
+        <div class="items-card-title">Cancelled Items</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th style="text-align:center;">Qty</th>
+              <th>Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% order.items.forEach(function(item) { %>
+            <tr>
+             <td>
+  <span style="font-weight:600; color:#cccccc;"><%= item.name || 'Product #' + item.productId %></span>
+  <% if (item.reference) { %>
+    <br/><span style="font-size:11px; color:#555;">SKU: <%= item.reference %></span>
+  <% } %>
+  <br/>
+  <% if (item.variantInfo && typeof item.variantInfo === 'object') { %>
+    <% Object.keys(item.variantInfo).forEach(function(key) { %>
+      <span class="variant-tag"><%= key %>: <%= item.variantInfo[key] %></span>
+    <% }) %>
+  <% } %>
+</td>
+              <td style="text-align:center; color:#888;">× <%= item.quantity %></td>
+              <td>$<%= Number(item.price).toFixed(2) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- TOTAL -->
+      <div class="total-row">
+        <span class="total-label">Refund Amount</span>
+        <span class="total-amount">$<%= Number(order.total).toFixed(2) %></span>
+      </div>
+
+      <!-- NOTICE -->
+      <div class="notice">
+        <p>If you have any questions about your cancellation, please don't hesitate to contact us.<br/>
+        <strong>No charges have been made</strong> for this order.</p>
+      </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <p>Need help? Contact us at <a href="mailto:support@chefworld.com">support@chefworld.com</a></p>
+      <p class="brand">&copy; 2025 Chef's World. All rights reserved.</p>
+    </div>
+
+  </div>
+</body>
+</html>

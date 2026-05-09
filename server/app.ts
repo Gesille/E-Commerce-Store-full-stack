@@ -1,0 +1,88 @@
+import express, { NextFunction, Request, Response } from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
+import { rateLimit } from "express-rate-limit";
+
+dotenv.config();
+
+import userRouter from "./routes/user.route.js";
+import productRouter from "./routes/product.route.js";
+import orderRouter from "./routes/order.route.js";
+import addressRouter from "./routes/address.route.js";
+
+import { ErrorMiddleware } from "./middleware/error.js";
+import categoryRouter from "./routes/categories.route.js";
+import contactRouter from "./routes/contact.route.js";
+import reportRouter from "./routes/reportRoutes.js";
+
+
+export const app = express();
+
+// ======================
+// 🔥 GLOBAL MIDDLEWARES
+// ======================
+
+// body parser
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// cookies
+app.use(cookieParser());
+
+// cors
+app.use(
+  cors({
+    origin: [
+      "https://e-commerce-store-full-stack-dvdl.vercel.app",
+      "https://e-commerce-store-full-stack-duuo.vercel.app"
+    ],
+    credentials: true,
+  })
+);
+
+// rate limit
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+});
+app.use(limiter);
+app.set("trust proxy", 1);
+// ======================
+// ROUTES
+// ======================
+
+app.use("/api/v1", userRouter);
+app.use("/api/v1", productRouter);
+app.use("/api/v1", orderRouter);
+app.use("/api/v1", addressRouter);
+app.use("/api/v1",categoryRouter);
+app.use("/api/v1",contactRouter);
+app.use("/api/v1",reportRouter);
+
+
+
+// test route
+app.get("/test", (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: "API is working!",
+  });
+});
+
+// ======================
+// ❌ NOT FOUND ROUTE
+// ======================
+
+app.all("*", (req: Request, res: Response, next: NextFunction) => {
+  const err = new Error(`Route ${req.originalUrl} not found`) as any;
+  err.statusCode = 404;
+  next(err);
+});
+
+// ======================
+// ❌ ERROR MIDDLEWARE
+// ======================
+
+app.use(ErrorMiddleware);
+

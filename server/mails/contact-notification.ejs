@@ -1,0 +1,28 @@
+<!-- views/contact-notification.ejs -->
+<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+  <h2 style="color: #e11d48;">New Contact Message 📬</h2>
+  
+  <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+    <tr>
+      <td style="padding: 8px; font-weight: bold; width: 80px;">Name:</td>
+      <td style="padding: 8px;"><%= name %></td>
+    </tr>
+    <tr style="background: #f9f9f9;">
+      <td style="padding: 8px; font-weight: bold;">Email:</td>
+      <td style="padding: 8px;"><%= email %></td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; font-weight: bold;">Phone:</td>
+      <td style="padding: 8px;"><%= phone || "Not provided" %></td>
+    </tr>
+  </table>
+
+  <div style="background: #f4f4f4; padding: 16px; border-radius: 8px; margin-top: 16px;">
+    <p style="font-weight: bold; margin: 0 0 8px;">Message:</p>
+    <p style="margin: 0; color: #444;"><%= message %></p>
+  </div>
+
+  <p style="margin-top: 16px; font-size: 12px; color: #888;">
+    Reply to this email to respond directly to <%= name %> at <%= email %>
+  </p>
+</div>
