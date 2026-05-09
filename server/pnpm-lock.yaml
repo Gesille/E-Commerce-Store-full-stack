@@ -99,8 +99,8 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       nodemailer:
-        specifier: ^6.9.15
-        version: 6.10.1
+        specifier: ^8.0.7
+        version: 8.0.7
       openai:
         specifier: ^4.79.1
         version: 4.104.0(ws@8.20.0)(zod@3.25.76)
@@ -108,8 +108,8 @@ importers:
         specifier: ^0.3.7
         version: 0.3.7
       puppeteer:
-        specifier: ^24.42.0
-        version: 24.42.0(typescript@5.9.3)
+        specifier: ^24.43.0
+        version: 24.43.0(typescript@5.9.3)
       slugify:
         specifier: ^1.6.6
         version: 1.6.9
@@ -412,8 +412,8 @@ packages:
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
 
-  '@puppeteer/browsers@2.13.0':
-    resolution: {integrity: sha512-46BZJYJjc/WwmKjsvDFykHtXrtomsCIrwYQPOP7VfMJoZY2bsDF9oROBABR3paDjDcmkUye1Pb1BqdcdiipaWA==}
+  '@puppeteer/browsers@2.13.1':
+    resolution: {integrity: sha512-zmS4RTK9fbrc++WlAJhxYbfz3IjDeOmkK/CwwbLmk7ydfS9e2CiEeRJHEPvjDVElO/bwXbidwGA37Bsm6LzCnQ==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -960,8 +960,8 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  devtools-protocol@0.0.1595872:
-    resolution: {integrity: sha512-kRfgp8vWVjBu/fbYCiVFiOqsCk3CrMKEo3WbgGT2NXK2dG7vawWPBljixajVgGK9II8rDO9G0oD0zLt3I1daRg==}
+  devtools-protocol@0.0.1608973:
+    resolution: {integrity: sha512-Tpm17fxYzt+J7VrGdc1k8YdRqS3YV7se/M6KeemEqvUbq/n7At1rWVuXMxQgpWkdwSdIEKYbU//Bve+Shm4YNQ==}
 
   dfa@1.2.0:
     resolution: {integrity: sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==}
@@ -1611,8 +1611,8 @@ packages:
       encoding:
         optional: true
 
-  nodemailer@6.10.1:
-    resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+  nodemailer@8.0.7:
+    resolution: {integrity: sha512-pkjE4mkBzQjdJT4/UmlKl3pX0rC9fZmjh7c6C9o7lv66Ac6w9WCnzPzhbPNxwZAzlF4mdq4CSWB5+FbK6FWCow==}
     engines: {node: '>=6.0.0'}
 
   normalize-path@3.0.0:
@@ -1741,12 +1741,12 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  puppeteer-core@24.42.0:
-    resolution: {integrity: sha512-T4zXokk/izH01fYPhyyev1A4piWiOKrYq7CUFpdoYQxmOnXoV6YjUabmfIjCYkNspSoAXIxRid3Tw+Vg0fthYg==}
+  puppeteer-core@24.43.0:
+    resolution: {integrity: sha512-cCRNXsUlhyPoKDz6+TiSpfZpRS3mD6Y1YFKhkdr6ik6TMfuJb7fAtXq9ThUFc4sphxObDk3BuAvdxc1Y6YOnqQ==}
     engines: {node: '>=18'}
 
-  puppeteer@24.42.0:
-    resolution: {integrity: sha512-94MoPfFp2eY3eYIMdINkez4IOP5TMHntlZbVx06fHlQTtiQiYgaY0L2Zzfod8PVUkPqP7m3Qlre2v8YS8cudPA==}
+  puppeteer@24.43.0:
+    resolution: {integrity: sha512-DRnMFz+J3s4lFUQcjqKl0/7h0jzlCZuUFU9lNjtKrnMl5WI1RwCaIItpHVu9empuPyUreYueN0sUW3/pnfdqsg==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -2419,7 +2419,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@puppeteer/browsers@2.13.0':
+  '@puppeteer/browsers@2.13.1':
     dependencies:
       debug: 4.4.3
       extract-zip: 2.0.1
@@ -2875,9 +2875,9 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  chromium-bidi@14.0.0(devtools-protocol@0.0.1595872):
+  chromium-bidi@14.0.0(devtools-protocol@0.0.1608973):
     dependencies:
-      devtools-protocol: 0.0.1595872
+      devtools-protocol: 0.0.1608973
       mitt: 3.0.1
       zod: 3.25.76
 
@@ -2995,7 +2995,7 @@ snapshots:
   detect-libc@2.1.2:
     optional: true
 
-  devtools-protocol@0.0.1595872: {}
+  devtools-protocol@0.0.1608973: {}
 
   dfa@1.2.0: {}
 
@@ -3669,7 +3669,7 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  nodemailer@6.10.1: {}
+  nodemailer@8.0.7: {}
 
   normalize-path@3.0.0: {}
 
@@ -3810,12 +3810,12 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  puppeteer-core@24.42.0:
+  puppeteer-core@24.43.0:
     dependencies:
-      '@puppeteer/browsers': 2.13.0
-      chromium-bidi: 14.0.0(devtools-protocol@0.0.1595872)
+      '@puppeteer/browsers': 2.13.1
+      chromium-bidi: 14.0.0(devtools-protocol@0.0.1608973)
       debug: 4.4.3
-      devtools-protocol: 0.0.1595872
+      devtools-protocol: 0.0.1608973
       typed-query-selector: 2.12.2
       webdriver-bidi-protocol: 0.4.1
       ws: 8.20.0
@@ -3827,13 +3827,13 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  puppeteer@24.42.0(typescript@5.9.3):
+  puppeteer@24.43.0(typescript@5.9.3):
     dependencies:
-      '@puppeteer/browsers': 2.13.0
-      chromium-bidi: 14.0.0(devtools-protocol@0.0.1595872)
+      '@puppeteer/browsers': 2.13.1
+      chromium-bidi: 14.0.0(devtools-protocol@0.0.1608973)
       cosmiconfig: 9.0.1(typescript@5.9.3)
-      devtools-protocol: 0.0.1595872
-      puppeteer-core: 24.42.0
+      devtools-protocol: 0.0.1608973
+      puppeteer-core: 24.43.0
       typed-query-selector: 2.12.2
     transitivePeerDependencies:
       - bare-abort-controller
