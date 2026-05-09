@@ -16,7 +16,7 @@ export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { items, shippingAddress } = req.body;
     const user = req.user;
-
+if (!shippingAddress) return next(new ErrorHandler("Shipping address is required", 400));
     if (!items?.length) return next(new ErrorHandler("Cart is empty", 400));
 
     let total = 0;

@@ -86,23 +86,23 @@
   <h4>Shipping Address</h4>
   <div class="info-row">
     <span class="label">Name</span>
-    <span class="value"><%= order.shippingAddress.name %></span>
+    <span class="value"><%= order.shippingAddress.name|| 'N/A'  %></span>
   </div>
   <div class="info-row">
     <span class="label">Email</span>
-    <span class="value"><%= order.shippingAddress.email %></span>
+    <span class="value"><%= order.shippingAddress.email || 'N/A' %></span>
   </div>
   <div class="info-row">
     <span class="label">Phone</span>
-    <span class="value"><%= order.shippingAddress.phone %></span>
+    <span class="value"><%= order.shippingAddress.phone || 'N/A' %></span>
   </div>
   <div class="info-row">
     <span class="label">City</span>
-    <span class="value"><%= order.shippingAddress.city %></span>
+    <span class="value"><%= order.shippingAddress.city || 'N/A' %></span>
   </div>
   <div class="info-row">
     <span class="label">Address</span>
-    <span class="value"><%= order.shippingAddress.address %></span>
+    <span class="value"><%= order.shippingAddress.address || 'N/A' %></span>
   </div>
 </div>
 
