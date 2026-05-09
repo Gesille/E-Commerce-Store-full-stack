@@ -264,7 +264,8 @@ export const updateAccessToken = CatchAsyncError(
       // ✅ set both cookies again
       res.cookie("access_token", accessToken, accessTokenOptions);
       res.cookie("refresh_token", refreshToken, refreshTokenOptions);
-
+console.log("🔄 refresh_token:", req.cookies.refresh_token);
+console.log("🍪 All cookies:", req.cookies);
       req.user = user; // ✅ set user so next middleware works
 
       next(); // ✅ IMPORTANT — continue to the actual route handler
