@@ -5,9 +5,15 @@ import { updateAccessToken } from "../controllers/user.controller.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import userModel from "../models/user.model.js";
 
+
 export const isAuthenticated = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const access_token = req.cookies.access_token as string;
+    
+    // ← يقرأ من header أو cookie
+    const authHeader = req.headers.authorization;
+    const access_token = authHeader?.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : req.cookies.access_token as string;
 
     if (!access_token) {
       return next(new ErrorHandler("Please login to access this resource", 401));
@@ -26,7 +32,6 @@ export const isAuthenticated = CatchAsyncError(
       next();
     } catch (error: any) {
       if (error.name === "TokenExpiredError") {
-        // ✅ auto refresh when access token expires
         return updateAccessToken(req, res, next);
       }
       return next(new ErrorHandler("Invalid access token", 401));
