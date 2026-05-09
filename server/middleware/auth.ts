@@ -19,7 +19,8 @@ export const isAuthenticated = CatchAsyncError(
     if (!access_token) {
       return next(new ErrorHandler("Please login to access this resource", 401));
     }
-console.log(req.cookies);
+console.log("ACCESS TOKEN:", access_token);
+console.log("ACCESS SECRET:", process.env.ACCESS_TOKEN_SECRET);
     try {
       const decoded = jwt.verify(
         access_token,
@@ -34,7 +35,9 @@ console.log(req.cookies);
     } catch (error: any) {
       if (error.name === "TokenExpiredError") {
         return updateAccessToken(req, res, next);
+        
       }
+      console.log(error);
       return next(new ErrorHandler("Invalid access token", 401));
     }
   }
