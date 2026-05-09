@@ -34,7 +34,9 @@ app.use(cookieParser());
 app.use(
   cors({
     origin: [
-      "https://e-commerce-store-full-stack-dvdl.vercel.app",
+     "https://e-commerce-store-full-stack-oear.vercel.app",
+      "https://e-commerce-store-full-stack.vercel.app",
+      "https://e-commerce-store-frontend-ten.vercel.app",
       "https://e-commerce-store-full-stack-duuo.vercel.app"
     ],
     credentials: true,
