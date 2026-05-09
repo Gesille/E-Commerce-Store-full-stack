@@ -4,6 +4,7 @@ import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import sendMail from "../utils/sendMail.js";
 import MessageModel from "../models/message.model.js";
+import userModel from "../models/user.model.js";
 
 // anyone can send a message
 export const sendContactMessage = CatchAsyncError(
@@ -17,10 +18,12 @@ export const sendContactMessage = CatchAsyncError(
     // 1️⃣ save to DB
     await MessageModel.create({ name, email, phone, message });
 
-    // 2️⃣ notify manager
+   
+const adminUser = await userModel.findOne({ role: "admin" });
+if (!adminUser) return next(new ErrorHandler("No admin found", 404));
     try {
       await sendMail({
-        email: process.env.MANAGER_EMAIL!,
+        email: adminUser.email,
         subject: `New Contact Message from ${name}`,
         template: "contact-notification.ejs",
         data: { name, email, phone, message },

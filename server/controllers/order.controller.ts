@@ -58,9 +58,10 @@ const itemsWithNames = await Promise.all(
     };
   })
 );
-
+const adminUser = await userModel.findOne({ role: "admin" });
+if (!adminUser) return next(new ErrorHandler("No admin found", 404));
     await sendMail({
-      email: process.env.MANAGER_EMAIL!,
+      email: adminUser.email,
       subject: `🔔 New Order #${order._id}`,
       template: "manager-order.ejs",
        data: {
@@ -969,8 +970,10 @@ export const managerCreateOrder = CatchAsyncError(
 
     const itemsWithNames = order.items.map((item: any) => item.toObject());
 
+const adminUser = await userModel.findOne({ role: "admin" });
+if (!adminUser) return next(new ErrorHandler("No admin found", 404));
     await sendMail({
-      email: process.env.MANAGER_EMAIL!,
+      email: adminUser.email,
       subject: `🔔 New Order #${order._id} (Created by Manager)`,
       template: "manager-order.ejs",
       data: {
