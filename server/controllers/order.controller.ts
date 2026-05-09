@@ -16,7 +16,9 @@ export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { items, shippingAddress } = req.body;
     const user = req.user;
-if (!shippingAddress) return next(new ErrorHandler("Shipping address is required", 400));
+
+    if (!shippingAddress)
+      return next(new ErrorHandler("Shipping address is required", 400));
     if (!items?.length) return next(new ErrorHandler("Cart is empty", 400));
 
     let total = 0;
@@ -31,7 +33,6 @@ if (!shippingAddress) return next(new ErrorHandler("Shipping address is required
       shippingAddress,
       total,
       status: "pending",
-      
     });
 
     await userModel.findByIdAndUpdate(user?._id, {
@@ -39,51 +40,58 @@ if (!shippingAddress) return next(new ErrorHandler("Shipping address is required
     });
 
     const baseUrl = process.env.BACKEND_URL?.replace(/\/$/, "");
-
     const confirmUrl = `${baseUrl}/api/v1/manager-confirm/${order._id}`;
     const cancelUrl = `${baseUrl}/api/v1/manager-cancel/${order._id}`;
-// After creating the order, fetch product names from Odoo
-const itemsWithNames = await Promise.all(
-  order.items.map(async (item: any) => {
-    const product = await odooRequest(
-      "product.template",
-      "search_read",
-      [[["id", "=", item.productId]]],
-      { fields: ["name","default_code"], limit: 1 }
+
+    const itemsWithNames = await Promise.all(
+      order.items.map(async (item: any) => {
+        const product = await odooRequest(
+          "product.template",
+          "search_read",
+          [[["id", "=", item.productId]]],
+          { fields: ["name", "default_code"], limit: 1 }
+        );
+        return {
+          ...item.toObject(),
+          name: product[0]?.name || `Product #${item.productId}`,
+          reference: product[0]?.default_code || null,
+        };
+      })
     );
-    return {
-      ...item.toObject(),
-      name: product[0]?.name || `Product #${item.productId}`,
-      reference: product[0]?.default_code || null,
-    };
-  })
-);
-const adminUser = await userModel.findOne({ role: "admin" });
-if (!adminUser) return next(new ErrorHandler("No admin found", 404));
-    await sendMail({
-      email: adminUser.email,
-      subject: `🔔 New Order #${order._id}`,
-      template: "manager-order.ejs",
-       data: {
-    order: {
-      ...order.toObject(),
-      date: new Date().toLocaleDateString(),
-      customerName: user?.name,
-      customerEmail: user?.email,
-      items:itemsWithNames, 
-      total: order.total,
-    },
-    confirmUrl,
-    cancelUrl,
-  },
-    });
+
+    // ✅ كل الـ admins
+    const adminUsers = await userModel.find({ role: "admin" });
+    if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
+
+    // ✅ أرسل لكلهم بالتوازي
+    await Promise.all(
+      adminUsers.map((adminUser) =>
+        sendMail({
+          email: adminUser.email,
+          subject: `🔔 New Order #${order._id}`,
+          template: "manager-order.ejs",
+          data: {
+            order: {
+              ...order.toObject(),
+              date: new Date().toLocaleDateString(),
+              customerName: user?.name,
+              customerEmail: user?.email,
+              items: itemsWithNames,
+              total: order.total,
+            },
+            confirmUrl,
+            cancelUrl,
+          },
+        })
+      )
+    );
 
     res.status(201).json({
       success: true,
       message: "Order saved in MongoDB. Waiting for manager approval.",
       order,
     });
-  },
+  }
 );
 
 // ===============================
@@ -99,9 +107,9 @@ export const managerConfirmOrder = CatchAsyncError(
 
     const user = req.user;
 
-if (!user) {
-  return next(new ErrorHandler("Not authenticated", 401));
-}
+    if (!user) {
+      return next(new ErrorHandler("Not authenticated", 401));
+    }
     const { orderId } = req.params;
 
     const order = await Order.findById(orderId);
@@ -221,35 +229,35 @@ if (!user) {
       // 6. Email user
       const user = await userModel.findById(order.userId);
 
-    // Before sendMail to client
-const itemsWithNames = await Promise.all(
-  order.items.map(async (item: any) => {
-    const product = await odooRequest(
-      "product.template",
-      "search_read",
-      [[["id", "=", item.productId]]],
-      { fields: ["name","default_code"], limit: 1 }
-    );
-    return {
-      ...item.toObject(),
-      name: product[0]?.name || `Product #${item.productId}`,
-      reference: product[0]?.default_code || null,
-    };
-  })
-);
+      // Before sendMail to client
+      const itemsWithNames = await Promise.all(
+        order.items.map(async (item: any) => {
+          const product = await odooRequest(
+            "product.template",
+            "search_read",
+            [[["id", "=", item.productId]]],
+            { fields: ["name", "default_code"], limit: 1 },
+          );
+          return {
+            ...item.toObject(),
+            name: product[0]?.name || `Product #${item.productId}`,
+            reference: product[0]?.default_code || null,
+          };
+        }),
+      );
 
-await sendMail({
-  email: user?.email!,
-  subject: "✅ Order Confirmed",
-  template: "order-confirmed-client.ejs",
-  data: {
-    order: {
-      ...order.toObject(),
-      date: new Date().toLocaleDateString(),
-      items: itemsWithNames, // ✅ items now have name
-    },
-  },
-});
+      await sendMail({
+        email: user?.email!,
+        subject: "✅ Order Confirmed",
+        template: "order-confirmed-client.ejs",
+        data: {
+          order: {
+            ...order.toObject(),
+            date: new Date().toLocaleDateString(),
+            items: itemsWithNames, // ✅ items now have name
+          },
+        },
+      });
 
       return res.send(`
         <div style="text-align:center;padding:40px">
@@ -297,14 +305,14 @@ export const managerCancelOrder = CatchAsyncError(
           "product.template",
           "search_read",
           [[["id", "=", item.productId]]],
-          { fields: ["name"], limit: 1 }
+          { fields: ["name"], limit: 1 },
         );
 
         return {
           ...item.toObject(),
           name: product[0]?.name || `Product #${item.productId}`,
         };
-      })
+      }),
     );
 
     // 📧 send email BEFORE deleting
@@ -338,11 +346,10 @@ export const managerCancelOrder = CatchAsyncError(
         </p>
       </div>
     `);
-  }
+  },
 );
 
-
-// return product 
+// return product
 export const returnOrderItems = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     console.log("📥 RETURN REQUEST BODY:", req.body);
@@ -363,7 +370,7 @@ export const returnOrderItems = CatchAsyncError(
       "stock.picking",
       "search_read",
       [[["sale_id", "=", saleOrderId]]],
-      { fields: ["id", "name"] }
+      { fields: ["id", "name"] },
     );
 
     console.log("📦 Pickings found:", pickings);
@@ -378,11 +385,9 @@ export const returnOrderItems = CatchAsyncError(
     console.log("📦 Picking ID:", pickingId);
 
     // 2. CREATE RETURN WIZARD
-    const returnWizardId = await odooRequest(
-      "stock.return.picking",
-      "create",
-      [{ picking_id: pickingId }]
-    );
+    const returnWizardId = await odooRequest("stock.return.picking", "create", [
+      { picking_id: pickingId },
+    ]);
 
     console.log("🔄 Return Wizard ID:", returnWizardId);
 
@@ -393,7 +398,7 @@ export const returnOrderItems = CatchAsyncError(
       [[["wizard_id", "=", returnWizardId]]],
       {
         fields: ["id", "product_id", "quantity"],
-      }
+      },
     );
 
     console.log("📦 Raw return lines:", lines);
@@ -405,7 +410,7 @@ export const returnOrderItems = CatchAsyncError(
           "product.product",
           "search_read",
           [[["id", "=", line.product_id[0]]]],
-          { fields: ["id", "name"], limit: 1 }
+          { fields: ["id", "name"], limit: 1 },
         );
 
         const name = product?.[0]?.name;
@@ -419,7 +424,7 @@ export const returnOrderItems = CatchAsyncError(
           ...line,
           productName: name,
         };
-      })
+      }),
     );
 
     // 5. MATCH BY NAME (YOUR REQUEST)
@@ -428,7 +433,7 @@ export const returnOrderItems = CatchAsyncError(
 
       const line = enrichedLines.find(
         (l: any) =>
-          l.productName?.toLowerCase() === item.productName?.toLowerCase()
+          l.productName?.toLowerCase() === item.productName?.toLowerCase(),
       );
 
       if (!line) {
@@ -450,7 +455,7 @@ export const returnOrderItems = CatchAsyncError(
     const result = await odooRequest(
       "stock.return.picking",
       "action_create_returns",
-      [[returnWizardId]]
+      [[returnWizardId]],
     );
 
     console.log("✅ RETURN RESULT:", result);
@@ -467,7 +472,7 @@ export const returnOrderItems = CatchAsyncError(
         })),
       },
     });
-  }
+  },
 );
 // controllers/order.controller.ts — add this function
 export const getAdminOrders = CatchAsyncError(
@@ -479,24 +484,24 @@ export const getAdminOrders = CatchAsyncError(
         [[]], // all orders
         {
           fields: [
-            "name",           // S00051
-            "date_order",     // May 3, 2:49 PM
-            "partner_id",     // Giselle Georges
-            "amount_total",   // 1.15$
-            "state",          // draft/sale/done/cancel
-            "user_id",        // salesperson
-            "origin",         // WEB_ORDER_xxx if from your store
+            "name", // S00051
+            "date_order", // May 3, 2:49 PM
+            "partner_id", // Giselle Georges
+            "amount_total", // 1.15$
+            "state", // draft/sale/done/cancel
+            "user_id", // salesperson
+            "origin", // WEB_ORDER_xxx if from your store
           ],
           limit: 100,
           order: "date_order desc",
-        }
+        },
       );
 
       res.status(200).json({ success: true, orders });
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
 // controllers/order.controller.ts — add this
 export const getAdminOrderDetail = CatchAsyncError(
@@ -511,12 +516,20 @@ export const getAdminOrderDetail = CatchAsyncError(
         [[["id", "=", Number(id)]]],
         {
           fields: [
-            "name", "date_order", "partner_id", "amount_total",
-            "amount_tax", "amount_untaxed", "state", "user_id",
-            "origin", "note", "order_line",
+            "name",
+            "date_order",
+            "partner_id",
+            "amount_total",
+            "amount_tax",
+            "amount_untaxed",
+            "state",
+            "user_id",
+            "origin",
+            "note",
+            "order_line",
           ],
           limit: 1,
-        }
+        },
       );
 
       if (!orders.length) {
@@ -531,14 +544,13 @@ export const getAdminOrderDetail = CatchAsyncError(
         [[["order_id", "=", Number(id)]]],
         {
           fields: [
-            "product_id",       
-            "name",            
-            "product_uom_qty", 
-            "price_unit",    
-            "price_subtotal",  
-                   
+            "product_id",
+            "name",
+            "product_uom_qty",
+            "price_unit",
+            "price_subtotal",
           ],
-        }
+        },
       );
 
       res.status(200).json({
@@ -548,7 +560,7 @@ export const getAdminOrderDetail = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
 // track order
 export const trackOrder = CatchAsyncError(
@@ -655,7 +667,6 @@ export const exportInventory = CatchAsyncError(
 
     if (format === "pdf") {
       try {
-      
         const DocClass = (jsPDF as any).default || jsPDF;
         const doc = new DocClass();
 
@@ -670,11 +681,9 @@ export const exportInventory = CatchAsyncError(
           `$${Number(item.list_price).toFixed(2)}`,
         ]);
 
-
         const applyAutoTable = (autoTable as any).default || autoTable;
 
         if (typeof applyAutoTable !== "function") {
-         
           if (typeof (doc as any).autoTable === "function") {
             (doc as any).autoTable({
               head: [tableColumn],
@@ -736,9 +745,6 @@ export const exportInventory = CatchAsyncError(
   },
 );
 
-
-
-
 export const getMonthlyRevenue = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -749,20 +755,28 @@ export const getMonthlyRevenue = CatchAsyncError(
         [[["state", "!=", "cancel"]]],
         {
           fields: ["date_order", "amount_total", "state"],
-         
-        }
+        },
       );
       console.log("Total orders fetched:", orders.length);
       console.log("Sample order:", JSON.stringify(orders[0], null, 2));
 
       const monthMap: {
-  [key: string]: { month: string; total: number; successful: number };
-} = {};
+        [key: string]: { month: string; total: number; successful: number };
+      } = {};
 
       const monthNames = [
-        "January", "February", "March", "April",
-        "May", "June", "July", "August",
-        "September", "October", "November", "December",
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
       ];
 
       for (const order of orders) {
@@ -802,11 +816,8 @@ export const getMonthlyRevenue = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
-
-
-
 
 // order.controller.ts
 export const getOrderStatusStats = CatchAsyncError(
@@ -816,7 +827,7 @@ export const getOrderStatusStats = CatchAsyncError(
         "sale.order",
         "search_read",
         [[["state", "!=", "cancel"]]],
-        { fields: ["state"] }
+        { fields: ["state"] },
       );
 
       const counts: Record<string, number> = {};
@@ -833,7 +844,7 @@ export const getOrderStatusStats = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
 
 // order.controller.ts
@@ -848,7 +859,7 @@ export const getLatestTransactions = CatchAsyncError(
           fields: ["name", "partner_id", "amount_total", "date_order", "state"],
           order: "date_order desc",
           limit: 10,
-        }
+        },
       );
 
       const transactions = orders.map((order: any) => ({
@@ -864,7 +875,7 @@ export const getLatestTransactions = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
 
 export const managerCreateOrder = CatchAsyncError(
@@ -875,7 +886,8 @@ export const managerCreateOrder = CatchAsyncError(
     if (!items?.length) return next(new ErrorHandler("Cart is empty", 400));
 
     const targetUser = await userModel.findOne({ email });
-    if (!targetUser) return next(new ErrorHandler("Target user not found", 404));
+    if (!targetUser)
+      return next(new ErrorHandler("Target user not found", 404));
 
     // 1. Validate + check stock for all items BEFORE creating the order
     const resolvedItems = await Promise.all(
@@ -884,12 +896,17 @@ export const managerCreateOrder = CatchAsyncError(
           "product.template",
           "search_read",
           [[["default_code", "=", item.reference]]],
-          { fields: ["id", "name", "default_code", "qty_available"], limit: 1 }
+          { fields: ["id", "name", "default_code", "qty_available"], limit: 1 },
         );
 
         // 2. Check reference exists
         if (!product[0])
-          return next(new ErrorHandler(`Reference "${item.reference}" not found in Odoo`, 404));
+          return next(
+            new ErrorHandler(
+              `Reference "${item.reference}" not found in Odoo`,
+              404,
+            ),
+          );
 
         // 3. Validate name matches
         const odooName = product[0].name?.trim().toLowerCase();
@@ -898,8 +915,8 @@ export const managerCreateOrder = CatchAsyncError(
           return next(
             new ErrorHandler(
               `Product name mismatch for "${item.reference}": expected "${product[0].name}", got "${item.name}"`,
-              400
-            )
+              400,
+            ),
           );
 
         // 4. Check sufficient stock
@@ -907,8 +924,8 @@ export const managerCreateOrder = CatchAsyncError(
           return next(
             new ErrorHandler(
               `Insufficient stock for "${product[0].name}": available ${product[0].qty_available}, requested ${item.quantity}`,
-              400
-            )
+              400,
+            ),
           );
 
         return {
@@ -918,12 +935,12 @@ export const managerCreateOrder = CatchAsyncError(
           price: item.price,
           quantity: item.quantity,
         };
-      })
+      }),
     );
 
     const total = resolvedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0
+      0,
     );
 
     const order = await Order.create({
@@ -947,20 +964,18 @@ export const managerCreateOrder = CatchAsyncError(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", item.productId]]],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
 
       if (variant[0]) {
         // Create an inventory adjustment (stock.quant) to decrease qty
-        await odooRequest(
-          "stock.quant",
-          "create",
-          [{
+        await odooRequest("stock.quant", "create", [
+          {
             product_id: variant[0].id,
             location_id: 8, // your Odoo stock location ID (usually 8 = Virtual Locations/WH/Stock)
             quantity: -item.quantity, // negative = decrease
-          }]
-        );
+          },
+        ]);
       }
     }
 
@@ -970,8 +985,8 @@ export const managerCreateOrder = CatchAsyncError(
 
     const itemsWithNames = order.items.map((item: any) => item.toObject());
 
-const adminUser = await userModel.findOne({ role: "admin" });
-if (!adminUser) return next(new ErrorHandler("No admin found", 404));
+    const adminUser = await userModel.findOne({ role: "admin" });
+    if (!adminUser) return next(new ErrorHandler("No admin found", 404));
     await sendMail({
       email: adminUser.email,
       subject: `🔔 New Order #${order._id} (Created by Manager)`,
@@ -995,5 +1010,5 @@ if (!adminUser) return next(new ErrorHandler("No admin found", 404));
       message: "Order created on behalf of user. Waiting for approval.",
       order,
     });
-  }
+  },
 );
