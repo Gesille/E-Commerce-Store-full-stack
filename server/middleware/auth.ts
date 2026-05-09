@@ -11,6 +11,8 @@ export const isAuthenticated = CatchAsyncError(
     
     // ← يقرأ من header أو cookie
     const authHeader = req.headers.authorization;
+    console.log("🔑 Auth Header:", authHeader);
+console.log("🍪 Cookie:", req.cookies.access_token);
     const access_token = authHeader?.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
       : req.cookies.access_token as string;
