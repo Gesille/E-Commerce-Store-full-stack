@@ -11,8 +11,7 @@ export const isAuthenticated = CatchAsyncError(
     
     // ← يقرأ من header أو cookie
     const authHeader = req.headers.authorization;
-    console.log("🔑 Auth Header:", authHeader);
-console.log("🍪 Cookie:", req.cookies.access_token);
+  
     const access_token = authHeader?.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
       : req.cookies.access_token as string;
@@ -20,7 +19,7 @@ console.log("🍪 Cookie:", req.cookies.access_token);
     if (!access_token) {
       return next(new ErrorHandler("Please login to access this resource", 401));
     }
-
+console.log(req.cookies);
     try {
       const decoded = jwt.verify(
         access_token,
