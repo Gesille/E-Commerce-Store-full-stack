@@ -18,16 +18,17 @@ export const accessTokenOptions: ITokenOptions = {
   expires: new Date(Date.now() + accessTokenExpire * 60 * 60 * 1000),
   maxAge: accessTokenExpire * 60 * 60 * 1000,
   httpOnly: true,
-  sameSite: "lax",  // ✅ works on IP over HTTP
-  secure: false,    // ✅ false for HTTP
+  
+  sameSite: "none",  // ✅ works on IP over HTTP
+  secure: true,    // ✅ false for HTTP
 };
 
 export const refreshTokenOptions: ITokenOptions = {
   expires: new Date(Date.now() + refreshTokenExpire * 24 * 60 * 60 * 1000),
   maxAge: refreshTokenExpire * 24 * 60 * 60 * 1000,
   httpOnly: true,
-  sameSite: "lax",  // ✅ same
-  secure: false,
+  sameSite: "none",  // ✅ same
+  secure: true,
 };
 
 export const sendToken = (user: IUser, statusCode: number, res: Response) => {

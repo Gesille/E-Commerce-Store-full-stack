@@ -26,7 +26,7 @@ export const apiSlice = createApi({
             headers:{
               Authorization:`Bearer ${token}`
             },
-            Credentials: "include" ,
+            credentials: "include",
         }),
         async onQueryStarted(arg, { queryFulfilled, dispatch }) {
             try {
