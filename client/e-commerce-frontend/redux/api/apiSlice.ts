@@ -4,46 +4,42 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { userLoggedIn } from "../auth/authSlice";
 
 
+// apiSlice.ts
 export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
     baseUrl: process.env.NEXT_PUBLIC_SERVER_URL,
-    credentials: 'include',
-    
+    credentials: "include", // ✅ sends cookies automatically on every request
   }),
   endpoints: (builder) => ({
     refreshToken: builder.query({
-      query: (data) => ({
+      query: () => ({
         url: "refresh-token",
         method: "GET",
-        credentials: "include",
       }),
     }),
+
     loadUser: builder.query({
-        query: (token) =>({
-            url:"get-user-info",
-            method:"GET",
-            headers:{
-              Authorization:`Bearer ${token}`
-            },
-            credentials: "include",
-        }),
-        async onQueryStarted(arg, { queryFulfilled, dispatch }) {
-            try {
-              const result = await queryFulfilled;
-      
-              dispatch(
-                userLoggedIn({
-                  accessToken: result.data.accessToken,
-                  user: result.data.user,
-                })
-              );
-            } catch (error: any) {
-              console.log(error);
-            }
-          },
-    })
+      query: () => ({          // ✅ no token argument needed
+        url: "get-user-info",
+        method: "GET",         // cookie is sent automatically via credentials: "include"
+      }),
+      async onQueryStarted(arg, { queryFulfilled, dispatch }) {
+        try {
+          const result = await queryFulfilled;
+          dispatch(
+            userLoggedIn({
+              accessToken: result.data.accessToken,
+              user: result.data.user,
+            })
+          );
+        } catch (error: any) {
+          console.log(error);
+        }
+      },
+    }),
   }),
 });
 
-export const { useRefreshTokenQuery,useLoadUserQuery } = apiSlice;
+export const { useRefreshTokenQuery, useLoadUserQuery } = apiSlice;
+
