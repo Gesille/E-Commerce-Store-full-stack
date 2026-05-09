@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { TransportOptions } from "nodemailer";
 import ejs from "ejs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -16,14 +16,17 @@ interface EmailOptions {
   data: { [key: string]: any };
 }
 
+// utils/sendMail.ts
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  family: 4, // ✅ force IPv4 — fixes Railway IPv6 issue
   auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
   },
-});
-
+}as TransportOptions);
 const sendMail = async (options: EmailOptions): Promise<void> => {
   const { email, subject, template, data } = options;
 
