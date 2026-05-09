@@ -20,7 +20,7 @@ export const isAuthenticated = CatchAsyncError(
       return next(new ErrorHandler("Please login to access this resource", 401));
     }
 console.log("ACCESS TOKEN:", access_token);
-console.log("ACCESS SECRET:", process.env.ACCESS_TOKEN_SECRET);
+
     try {
       const decoded = jwt.verify(
         access_token,
