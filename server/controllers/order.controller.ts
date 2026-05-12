@@ -59,11 +59,11 @@ export const createOrder = CatchAsyncError(
       })
     );
 
-    // ✅ كل الـ admins
+
     const adminUsers = await userModel.find({ role: "admin" });
     if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
 
-    // ✅ أرسل لكلهم بالتوازي
+   
     await Promise.all(
       adminUsers.map((adminUser) =>
         sendMail({
