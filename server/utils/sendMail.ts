@@ -19,7 +19,7 @@ interface EmailOptions {
 // utils/sendMail.ts
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
+  port: 587,
   secure: true,
   family: 4, // ✅ force IPv4 — fixes Railway IPv6 issue
   auth: {
@@ -27,20 +27,20 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASSWORD,
   },
 }as TransportOptions);
+console.log("smtp user",process.env.SMTP_USER)
+console.log("smtp PASS",process.env.SMTP_PASSWORD)
 const sendMail = async (options: EmailOptions): Promise<void> => {
   const { email, subject, template, data } = options;
 
   const templatePath = path.join(__dirname, "../mails", template);
   const html = await ejs.renderFile(templatePath, data);
-
-  console.log("📨 Gmail Config:", {
-    to: email,
-    from: process.env.GMAIL_USER,
-    user: process.env.GMAIL_USER ? "SET" : "MISSING",
-    pass: process.env.GMAIL_APP_PASSWORD ? "SET" : "MISSING",
-  });
-  console.log("📧 Gmail User:", process.env.GMAIL_USER);
-console.log("🔑 Gmail Pass:", process.env.GMAIL_APP_PASSWORD ? "SET" : "MISSING");
+transporter.verify((error,success) =>{
+  if(error){
+    console.log(error)
+  }else{
+    console.log("SMTP READY")
+  }
+})
 
   await transporter.sendMail({
     from: `"Next International" <${process.env.GMAIL_USER}>`,
