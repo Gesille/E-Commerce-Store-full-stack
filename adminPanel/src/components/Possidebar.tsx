@@ -76,7 +76,7 @@ const POSSidebar = () => {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link
-                    href="/pos"
+                    href="/cashier"
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
                   >
                     <ScanBarcode size={16} />
