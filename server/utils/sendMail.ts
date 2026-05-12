@@ -19,16 +19,14 @@ interface EmailOptions {
 // utils/sendMail.ts
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 587,
-  secure: true,
-  family: 4, // ✅ force IPv4 — fixes Railway IPv6 issue
+  port: 465,
+  secure: true, // ✅ true for port 465 (SSL)
+  family: 4,
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-}as TransportOptions);
-console.log("smtp user",process.env.GMAIL_USER)
-console.log("smtp PASS",process.env.GMAIL_APP_PASSWORD)
+} as TransportOptions);
 const sendMail = async (options: EmailOptions): Promise<void> => {
   const { email, subject, template, data } = options;
 
