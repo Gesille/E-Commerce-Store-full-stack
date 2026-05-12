@@ -16,8 +16,7 @@ export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { items, shippingAddress } = req.body;
     const user = req.user;
-const allUsers = await userModel.find({});
-console.log(allUsers.map(u => ({ email: u.email, role: u.role })));
+
     if (!shippingAddress)
       return next(new ErrorHandler("Shipping address is required", 400));
     if (!items?.length) return next(new ErrorHandler("Cart is empty", 400));
@@ -60,32 +59,32 @@ console.log(allUsers.map(u => ({ email: u.email, role: u.role })));
       })
     );
 
-    // ✅ كل الـ admins
     const adminUsers = await userModel.find({ role: "admin" });
-    if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
+if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
 
-    // ✅ أرسل لكلهم بالتوازي
     await Promise.all(
-      adminUsers.map((adminUser) =>
-        sendMail({
-          email: adminUser.email,
-          subject: `🔔 New Order #${order._id}`,
-          template: "manager-order.ejs",
-          data: {
-            order: {
-              ...order.toObject(),
-              date: new Date().toLocaleDateString(),
-              customerName: user?.name,
-              customerEmail: user?.email,
-              items: itemsWithNames,
-              total: order.total,
-            },
-            confirmUrl,
-            cancelUrl,
+  adminUsers
+    .filter((adminUser) => adminUser.email === process.env.ADMIN_NOTIFICATION_EMAIL)
+    .map((adminUser) =>
+      sendMail({
+        email: adminUser.email,
+        subject: `🔔 New Order #${order._id}`,
+        template: "manager-order.ejs",
+        data: {
+          order: {
+            ...order.toObject(),
+            date: new Date().toLocaleDateString(),
+            customerName: user?.name,
+            customerEmail: user?.email,
+            items: itemsWithNames,
+            total: order.total,
           },
-        })
-      )
-    );
+          confirmUrl,
+          cancelUrl,
+        },
+      })
+    )
+);
 
     res.status(201).json({
       success: true,
