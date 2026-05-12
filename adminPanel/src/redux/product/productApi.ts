@@ -1,4 +1,4 @@
-import { Product } from "@/app/products/columns";
+import { Product } from "@/app/(dashboard)/products/columns";
 import { apiSlice } from "../api/apiSlice";
 
 export const productApi = apiSlice.injectEndpoints({

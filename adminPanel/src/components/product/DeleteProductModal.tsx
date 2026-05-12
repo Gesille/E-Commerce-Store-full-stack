@@ -9,7 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Product } from "@/app/products/columns";
+import { Product } from "@/app/(dashboard)/products/columns";
 import { useDeleteProductMutation } from "@/redux/product/productApi";
 import toast from "react-hot-toast";
 
