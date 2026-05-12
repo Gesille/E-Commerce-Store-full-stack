@@ -59,32 +59,45 @@ export const createOrder = CatchAsyncError(
       })
     );
 
+    const orderData = {
+      ...order.toObject(),
+      date: new Date().toLocaleDateString(),
+      customerName: user?.name,
+      customerEmail: user?.email,
+      items: itemsWithNames,
+      total: order.total,
+    };
+
+    // 1️⃣ Notify all admins
     const adminUsers = await userModel.find({ role: "admin" });
-if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
+    if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
 
     await Promise.all(
-  adminUsers
-    .filter((adminUser) => adminUser.email === process.env.ADMIN_NOTIFICATION_EMAIL)
-    .map((adminUser) =>
-      sendMail({
-        email: adminUser.email,
-        subject: `🔔 New Order #${order._id}`,
-        template: "manager-order.ejs",
-        data: {
-          order: {
-            ...order.toObject(),
-            date: new Date().toLocaleDateString(),
-            customerName: user?.name,
-            customerEmail: user?.email,
-            items: itemsWithNames,
-            total: order.total,
+      adminUsers.map((adminUser) =>
+        sendMail({
+          email: adminUser.email,
+          subject: `🔔 New Order #${order._id}`,
+          template: "manager-order.ejs",
+          data: {
+            order: orderData,
+            confirmUrl,
+            cancelUrl,
           },
-          confirmUrl,
-          cancelUrl,
+        })
+      )
+    );
+
+    // 2️⃣ Notify the customer who placed the order
+    if (user?.email) {
+      await sendMail({
+        email: user.email,
+        subject: `✅ Order Received #${order._id}`,
+        template: "order-confirmed-client.ejs",
+        data: {
+          order: orderData,
         },
-      })
-    )
-);
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -93,7 +106,6 @@ if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
     });
   }
 );
-
 // ===============================
 // ✅ MANAGER CONFIRM → ODOO
 // ===============================
