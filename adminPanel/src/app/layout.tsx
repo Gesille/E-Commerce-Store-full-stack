@@ -6,9 +6,9 @@ import Navbar from "@/components/Navbar";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { cookies } from "next/headers";
-import AuthSync from "@/components/AuthSync";
+
 import { Toaster } from "react-hot-toast";
-import SidebarSwitcher from "@/components/SidebarSwitcher";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,7 +57,6 @@ export default async function RootLayout({
           <SidebarProvider defaultOpen={defaultOpen}>
             <AppSidebar />
             
-<SidebarSwitcher />
             <main className="w-full">
               <Navbar />
               <div className="px-4">{children}</div>
