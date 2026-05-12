@@ -23,12 +23,12 @@ const transporter = nodemailer.createTransport({
   secure: true,
   family: 4, // ✅ force IPv4 — fixes Railway IPv6 issue
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
   },
 }as TransportOptions);
-console.log("smtp user",process.env.SMTP_USER)
-console.log("smtp PASS",process.env.SMTP_PASSWORD)
+console.log("smtp user",process.env.GMAIL_USER)
+console.log("smtp PASS",process.env.GMAIL_APP_PASSWORD)
 const sendMail = async (options: EmailOptions): Promise<void> => {
   const { email, subject, template, data } = options;
 
