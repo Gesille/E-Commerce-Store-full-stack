@@ -38,24 +38,19 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
+  
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "./ui/collapsible";
+
 import { Sheet, SheetTrigger } from "./ui/sheet";
 import { RootState } from "@/redux/store";
 
 import AddCategory from "./AddCategory";
 import AddProduct from "./AddProduct";
 import { useSelector } from "react-redux";
-import { useLogOutMutation } from "@/redux/auth/authApi";
+
 import { useGetAllMessagesQuery } from "@/redux/contact/contactApi";
-import { useLoadUserQuery } from "@/redux/api/apiSlice";
+
 import ReturnOrder from "./ReturnOrders";
 import CreateOrderForUser from "./CreateOrderForUser";
 import AddUser from "./AddUser";
@@ -81,6 +76,11 @@ const items = [
     title: "Settings",
     url: "#",
     icon: Settings,
+  },
+   {
+    title: "POS",
+    url: "/pos",
+    icon: ListOrdered,
   },
 ];
 
