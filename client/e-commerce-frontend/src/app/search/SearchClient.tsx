@@ -11,9 +11,16 @@ export default function SearchClient() {
 
   const { data, isLoading, isError } = useGetProductsQuery(undefined);
 
-  const filteredProducts = (data?.products ?? data ?? []).filter((product: any) =>
-    product.name.toLowerCase().includes(query) ||
-    product.shortDescription?.toLowerCase().includes(query)
+  // Fix: Ensure products is always an array
+  const products = Array.isArray(data?.products) 
+    ? data.products 
+    : Array.isArray(data) 
+    ? data 
+    : [];
+
+  const filteredProducts = products.filter((product: any) =>
+    product?.name?.toLowerCase().includes(query) ||
+    product?.shortDescription?.toLowerCase().includes(query)
   );
 
   if (isLoading) {
