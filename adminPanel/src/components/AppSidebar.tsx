@@ -235,7 +235,7 @@ const AppSidebar = () => {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link
-                    href="/temp"
+                    href="/pos"
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
                   >
                     <ShoppingBasket size={16} />
