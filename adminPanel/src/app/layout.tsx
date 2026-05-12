@@ -55,7 +55,7 @@ export default async function RootLayout({
         >
       <Toaster position="top-right" />
           <SidebarProvider defaultOpen={defaultOpen}>
-            
+            <AppSidebar />
             
             <main className="w-full">
               <Navbar />
