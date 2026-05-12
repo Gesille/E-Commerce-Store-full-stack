@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import toast from "react-hot-toast";
 import useBarcode from "@/hooks/useBarcode";
-import { useLazyGetProductByBarcodeQuery } from "@/redux/product/productApi"; // 👈 Lazy not regular
+import { useLazyGetProductByBarcodeQuery } from "@/redux/product/productApi";
 
 type POSItem = {
   productId: number;
@@ -14,13 +14,14 @@ type POSItem = {
 };
 
 const POSPage = () => {
-  const [cart, setCart] = useState<POSItem[]>([]); // ✅ only once
-  const [barcodeInput, setBarcodeInput] = useState(""); 
-  const [triggerBarcode] =useLazyGetProductByBarcodeQuery()
+  const [cart, setCart] = useState<POSItem[]>([]);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [triggerBarcode] = useLazyGetProductByBarcodeQuery();
 
   const handleScan = useCallback(async (code: string) => {
     try {
-      const product = await triggerBarcode(code).unwrap();
+      const res = await triggerBarcode(code).unwrap(); // 👈 full response
+      const product = res.product;                     // 👈 extract nested product
 
       setCart((prev) => {
         const existing = prev.find((i) => i.productId === product.id);
@@ -56,7 +57,7 @@ const POSPage = () => {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">POS</h1>
-        <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6">
         <input
           type="text"
           value={barcodeInput}
@@ -64,7 +65,7 @@ const POSPage = () => {
           onKeyDown={(e) => {
             if (e.key === "Enter" && barcodeInput.trim()) {
               handleScan(barcodeInput.trim());
-              setBarcodeInput(""); // clear after scan
+              setBarcodeInput("");
             }
           }}
           placeholder="Type barcode or default_code and press Enter"
