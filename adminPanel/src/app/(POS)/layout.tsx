@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { cookies } from "next/headers";
 
 import { Toaster } from "react-hot-toast";
+import POSSidebar from "@/components/Possidebar";
 
 
 const geistSans = Geist({
@@ -55,7 +56,7 @@ export default async function RootLayout({
       <Toaster position="top-right" />
           <SidebarProvider defaultOpen={defaultOpen}>
      
-            
+            <POSSidebar />
             <main className="w-full">
               <Navbar />
               <div className="px-4">{children}</div>
