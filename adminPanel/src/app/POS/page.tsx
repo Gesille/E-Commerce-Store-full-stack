@@ -15,6 +15,7 @@ type POSItem = {
 
 const POSPage = () => {
   const [cart, setCart] = useState<POSItem[]>([]); // ✅ only once
+  const [barcodeInput, setBarcodeInput] = useState(""); 
   const [triggerBarcode] =useLazyGetProductByBarcodeQuery()
 
   const handleScan = useCallback(async (code: string) => {
@@ -55,6 +56,33 @@ const POSPage = () => {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">POS</h1>
+        <div className="flex gap-2 mb-6">
+        <input
+          type="text"
+          value={barcodeInput}
+          onChange={(e) => setBarcodeInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && barcodeInput.trim()) {
+              handleScan(barcodeInput.trim());
+              setBarcodeInput(""); // clear after scan
+            }
+          }}
+          placeholder="Type barcode or default_code and press Enter"
+          className="border rounded-xl px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+          autoFocus
+        />
+        <button
+          onClick={() => {
+            if (barcodeInput.trim()) {
+              handleScan(barcodeInput.trim());
+              setBarcodeInput("");
+            }
+          }}
+          className="px-4 py-2 bg-blue-500 text-white rounded-xl"
+        >
+          Add
+        </button>
+      </div>
       <p className="text-gray-500 mb-6">Scan a barcode to add product</p>
 
       {cart.length === 0 ? (
