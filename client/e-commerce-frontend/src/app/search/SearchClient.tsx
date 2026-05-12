@@ -39,7 +39,8 @@ const filteredProducts = rawProducts.filter(
         <p className="text-red-500">Failed to load products. Please try again.</p>
       </div>
     );
-  }
+  }console.log("RAW DATA:", JSON.stringify(data, null, 2));
+console.log("PRODUCTS:", rawProducts);
 
   return (
     <div className="p-6">
@@ -58,4 +59,5 @@ const filteredProducts = rawProducts.filter(
       )}
     </div>
   );
+  
 }
