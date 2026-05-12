@@ -56,7 +56,8 @@ export default async function RootLayout({
       <Toaster position="top-right" />
           <SidebarProvider defaultOpen={defaultOpen}>
             <AppSidebar />
-            <SidebarSwitcher />
+            
+<SidebarSwitcher />
             <main className="w-full">
               <Navbar />
               <div className="px-4">{children}</div>
