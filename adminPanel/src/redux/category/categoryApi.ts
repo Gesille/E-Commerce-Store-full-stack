@@ -19,6 +19,7 @@ export const categoryApi = apiSlice.injectEndpoints({
       }),
       transformResponse: (response: { count: number; categories: Category[] }) =>
         response.categories,
+       providesTags: ["Categories"],
     }),
     createCategory: builder.mutation({
       query: (body: { catTitle: string; catDesc: string }) => ({
