@@ -4,9 +4,7 @@ export interface IOrder extends Document {
   userId: mongoose.Types.ObjectId;
 
   address: mongoose.Types.ObjectId;
-  // In OrderSchema, add this field:
-
-  // Also add to IOrder interface:
+  
   shippingAddress?: {
     name?: string;
     email?: string;
@@ -50,6 +48,7 @@ const OrderSchema = new Schema<IOrder>(
       ref: "Address",
       required: false,
     },
+    
     shippingAddress: {
       name: { type: String },
       email: { type: String },

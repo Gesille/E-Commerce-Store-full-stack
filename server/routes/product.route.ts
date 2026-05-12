@@ -1,5 +1,5 @@
 import express from 'express';
-import { createProduct, deleteProduct, getAllProductsFromOdoo, getLowStockAlerts, getProductByIdFromOdoo, getPurchasedProducts, getTopSellingProducts, testOdooConnection, updateProduct } from '../controllers/product.controller.js';
+import { createProduct, deleteProduct, getAllProductsFromOdoo, getLowStockAlerts, getProductByBarcode, getProductByIdFromOdoo, getPurchasedProducts, getTopSellingProducts, testOdooConnection, updateProduct } from '../controllers/product.controller.js';
 import { authorizeRoles, isAuthenticated } from '../middleware/auth.js';
 
 
@@ -32,4 +32,6 @@ productRouter.get(
   authorizeRoles("admin"),
   getLowStockAlerts
 );
+
+productRouter.get("/barcode/:code", isAuthenticated, getProductByBarcode);
 export default productRouter;

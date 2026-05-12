@@ -6,12 +6,13 @@ export interface IProduct extends Document {
   price: number;
   stock: number;
   image?: string;
-
+barcode: String
   attributes: {
     colors: string[];
     sizes: string[];
     materials: string[];
   };
+
 
   odooProductId: number;
   odooCategoryId?: number;
@@ -31,7 +32,7 @@ const productSchema: Schema<IProduct> = new Schema(
       sizes: [{ type: String }],
       materials: [{ type: String }],
     },
-
+barcode:{type:String},
     odooProductId: { type: Number, required: true },
     odooCategoryId: { type: Number },
   },

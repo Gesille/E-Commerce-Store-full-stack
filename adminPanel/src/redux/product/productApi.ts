@@ -81,23 +81,32 @@ export const productApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Products"],
     }),
     getTopSellingProducts: builder.query({
-  query: () => ({
-    url: "dashboard/top-products",
-    method: "GET",
-    credentials: "include" as const,
-  }),
-  transformResponse: (res: any) => res.topProducts,
-}),
+      query: () => ({
+        url: "dashboard/top-products",
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (res: any) => res.topProducts,
+    }),
 
-// productApi.ts
-getLowStockAlerts: builder.query({
-  query: (threshold = 5) => ({
-    url: `low-stock?threshold=${threshold}`,
-    method: "GET",
-    credentials: "include" as const,
-  }),
-  transformResponse: (res: any) => res.products,
-}),
+    // productApi.ts
+    getLowStockAlerts: builder.query({
+      query: (threshold = 5) => ({
+        url: `low-stock?threshold=${threshold}`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (res: any) => res.products,
+    }),
+    getProductByBarcode: builder.query<any, string>({
+      query: (code) => ({
+        url: `product/barcode/${code}`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (response: { success: boolean; product: any }) =>
+        response.product,
+    }),
   }),
 });
 
@@ -107,5 +116,6 @@ export const {
   useDeleteProductMutation,
   useCreateProductMutation,
   useGetLowStockAlertsQuery,
-  useGetTopSellingProductsQuery
+  useGetTopSellingProductsQuery,
+  useLazyGetProductByBarcodeQuery
 } = productApi;

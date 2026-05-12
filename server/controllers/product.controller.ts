@@ -521,3 +521,27 @@ export const getLowStockAlerts = CatchAsyncError(
     }
   }
 );
+
+
+// Barcode
+export const getProductByBarcode = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { code } = req.params;
+
+    const product = await odooRequest(
+      "product.template",
+      "search_read",
+      [["|", ["barcode", "=", code], ["default_code", "=", code]]], // ✅ OR condition
+      {
+        fields: ["id", "name", "list_price", "barcode", "default_code", "qty_available"],
+        limit: 1,
+      }
+    );
+
+    if (!product.length) {
+      return next(new ErrorHandler("Product not found", 404));
+    }
+
+    res.status(200).json({ success: true, product: product[0] });
+  }
+);
