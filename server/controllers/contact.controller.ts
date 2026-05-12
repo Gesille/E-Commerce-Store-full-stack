@@ -15,12 +15,18 @@ export const sendContactMessage = CatchAsyncError(
       return next(new ErrorHandler("Name, email and message are required", 400));
     }
 
-    // 1️⃣ save to DB
-    await MessageModel.create({ name, email, phone, message });
+// 1️⃣ save to DB
+await MessageModel.create({ name, email, phone, message });
 
-   
-const adminUser = await userModel.findOne({ role: "admin" });
-if (!adminUser) return next(new ErrorHandler("No admin found", 404));
+// 2️⃣ find ALL admins
+const adminUsers = await userModel.find({ role: "admin" });
+console.log("✅ Admins found:", adminUsers.length, adminUsers.map(a => a.email));
+
+if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
+
+// 3️⃣ send to all admins in parallel
+await Promise.all(
+  adminUsers.map(async (adminUser) => {
     try {
       await sendMail({
         email: adminUser.email,
@@ -28,23 +34,27 @@ if (!adminUser) return next(new ErrorHandler("No admin found", 404));
         template: "contact-notification.ejs",
         data: { name, email, phone, message },
       });
+      console.log("✅ Admin email sent to:", adminUser.email);
     } catch (err) {
-      console.log("manager email failed:", err);
+      console.log("❌ Admin email failed for:", adminUser.email, err);
     }
+  })
+);
 
-    // 3️⃣ confirm to user
-    try {
-      await sendMail({
-        email,
-        subject: "We received your message - Chef's World",
-        template: "contact-confirmation.ejs",
-        data: { name },
-      });
-    } catch (err) {
-      console.log("user email failed:", err);
-    }
+// 4️⃣ confirm to user
+try {
+  await sendMail({
+    email,
+    subject: "We received your message - Chef's World",
+    template: "contact-confirmation.ejs",
+    data: { name },
+  });
+  console.log("✅ User confirmation sent to:", email);
+} catch (err) {
+  console.log("❌ User email failed:", err);
+}
 
-    res.status(200).json({ success: true, message: "Message sent successfully" });
+res.status(200).json({ success: true, message: "Message sent successfully" });
   }
 );
 
