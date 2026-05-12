@@ -68,37 +68,32 @@ export const createOrder = CatchAsyncError(
       total: order.total,
     };
 
-    // 1️⃣ Notify all admins
-    const adminUsers = await userModel.find({ role: "admin" });
-    if (!adminUsers.length) return next(new ErrorHandler("No admin found", 404));
+   // 1️⃣ Notify admin
+const adminUser = await userModel.findOne({ role: "admin" });
+if (!adminUser) return next(new ErrorHandler("No admin found", 404));
 
-    await Promise.all(
-      adminUsers.map((adminUser) =>
-        sendMail({
-          email: adminUser.email,
-          subject: `🔔 New Order #${order._id}`,
-          template: "manager-order.ejs",
-          data: {
-            order: orderData,
-            confirmUrl,
-            cancelUrl,
-          },
-        })
-      )
-    );
+await sendMail({
+  email: adminUser.email,
+  subject: `🔔 New Order #${order._id}`,
+  template: "manager-order.ejs",
+  data: {
+    order: orderData,
+    confirmUrl,
+    cancelUrl,
+  },
+});
 
-    // 2️⃣ Notify the customer who placed the order
-    if (user?.email) {
-      await sendMail({
-        email: user.email,
-        subject: `✅ Order Received #${order._id}`,
-        template: "order-confirmed-client.ejs",
-        data: {
-          order: orderData,
-        },
-      });
-    }
-
+// 2️⃣ Notify the customer who placed the order
+if (user?.email) {
+  await sendMail({
+    email: user.email,
+    subject: `✅ Order Received #${order._id}`,
+    template: "order-confirmed-client.ejs",
+    data: {
+      order: orderData,
+    },
+  });
+}
     res.status(201).json({
       success: true,
       message: "Order saved in MongoDB. Waiting for manager approval.",
