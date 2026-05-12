@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
-import { useSearch } from "@/context/SearchContext";
-
+import { useRouter } from "next/navigation";
 
 const SearchBar = () => {
   const [query, setQuery] = useState<string>("");
-  const { setSearchQuery } = useSearch();
+  const router = useRouter();
 
   const handleSearch = () => {
     if (!query.trim()) return;
-    setSearchQuery(query); // Set in context instead of URL
+
+    
+    router.push(`/search?q=${encodeURIComponent(query)}`);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
