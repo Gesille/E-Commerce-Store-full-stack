@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  ShoppingCart,
   BarChart2,
   ClipboardList,
+  LayoutDashboard,
   RotateCcw,
   Package,
   ArrowLeftFromLine,
@@ -27,19 +27,40 @@ import {
 } from "./ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const POSSidebar = () => {
   const user = useSelector((state: RootState) => state?.auth.user as any);
+  const pathname = usePathname();
+
+  const navItem = (href: string, icon: React.ReactNode, label: string) => {
+    const active = pathname === href;
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild>
+          <Link
+            href={href}
+            className={cn(
+              "flex items-center gap-2 px-2 py-1.5 rounded-md transition",
+              active
+                ? "bg-muted font-medium text-foreground"
+                : "hover:bg-muted text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {icon}
+            <span className="text-sm">{label}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r bg-background">
-
       {/* HEADER */}
       <SidebarHeader className="px-3 py-3">
         <SidebarMenu>
@@ -63,64 +84,18 @@ const POSSidebar = () => {
       <SidebarSeparator />
 
       <SidebarContent className="px-1">
-
         {/* MAIN */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
             Point of Sale
           </SidebarGroupLabel>
-
           <SidebarGroupContent>
             <SidebarMenu>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/cashier"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <ScanBarcode size={16} />
-                    <span className="text-sm">Cashier</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/orders"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <ClipboardList size={16} />
-                    <span className="text-sm">POS Orders</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/receipts"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <Receipt size={16} />
-                    <span className="text-sm">Receipts</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/returns"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <RotateCcw size={16} />
-                    <span className="text-sm">Returns</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
+              {navItem("/pos/dashboard", <LayoutDashboard size={16} />, "Dashboard")}
+              {navItem("/pos/cashier", <ScanBarcode size={16} />, "Cashier")}
+              {navItem("/pos/orders", <ClipboardList size={16} />, "POS Orders")}
+              {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
+              {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -130,34 +105,10 @@ const POSSidebar = () => {
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
             Reports
           </SidebarGroupLabel>
-
           <SidebarGroupContent>
             <SidebarMenu>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/reports/sales"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <BarChart2 size={16} />
-                    <span className="text-sm">Sales Report</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/reports/payments"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <Wallet size={16} />
-                    <span className="text-sm">Payments</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
+              {navItem("/pos/reports/sales", <BarChart2 size={16} />, "Sales Report")}
+              {navItem("/pos/reports/payments", <Wallet size={16} />, "Payments")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -167,22 +118,9 @@ const POSSidebar = () => {
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
             Inventory
           </SidebarGroupLabel>
-
           <SidebarGroupContent>
             <SidebarMenu>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos/products"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <Package size={16} />
-                    <span className="text-sm">Products</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
+              {navItem("/pos/products", <Package size={16} />, "Products")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -192,7 +130,6 @@ const POSSidebar = () => {
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
             Navigation
           </SidebarGroupLabel>
-
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -209,7 +146,6 @@ const POSSidebar = () => {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
       </SidebarContent>
 
       {/* FOOTER */}
@@ -228,7 +164,6 @@ const POSSidebar = () => {
           </DropdownMenuTrigger>
         </DropdownMenu>
       </SidebarFooter>
-
     </Sidebar>
   );
 };
