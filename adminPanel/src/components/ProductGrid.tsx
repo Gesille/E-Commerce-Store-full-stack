@@ -115,7 +115,7 @@ export function ProductGrid({
               key={p.id}
               onClick={() => {
                 if (oos) return;
-
+  console.log("PRODUCT CLICKED:", p);
                 setSelectedProduct(p);
                 setSelectedSize(p.attributes?.sizes?.[0] ?? "");
                 setSelectedColor(p.attributes?.colors?.[0] ?? "");
