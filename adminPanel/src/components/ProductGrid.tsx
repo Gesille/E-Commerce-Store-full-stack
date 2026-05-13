@@ -19,23 +19,40 @@ export function ProductGrid({
     useGetAllProductsQuery(
       categoryId !== undefined ? { categoryId } : undefined
     );
-
-
-  const products: Product[] = apiProducts.map((p: any) => ({
-    id: Number(p.id),
-    name: p.name ?? "",
-    reference: p.reference ?? "",
-    shortDescription: p.shortDescription ?? "",
-    description: p.description ?? "",
-    price: p.price ?? 0,
-    sizes: p.sizes ?? [],
-    colors: p.colors ?? [],
-    images: p.image_1920
-  ? ({ default: `data:image/png;base64,${p.image_1920}` } as Record<string, string>)
-  : undefined,
-    stock: p.qty_available ?? 0,
-  }));
 console.log(apiProducts)
+  // 🧠 RTX SAFE NORMALIZATION LAYER
+  const products: Product[] = apiProducts.map((p: any) => {
+    const colors =
+      p.colors ?? p.attributes?.colors ?? [];
+
+    const sizes =
+      p.sizes ?? p.attributes?.sizes ?? [];
+
+    const materials =
+      p.materials ?? p.attributes?.materials ?? [];
+
+    return {
+      id: Number(p.id),
+      name: p.name ?? "",
+      reference: p.reference ?? "",
+      shortDescription: p.shortDescription ?? "",
+      description: p.description ?? "",
+      price: p.price ?? 0,
+
+      sizes,
+      colors,
+      materials,
+
+      images: p.image_1920
+        ? {
+            default: `data:image/png;base64,${p.image_1920}`,
+          }
+        : undefined,
+
+      stock: p.qty_available ?? 0,
+    };
+  });
+
   const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -50,10 +67,9 @@ console.log(apiProducts)
   const cartQty = (id: number) =>
     cart.find((i) => i.id === id)?.qty ?? 0;
 
-  const confirmAddToCart = () => {
-    if (!selectedProduct) return;
-
-    const productId = Number(selectedProduct.id);
+  // 🧠 RTX ADD TO CART ENGINE
+  const addToCart = (p: Product) => {
+    const productId = Number(p.id);
 
     const exist = cart.find(
       (i) =>
@@ -79,8 +95,8 @@ console.log(apiProducts)
         ...cart,
         {
           id: productId,
-          name: selectedProduct.name,
-          price: selectedProduct.price,
+          name: p.name,
+          price: p.price,
           qty: 1,
           note: "",
           size: selectedSize,
@@ -89,10 +105,37 @@ console.log(apiProducts)
         },
       ]);
     }
+  };
 
+  const handleProductClick = (p: Product) => {
+    if (p.stock <= 0) return;
+
+    const hasOptions =
+      (p.sizes?.length ?? 0) > 0 ||
+      (p.colors?.length ?? 0) > 0 ||
+      (p.materials?.length ?? 0) > 0;
+
+    // ⚡ RTX FAST MODE (no modal)
+    if (!hasOptions) {
+      addToCart(p);
+      return;
+    }
+
+    // open modal
+    setSelectedProduct(p);
+    setSelectedSize(p.sizes?.[0] ?? "");
+    setSelectedColor(p.colors?.[0] ?? "");
+    setSelectedMaterial(p.materials?.[0] ?? "");
+  };
+
+  const confirmAddToCart = () => {
+    if (!selectedProduct) return;
+
+    addToCart(selectedProduct);
     setSelectedProduct(null);
   };
 
+  // LOADING UI
   if (isLoading) {
     return (
       <div
@@ -138,14 +181,7 @@ console.log(apiProducts)
           return (
             <button
               key={p.id}
-              onClick={() => {
-                if (oos) return;
-
-                setSelectedProduct(p);
-                setSelectedSize(p.sizes[0] ?? "");
-                setSelectedColor(p.colors[0] ?? "");
-                setSelectedMaterial("");
-              }}
+              onClick={() => handleProductClick(p)}
               disabled={oos}
               className={`relative bg-white rounded-xl border text-center p-3 transition ${
                 oos
@@ -207,12 +243,11 @@ console.log(apiProducts)
             </div>
 
             {/* SIZE */}
-            {selectedProduct.sizes.length > 0 && (
+            {selectedProduct.sizes?.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">
                   Size
                 </div>
-
                 <div className="flex gap-2 flex-wrap">
                   {selectedProduct.sizes.map((s) => (
                     <button
@@ -232,12 +267,11 @@ console.log(apiProducts)
             )}
 
             {/* COLOR */}
-            {selectedProduct.colors.length > 0 && (
+            {selectedProduct.colors?.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">
                   Color
                 </div>
-
                 <div className="flex gap-2 flex-wrap">
                   {selectedProduct.colors.map((c) => (
                     <button
