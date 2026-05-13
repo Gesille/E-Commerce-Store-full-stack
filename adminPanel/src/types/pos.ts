@@ -5,8 +5,11 @@ export interface CartItem {
   price: number;
   qty: number;
   discount?: number;
-}
 
+  size?: string;
+  color?: string;
+  material?: string;
+}
 export interface Order {
   id: number;
   name: string;
@@ -19,10 +22,16 @@ export interface Product {
   name: string;
   price: number;
   qty_available: number;
-  image_url?: string;
-  catTitle?: string;
-}
 
+  image_1920?: string;
+
+  attributes?: {
+    brand?: string;
+    sizes: string[];
+    colors: string[];
+    materials: string[];
+  };
+}
 export interface Category {
   odooCategoryId: string | number;
   catTitle: string;
