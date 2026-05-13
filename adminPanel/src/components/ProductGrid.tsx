@@ -15,8 +15,9 @@ export function ProductGrid({
   const categoryId = category !== "All" ? Number(category) : undefined;
   const { data: products = [], isLoading } = useGetAllProductsQuery(
     categoryId !== undefined ? { categoryId } : undefined
+    
   );
-
+console.log(products)
   const filtered = (products as Product[]).filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
