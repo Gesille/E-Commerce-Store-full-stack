@@ -16,20 +16,18 @@ export interface Order {
   cart: CartItem[];
   createdAt: Date;
 }
-
 export interface Product {
   id: number;
   name: string;
   price: number;
   qty_available: number;
-
   image_1920?: string;
 
   attributes?: {
     brand?: string;
-    sizes: string[];
-    colors: string[];
-    materials: string[];
+    sizes?: string[];
+    colors?: string[];
+    materials?: string[];
   };
 }
 export interface Category {
