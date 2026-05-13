@@ -25,7 +25,7 @@ export interface Product {
   price: number;
   sizes: string[];
   colors: string[];
-  images: Record<string, string>;
+ images?: Record<string, string>;
   stock:number;
 }
 export interface Category {

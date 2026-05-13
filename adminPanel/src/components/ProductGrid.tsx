@@ -15,13 +15,29 @@ export function ProductGrid({
 }) {
   const categoryId = category !== "All" ? Number(category) : undefined;
 
-  const { data: products = [], isLoading } = useGetAllProductsQuery(
-    categoryId !== undefined ? { categoryId } : undefined,
-  );
-  
-console.log(products)
+  const { data: apiProducts = [], isLoading } =
+    useGetAllProductsQuery(
+      categoryId !== undefined ? { categoryId } : undefined
+    );
+
+
+  const products: Product[] = apiProducts.map((p: any) => ({
+    id: Number(p.id),
+    name: p.name ?? "",
+    reference: p.reference ?? "",
+    shortDescription: p.shortDescription ?? "",
+    description: p.description ?? "",
+    price: p.price ?? 0,
+    sizes: p.sizes ?? [],
+    colors: p.colors ?? [],
+    images: p.image_1920
+  ? ({ default: `data:image/png;base64,${p.image_1920}` } as Record<string, string>)
+  : undefined,
+    stock: p.qty_available ?? 0,
+  }));
+
   const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()),
+    p.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const [selectedProduct, setSelectedProduct] =
@@ -37,34 +53,36 @@ console.log(products)
   const confirmAddToCart = () => {
     if (!selectedProduct) return;
 
+    const productId = Number(selectedProduct.id);
+
     const exist = cart.find(
       (i) =>
-        i.id === selectedProduct.id &&
+        i.id === productId &&
         i.size === selectedSize &&
         i.color === selectedColor &&
-        i.material === selectedMaterial,
+        i.material === selectedMaterial
     );
 
     if (exist) {
       setCart(
         cart.map((i) =>
-          i.id === selectedProduct.id &&
+          i.id === productId &&
           i.size === selectedSize &&
           i.color === selectedColor &&
           i.material === selectedMaterial
             ? { ...i, qty: i.qty + 1 }
-            : i,
-        ),
+            : i
+        )
       );
     } else {
       setCart([
         ...cart,
         {
-          id: selectedProduct.id,
+          id: productId,
           name: selectedProduct.name,
           price: selectedProduct.price,
           qty: 1,
-          note: "", // ✅ keep note
+          note: "",
           size: selectedSize,
           color: selectedColor,
           material: selectedMaterial,
@@ -113,15 +131,9 @@ console.log(products)
         }}
       >
         {filtered.map((p) => {
-          const inCart = cartQty(p.id);
-
-          const oos = p.qty_available <= 0;
-          const lowStock =
-            !oos && p.qty_available <= 3;
-
-          const sizes = p.sizes ?? [];
-          const colors = p.colors ?? [];
-          const materials = p.materials ?? [];
+          const inCart = cartQty(Number(p.id));
+          const oos = p.stock <= 0;
+          const lowStock = !oos && p.stock <= 3;
 
           return (
             <button
@@ -130,10 +142,9 @@ console.log(products)
                 if (oos) return;
 
                 setSelectedProduct(p);
-
-                setSelectedSize(sizes[0] ?? "");
-                setSelectedColor(colors[0] ?? "");
-                setSelectedMaterial(materials[0] ?? "");
+                setSelectedSize(p.sizes[0] ?? "");
+                setSelectedColor(p.colors[0] ?? "");
+                setSelectedMaterial("");
               }}
               disabled={oos}
               className={`relative bg-white rounded-xl border text-center p-3 transition ${
@@ -149,10 +160,10 @@ console.log(products)
               )}
 
               {/* IMAGE */}
-              <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2 flex items-center justify-center overflow-hidden">
-                {p.image_1920 ? (
+              <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2 overflow-hidden flex items-center justify-center">
+                {p.images?.default ? (
                   <img
-                    src={`data:image/png;base64,${p.image_1920}`}
+                    src={p.images.default}
                     alt={p.name}
                     className="w-full h-full object-cover"
                   />
@@ -178,8 +189,8 @@ console.log(products)
                 {oos
                   ? "Out of stock"
                   : lowStock
-                  ? `Low: ${p.qty_available}`
-                  : `Stock: ${p.qty_available}`}
+                  ? `Low: ${p.stock}`
+                  : `Stock: ${p.stock}`}
               </div>
             </button>
           );
@@ -196,7 +207,7 @@ console.log(products)
             </div>
 
             {/* SIZE */}
-            {selectedProduct.sizes?.length ? (
+            {selectedProduct.sizes.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">
                   Size
@@ -218,10 +229,10 @@ console.log(products)
                   ))}
                 </div>
               </div>
-            ) : null}
+            )}
 
             {/* COLOR */}
-            {selectedProduct.colors?.length ? (
+            {selectedProduct.colors.length > 0 && (
               <div className="mb-4">
                 <div className="text-xs text-gray-500 mb-2">
                   Color
@@ -243,32 +254,7 @@ console.log(products)
                   ))}
                 </div>
               </div>
-            ) : null}
-
-            {/* MATERIAL */}
-            {selectedProduct.materials?.length ? (
-              <div className="mb-4">
-                <div className="text-xs text-gray-500 mb-2">
-                  Material
-                </div>
-
-                <div className="flex gap-2 flex-wrap">
-                  {selectedProduct.materials.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setSelectedMaterial(m)}
-                      className={`px-2 py-1 text-xs border rounded ${
-                        selectedMaterial === m
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            )}
 
             {/* ACTIONS */}
             <div className="flex justify-end gap-2 mt-5">
