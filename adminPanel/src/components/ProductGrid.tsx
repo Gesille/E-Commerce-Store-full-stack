@@ -15,7 +15,6 @@ export function ProductGrid({
   const categoryId = category !== "All" ? Number(category) : undefined;
   const { data: products = [], isLoading } = useGetAllProductsQuery(
     categoryId !== undefined ? { categoryId } : undefined
-    
   );
 
   const filtered = (products as Product[]).filter((p) =>
@@ -76,9 +75,9 @@ export function ProductGrid({
               </span>
             )}
             <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2.5 flex items-center justify-center overflow-hidden">
-              {p.image_1920 ? (
+              {p.image_url ? (
                 <img
-                  src={p.image_1920}
+                  src={p.image_url}
                   alt={p.name}
                   className="w-full h-full object-cover rounded-xl"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}

@@ -5,7 +5,6 @@ export interface CartItem {
   price: number;
   qty: number;
   discount?: number;
- 
 }
 
 export interface Order {
@@ -20,7 +19,7 @@ export interface Product {
   name: string;
   price: number;
   qty_available: number;
-  image_1920?: string;
+  image_url?: string;
   catTitle?: string;
 }
 
