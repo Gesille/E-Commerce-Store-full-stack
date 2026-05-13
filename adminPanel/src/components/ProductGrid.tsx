@@ -35,7 +35,7 @@ export function ProductGrid({
   : undefined,
     stock: p.qty_available ?? 0,
   }));
-
+console.log(apiProducts)
   const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
