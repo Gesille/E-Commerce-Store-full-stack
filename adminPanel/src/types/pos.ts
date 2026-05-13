@@ -5,9 +5,7 @@ export interface CartItem {
   price: number;
   qty: number;
   discount?: number;
-  size?: string;
-  color?: string;
-  material?: string;
+ 
 }
 
 export interface Order {
@@ -24,11 +22,6 @@ export interface Product {
   qty_available: number;
   image_1920?: string;
   catTitle?: string;
-   attributes?: {
-    sizes: string[];
-    colors: string[];
-    materials: string[];
-  };
 }
 
 export interface Category {
