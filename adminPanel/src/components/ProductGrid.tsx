@@ -17,7 +17,7 @@ export function ProductGrid({
     categoryId !== undefined ? { categoryId } : undefined
     
   );
-console.log(products)
+
   const filtered = (products as Product[]).filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -76,9 +76,9 @@ console.log(products)
               </span>
             )}
             <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2.5 flex items-center justify-center overflow-hidden">
-              {p.image_url ? (
+              {p.image_1920 ? (
                 <img
-                  src={p.image_url}
+                  src={p.image_1920}
                   alt={p.name}
                   className="w-full h-full object-cover rounded-xl"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
