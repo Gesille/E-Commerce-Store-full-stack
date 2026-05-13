@@ -20,8 +20,9 @@ export interface Product {
   id: number;
   name: string;
   price: number;
-  qty_available: number;
-  image_1920?: string;
+  stock: number;        
+  image?: string;      
+  reference?: string;
 
   attributes?: {
     brand?: string;
