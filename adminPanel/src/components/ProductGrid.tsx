@@ -15,11 +15,14 @@ export function ProductGrid({
 }) {
   const categoryId = category !== "All" ? Number(category) : undefined;
 
-  const { data: products = [], isLoading } = useGetAllProductsQuery(
+  const { data: rawProducts = [], isLoading } = useGetAllProductsQuery(
     categoryId !== undefined ? { categoryId } : undefined,
   );
 
-  const filtered = (products as Product[]).filter((p) =>
+  // Cast here once — safe because pos.Product now matches backend shape
+  const products = rawProducts as unknown as Product[];
+
+  const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()),
   );
 
@@ -78,6 +81,7 @@ export function ProductGrid({
     setSelectedProduct(null);
   };
 
+  // ── LOADING ──
   if (isLoading) {
     return (
       <div
@@ -85,12 +89,16 @@ export function ProductGrid({
         style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
       >
         {Array.from({ length: 12 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-100 h-32 animate-pulse" />
+          <div
+            key={i}
+            className="bg-white rounded-xl border border-gray-100 h-32 animate-pulse"
+          />
         ))}
       </div>
     );
   }
 
+  // ── EMPTY ──
   if (filtered.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-400 text-sm">
@@ -101,15 +109,15 @@ export function ProductGrid({
 
   return (
     <>
-      {/* ── GRID ── */}
+      {/* ────────────── GRID ────────────── */}
       <div
         className="grid gap-2.5 p-4"
         style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
       >
         {filtered.map((p) => {
           const inCart = cartQty(p.id);
-          const oos = p.stock <= 0;                         // ← stock
-          const lowStock = !oos && p.stock <= 3;
+          const oos = (p.stock ?? 0) <= 0;
+          const lowStock = !oos && (p.stock ?? 0) <= 3;
 
           const hasVariants =
             (p.attributes?.sizes?.length ?? 0) > 0 ||
@@ -134,21 +142,21 @@ export function ProductGrid({
                 </span>
               )}
 
-              {/* Variant indicator */}
+              {/* Has-variants dot */}
               {hasVariants && !oos && (
                 <span className="absolute top-2 left-2 w-1.5 h-1.5 rounded-full bg-emerald-400" />
               )}
 
               {/* Image */}
               <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2 flex items-center justify-center overflow-hidden">
-                {p.image ? (                                 // ← image
+                {p.image ? (
                   <img
                     src={`data:image/png;base64,${p.image}`}
                     alt={p.name}
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-xs text-gray-400">📦</span>
+                  <span className="text-lg">📦</span>
                 )}
               </div>
 
@@ -164,7 +172,7 @@ export function ProductGrid({
                 </div>
               )}
 
-              {/* Color swatches preview (up to 3) */}
+              {/* Color swatches preview */}
               {(p.attributes?.colors?.length ?? 0) > 0 && (
                 <div className="flex justify-center gap-0.5 my-1">
                   {p.attributes!.colors!.slice(0, 3).map((c) => (
@@ -176,7 +184,9 @@ export function ProductGrid({
                     />
                   ))}
                   {(p.attributes!.colors!.length ?? 0) > 3 && (
-                    <span className="text-[9px] text-gray-400">+{p.attributes!.colors!.length - 3}</span>
+                    <span className="text-[9px] text-gray-400">
+                      +{p.attributes!.colors!.length - 3}
+                    </span>
                   )}
                 </div>
               )}
@@ -186,24 +196,34 @@ export function ProductGrid({
                 ${p.price.toFixed(2)}
               </div>
 
-              {/* Stock */}
+              {/* Stock status */}
               <div
                 className={`text-[10px] ${
-                  oos ? "text-red-400" : lowStock ? "text-amber-500" : "text-gray-400"
+                  oos
+                    ? "text-red-400"
+                    : lowStock
+                    ? "text-amber-500"
+                    : "text-gray-400"
                 }`}
               >
-                {oos ? "Out of stock" : lowStock ? `⚠ ${p.stock} left` : `Stock: ${p.stock}`}
+                {oos
+                  ? "Out of stock"
+                  : lowStock
+                  ? `⚠ ${p.stock} left`
+                  : `Stock: ${p.stock}`}
               </div>
             </button>
           );
         })}
       </div>
 
-      {/* ── MODAL ── */}
+      {/* ────────────── MODAL ────────────── */}
       {selectedProduct && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setSelectedProduct(null); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedProduct(null);
+          }}
         >
           <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
 
@@ -221,9 +241,13 @@ export function ProductGrid({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm leading-tight">{selectedProduct.name}</div>
+                <div className="font-semibold text-sm leading-tight">
+                  {selectedProduct.name}
+                </div>
                 {selectedProduct.attributes?.brand && (
-                  <div className="text-xs text-blue-500 mt-0.5">{selectedProduct.attributes.brand}</div>
+                  <div className="text-xs text-blue-500 mt-0.5">
+                    {selectedProduct.attributes.brand}
+                  </div>
                 )}
                 <div className="text-blue-600 font-bold text-base mt-1">
                   ${selectedProduct.price.toFixed(2)}
@@ -231,16 +255,18 @@ export function ProductGrid({
               </div>
             </div>
 
-            {/* Selectors */}
+            {/* Variant selectors */}
             <div className="p-4 space-y-4">
 
               {/* SIZE */}
               {(selectedProduct.attributes?.sizes?.length ?? 0) > 0 && (
                 <div>
                   <div className="text-xs font-medium text-gray-500 mb-1.5">
-                    Size
+                    Size{" "}
                     {selectedSize && (
-                      <span className="ml-1 text-blue-600 font-semibold">{selectedSize}</span>
+                      <span className="text-blue-600 font-semibold">
+                        — {selectedSize}
+                      </span>
                     )}
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -265,9 +291,11 @@ export function ProductGrid({
               {(selectedProduct.attributes?.colors?.length ?? 0) > 0 && (
                 <div>
                   <div className="text-xs font-medium text-gray-500 mb-1.5">
-                    Color
+                    Color{" "}
                     {selectedColor && (
-                      <span className="ml-1 text-blue-600 font-semibold capitalize">{selectedColor}</span>
+                      <span className="text-blue-600 font-semibold capitalize">
+                        — {selectedColor}
+                      </span>
                     )}
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -275,7 +303,6 @@ export function ProductGrid({
                       <button
                         key={c}
                         onClick={() => setSelectedColor(c)}
-                        title={c}
                         className={`flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg font-medium transition-colors ${
                           selectedColor === c
                             ? "border-blue-600 ring-1 ring-blue-600"
@@ -283,7 +310,7 @@ export function ProductGrid({
                         }`}
                       >
                         <span
-                          className="w-3 h-3 rounded-full border border-gray-200 inline-block flex-shrink-0"
+                          className="w-3 h-3 rounded-full border border-gray-200 flex-shrink-0"
                           style={{ backgroundColor: c.toLowerCase() }}
                         />
                         <span className="capitalize">{c}</span>
@@ -297,9 +324,11 @@ export function ProductGrid({
               {(selectedProduct.attributes?.materials?.length ?? 0) > 0 && (
                 <div>
                   <div className="text-xs font-medium text-gray-500 mb-1.5">
-                    Material
+                    Material{" "}
                     {selectedMaterial && (
-                      <span className="ml-1 text-blue-600 font-semibold">{selectedMaterial}</span>
+                      <span className="text-blue-600 font-semibold">
+                        — {selectedMaterial}
+                      </span>
                     )}
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -320,12 +349,14 @@ export function ProductGrid({
                 </div>
               )}
 
-              {/* No variants message */}
+              {/* No variants */}
               {(selectedProduct.attributes?.sizes?.length ?? 0) === 0 &&
-               (selectedProduct.attributes?.colors?.length ?? 0) === 0 &&
-               (selectedProduct.attributes?.materials?.length ?? 0) === 0 && (
-                <p className="text-xs text-gray-400 text-center py-2">No variants for this product</p>
-              )}
+                (selectedProduct.attributes?.colors?.length ?? 0) === 0 &&
+                (selectedProduct.attributes?.materials?.length ?? 0) === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-2">
+                    No variants for this product
+                  </p>
+                )}
             </div>
 
             {/* Actions */}
