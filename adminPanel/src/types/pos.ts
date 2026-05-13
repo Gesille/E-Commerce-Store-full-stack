@@ -17,18 +17,16 @@ export interface Order {
   createdAt: Date;
 }
 export interface Product {
-  id: number;
+  id: string | number;
   name: string;
+  reference:string;
+  shortDescription: string;
+  description: string;
   price: number;
-  qty_available: number;
-  image_1920?: string;
-
-  attributes?: {
-    brand?: string;
-    sizes?: string[];
-    colors?: string[];
-    materials?: string[];
-  };
+  sizes: string[];
+  colors: string[];
+  images: Record<string, string>;
+  stock:number;
 }
 export interface Category {
   odooCategoryId: string | number;
@@ -46,7 +44,7 @@ export interface Customer {
   phone?: string;
 }
 
- export function fmt(n: number) {
+export function fmt(n: number) {
   return n.toFixed(2);
 }
 

@@ -18,13 +18,15 @@ export function ProductGrid({
   const { data: products = [], isLoading } = useGetAllProductsQuery(
     categoryId !== undefined ? { categoryId } : undefined,
   );
-
-  const filtered = (products as Product[]).filter((p) =>
+  
+console.log(products)
+  const filtered = products.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()),
   );
 
-  // ───────── STATE ─────────
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] =
+    useState<Product | null>(null);
+
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [selectedMaterial, setSelectedMaterial] = useState("");
@@ -32,7 +34,6 @@ export function ProductGrid({
   const cartQty = (id: number) =>
     cart.find((i) => i.id === id)?.qty ?? 0;
 
-  // ───────── ADD TO CART ─────────
   const confirmAddToCart = () => {
     if (!selectedProduct) return;
 
@@ -63,11 +64,11 @@ export function ProductGrid({
           name: selectedProduct.name,
           price: selectedProduct.price,
           qty: 1,
-          note: "",
+          note: "", // ✅ keep note
           size: selectedSize,
           color: selectedColor,
           material: selectedMaterial,
-        } as any,
+        },
       ]);
     }
 
@@ -78,7 +79,10 @@ export function ProductGrid({
     return (
       <div
         className="grid gap-2.5 p-4"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
+        style={{
+          gridTemplateColumns:
+            "repeat(auto-fill, minmax(110px, 1fr))",
+        }}
       >
         {Array.from({ length: 12 }).map((_, i) => (
           <div
@@ -100,19 +104,24 @@ export function ProductGrid({
 
   return (
     <>
-      {/* ───────── GRID ───────── */}
+      {/* GRID */}
       <div
         className="grid gap-2.5 p-4"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))" }}
+        style={{
+          gridTemplateColumns:
+            "repeat(auto-fill, minmax(110px, 1fr))",
+        }}
       >
         {filtered.map((p) => {
           const inCart = cartQty(p.id);
-          const oos = p.qty_available <= 0;
-          const lowStock = !oos && p.qty_available <= 3;
 
-          const sizes = p.attributes?.sizes ?? [];
-          const colors = p.attributes?.colors ?? [];
-          const materials = p.attributes?.materials ?? [];
+          const oos = p.qty_available <= 0;
+          const lowStock =
+            !oos && p.qty_available <= 3;
+
+          const sizes = p.sizes ?? [];
+          const colors = p.colors ?? [];
+          const materials = p.materials ?? [];
 
           return (
             <button
@@ -121,12 +130,13 @@ export function ProductGrid({
                 if (oos) return;
 
                 setSelectedProduct(p);
+
                 setSelectedSize(sizes[0] ?? "");
                 setSelectedColor(colors[0] ?? "");
                 setSelectedMaterial(materials[0] ?? "");
               }}
               disabled={oos}
-              className={`relative bg-white rounded-xl border text-center p-3 ${
+              className={`relative bg-white rounded-xl border text-center p-3 transition ${
                 oos
                   ? "opacity-40 cursor-not-allowed"
                   : "cursor-pointer hover:shadow-sm hover:-translate-y-px"
@@ -138,6 +148,7 @@ export function ProductGrid({
                 </span>
               )}
 
+              {/* IMAGE */}
               <div className="w-11 h-11 bg-gray-100 rounded-xl mx-auto mb-2 flex items-center justify-center overflow-hidden">
                 {p.image_1920 ? (
                   <img
@@ -146,22 +157,23 @@ export function ProductGrid({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="text-xs text-gray-400">No Image</div>
+                  <div className="text-[10px] text-gray-400">
+                    No Image
+                  </div>
                 )}
               </div>
 
+              {/* NAME */}
               <div className="text-[11px] font-medium line-clamp-2">
                 {p.name}
               </div>
 
-              <div className="text-[10px] text-gray-400">
-                {p.attributes?.brand ?? ""}
-              </div>
-
+              {/* PRICE */}
               <div className="text-[13px] font-semibold text-blue-600">
                 ${p.price}
               </div>
 
+              {/* STOCK */}
               <div className="text-[10px] text-gray-400">
                 {oos
                   ? "Out of stock"
@@ -174,96 +186,102 @@ export function ProductGrid({
         })}
       </div>
 
-      {/* ───────── MODAL ───────── */}
+      {/* MODAL */}
       {selectedProduct && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white w-80 rounded-xl p-4 shadow-lg">
 
-            <div className="text-sm font-semibold mb-3">
+            <div className="text-sm font-semibold mb-4">
               {selectedProduct.name}
             </div>
 
             {/* SIZE */}
-            <div className="mb-3">
-              <div className="text-xs text-gray-500 mb-1">Size</div>
+            {selectedProduct.sizes?.length ? (
+              <div className="mb-4">
+                <div className="text-xs text-gray-500 mb-2">
+                  Size
+                </div>
 
-              {((selectedProduct.attributes?.sizes ?? []).length > 0) ? (
                 <div className="flex gap-2 flex-wrap">
-                  {(selectedProduct.attributes?.sizes ?? []).map((s) => (
+                  {selectedProduct.sizes.map((s) => (
                     <button
                       key={s}
                       onClick={() => setSelectedSize(s)}
                       className={`px-2 py-1 text-xs border rounded ${
-                        selectedSize === s ? "bg-blue-600 text-white" : ""
+                        selectedSize === s
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white"
                       }`}
                     >
                       {s}
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="text-xs text-gray-400">No sizes</div>
-              )}
-            </div>
+              </div>
+            ) : null}
 
             {/* COLOR */}
-            <div className="mb-3">
-              <div className="text-xs text-gray-500 mb-1">Color</div>
+            {selectedProduct.colors?.length ? (
+              <div className="mb-4">
+                <div className="text-xs text-gray-500 mb-2">
+                  Color
+                </div>
 
-              {((selectedProduct.attributes?.colors ?? []).length > 0) ? (
                 <div className="flex gap-2 flex-wrap">
-                  {(selectedProduct.attributes?.colors ?? []).map((c) => (
+                  {selectedProduct.colors.map((c) => (
                     <button
                       key={c}
                       onClick={() => setSelectedColor(c)}
                       className={`px-2 py-1 text-xs border rounded ${
-                        selectedColor === c ? "bg-blue-600 text-white" : ""
+                        selectedColor === c
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white"
                       }`}
                     >
                       {c}
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="text-xs text-gray-400">No colors</div>
-              )}
-            </div>
+              </div>
+            ) : null}
 
             {/* MATERIAL */}
-            <div className="mb-3">
-              <div className="text-xs text-gray-500 mb-1">Material</div>
+            {selectedProduct.materials?.length ? (
+              <div className="mb-4">
+                <div className="text-xs text-gray-500 mb-2">
+                  Material
+                </div>
 
-              {((selectedProduct.attributes?.materials ?? []).length > 0) ? (
                 <div className="flex gap-2 flex-wrap">
-                  {(selectedProduct.attributes?.materials ?? []).map((m) => (
+                  {selectedProduct.materials.map((m) => (
                     <button
                       key={m}
                       onClick={() => setSelectedMaterial(m)}
                       className={`px-2 py-1 text-xs border rounded ${
-                        selectedMaterial === m ? "bg-blue-600 text-white" : ""
+                        selectedMaterial === m
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white"
                       }`}
                     >
                       {m}
                     </button>
                   ))}
                 </div>
-              ) : (
-                <div className="text-xs text-gray-400">No materials</div>
-              )}
-            </div>
+              </div>
+            ) : null}
 
             {/* ACTIONS */}
-            <div className="flex justify-end gap-2 mt-4">
+            <div className="flex justify-end gap-2 mt-5">
               <button
                 onClick={() => setSelectedProduct(null)}
-                className="px-3 py-1 text-xs border rounded"
+                className="px-3 py-1.5 text-xs border rounded-lg"
               >
                 Cancel
               </button>
 
               <button
                 onClick={confirmAddToCart}
-                className="px-3 py-1 text-xs bg-blue-600 text-white rounded"
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg"
               >
                 Add to Cart
               </button>
