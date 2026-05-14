@@ -1,11 +1,15 @@
+"use client";
+
 import {
   CartItem,
   Customer,
-  calcOrderTotals,
   fmt,
   calcLineTotal,
+  
 } from "@/types/pos";
+
 import { useState, useCallback, useEffect } from "react";
+import { calcTotal, Discount } from "./posPricing";
 
 export function CartPanel({
   cart,
@@ -27,41 +31,41 @@ export function CartPanel({
   onOpenNote: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [mode, setMode] = useState<"Qty" | "Disc" | "Price">("Qty");
   const [buffer, setBuffer] = useState("");
-  const [globalDiscount, setGlobalDiscount] = useState(0);
 
-  const { subtotal } = calcOrderTotals(cart);
+  // ✅ GLOBAL DISCOUNT (Odoo style)
+  const [discount, setDiscount] = useState<Discount>({
+    type: "percent",
+    value: 0,
+  });
 
-  const discountAmt = subtotal * (globalDiscount / 100);
-  const discountedSubtotal = subtotal - discountAmt;
-  const taxOnDiscounted = discountedSubtotal * 0.1;
-  const total = discountedSubtotal + taxOnDiscounted;
+  // ✅ ALL CALCULATIONS COME FROM ONE SOURCE (IMPORTANT)
+  const { subtotal, discountAmt, afterDiscount, tax, total } = calcTotal(
+    cart,
+    discount,
+  );
 
-  // ─── UPDATE ITEM (numpad still works if needed) ───
+  // ─────────────────────────────────────────────
+  // UPDATE ITEM
+  // ─────────────────────────────────────────────
   const updateItem = (id: number, val: number) => {
     setCart(
       cart
         .map((item) => {
           if (item.id !== id) return item;
 
-          if (mode === "Qty") return { ...item, qty: Math.max(1, val) };
-
-          if (mode === "Disc")
-            return {
-              ...item,
-              discount: Math.min(100, Math.max(0, val)),
-            };
-
-          if (mode === "Price") return { ...item, price: Math.max(0, val) };
-
-          return item;
+          return {
+            ...item,
+            qty: Math.max(1, val),
+          };
         })
         .filter((item) => item.qty > 0),
     );
   };
 
-  // ─── + / - QUANTITY ───
+  // ─────────────────────────────────────────────
+  // QTY +/-
+  // ─────────────────────────────────────────────
   const changeQty = (id: number, delta: number) => {
     setCart(
       cart
@@ -74,7 +78,9 @@ export function CartPanel({
     );
   };
 
-  // ─── NUMPAD (optional, still kept) ───
+  // ─────────────────────────────────────────────
+  // NUMPAD
+  // ─────────────────────────────────────────────
   const handleNumpad = useCallback(
     (key: string) => {
       if (!selectedId) return;
@@ -90,19 +96,24 @@ export function CartPanel({
       const num = parseFloat(next);
       if (!isNaN(num)) updateItem(selectedId, num);
     },
-    [selectedId, buffer, mode],
+    [selectedId, buffer],
   );
 
-  // ─── REMOVE ITEM ───
+  // ─────────────────────────────────────────────
+  // REMOVE ITEM
+  // ─────────────────────────────────────────────
   const removeItem = (id: number) => {
     setCart(cart.filter((i) => i.id !== id));
+
     if (selectedId === id) {
       setSelectedId(null);
       setBuffer("");
     }
   };
 
-  // ─── KEYBOARD ───
+  // ─────────────────────────────────────────────
+  // KEYBOARD SUPPORT
+  // ─────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -130,9 +141,12 @@ export function CartPanel({
     return () => window.removeEventListener("keydown", handler);
   }, [selectedId, handleNumpad]);
 
+  // ─────────────────────────────────────────────
+  // UI
+  // ─────────────────────────────────────────────
   return (
     <div className="w-72 bg-white border-l flex flex-col">
-      {/* ─── HEADER ─── */}
+      {/* HEADER */}
       <div className="px-5 py-3 border-b">
         <div className="text-[15px] font-semibold">{orderName}</div>
 
@@ -144,7 +158,6 @@ export function CartPanel({
           </button>
         </div>
 
-        {/* ORDER NOTE (KEEPED ONLY ONE NOTE) */}
         <button
           onClick={onOpenNote}
           className={`mt-2 text-left text-xs ${
@@ -155,7 +168,7 @@ export function CartPanel({
         </button>
       </div>
 
-      {/* ─── CART ITEMS ─── */}
+      {/* CART */}
       <div className="flex-1 overflow-y-auto">
         {cart.length === 0 && (
           <div className="text-center text-gray-400 text-sm mt-10">
@@ -191,7 +204,6 @@ export function CartPanel({
               </div>
             </div>
 
-            {/* ─── QTY CONTROLS ─── */}
             <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
               <button
                 onClick={(e) => {
@@ -221,45 +233,26 @@ export function CartPanel({
         ))}
       </div>
 
-      {/* ─── TOTALS ─── */}
-      {/* ─── TOTALS ─── */}
+      {/* TOTALS (Odoo STYLE) */}
       <div className="px-5 py-4 bg-gray-50 border-t">
         <div className="flex justify-between text-xs">
           <span>Subtotal</span>
           <span>${fmt(subtotal)}</span>
         </div>
 
-        {/* 🔥 ADD GLOBAL DISCOUNT HERE */}
-        <div className="flex items-center justify-between text-xs mt-2">
-          <span>Discount %</span>
-
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={globalDiscount}
-            onChange={(e) =>
-              setGlobalDiscount(
-                Math.max(0, Math.min(100, Number(e.target.value))),
-              )
-            }
-            className="w-16 text-right border rounded px-1 py-0.5 text-xs"
-          />
-        </div>
-
         <div className="flex justify-between text-xs mt-1">
-          <span>Discount Amount</span>
+          <span>Discount</span>
           <span>-${fmt(discountAmt)}</span>
         </div>
 
         <div className="flex justify-between text-xs mt-1">
           <span>After Discount</span>
-          <span>${fmt(discountedSubtotal)}</span>
+          <span>${fmt(afterDiscount)}</span>
         </div>
 
         <div className="flex justify-between text-xs mt-1">
-          <span>Tax (10%)</span>
-          <span>${fmt(taxOnDiscounted)}</span>
+          <span>Tax</span>
+          <span>${fmt(tax)}</span>
         </div>
 
         <div className="flex justify-between text-lg font-semibold mt-2">
@@ -267,7 +260,8 @@ export function CartPanel({
           <span>${fmt(total)}</span>
         </div>
       </div>
-      {/* ─── PAY BUTTON ─── */}
+
+      {/* PAY */}
       <button
         onClick={() => cart.length > 0 && onOpenPayment()}
         disabled={cart.length === 0}
