@@ -231,18 +231,7 @@ const AppSidebar = () => {
 
           <SidebarGroupContent>
             <SidebarMenu>
-              {/* POS */}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <Link
-                    href="/pos"
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
-                  >
-                    <ShoppingBasket size={16} />
-                    <span className="text-sm">POS</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+             
               <Sheet>
                 <SheetTrigger asChild>
                   <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
