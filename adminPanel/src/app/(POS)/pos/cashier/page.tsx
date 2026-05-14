@@ -37,7 +37,7 @@ function ClockDisplay() {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
-  
+  const { session, stats, loading, openSession, closeSession, switchCashier } = usePOSSession();
 
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
