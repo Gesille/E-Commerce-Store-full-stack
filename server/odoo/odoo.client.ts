@@ -9,7 +9,7 @@ const ODOO_PASSWORD = process.env.ODOO_PASSWORD as string;
 export const odooRequest = async (
   model: string,
   method: string,
-  domain: any[] = [],
+   args: any[] = [],
   kwargs: any = {}
 ) => {
   const response = await fetch(`${ODOO_URL}/jsonrpc`, {
@@ -29,7 +29,7 @@ export const odooRequest = async (
           ODOO_PASSWORD,
           model,
           method,
-          domain,
+          args,
           kwargs,
         ],
       },
@@ -45,3 +45,4 @@ export const odooRequest = async (
 
   return data.result;
 };
+
