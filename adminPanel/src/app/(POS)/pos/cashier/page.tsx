@@ -11,7 +11,7 @@ import { NoteModal } from "@/components/NoteModal";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { POSSearchBar } from "@/components/POSSearchBar";
-import { usePOSSession } from "@/hooks/usePOSSession";
+
 import { OpenSessionModal } from "@/components/OpenSessionModal";
 import { SwitchCashierModal } from "@/components/SwitchCashierModal";
 
@@ -37,7 +37,7 @@ function ClockDisplay() {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
-  const { session, stats, loading, openSession, closeSession, switchCashier } = usePOSSession();
+  
 
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
