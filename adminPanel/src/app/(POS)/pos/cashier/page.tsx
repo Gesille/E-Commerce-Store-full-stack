@@ -12,6 +12,8 @@ import { HoldOrdersPanel } from "@/components/HoldOrdersPanel";
 import { NoteModal } from "@/components/NoteModal";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ReceiptModal } from "@/components/ReceiptModal";
+import { POSSearchBar } from "@/components/POSSearchBar";
+import { usePOSSession } from "@/hooks/usePOSSession";
 
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
@@ -35,37 +37,13 @@ function ClockDisplay() {
 
 // ─── SEARCH BAR ───────────────────────────────────────────────────────────────
 
-function POSSearchBar({
-  search,
-  setSearch,
-}: {
-  search: string;
-  setSearch: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 h-8 w-52">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search products…"
-        className="bg-transparent border-none outline-none text-gray-700 text-xs w-full placeholder-gray-400"
-      />
-      {search && (
-        <button onClick={() => setSearch("")} aria-label="Clear search" className="text-gray-400 hover:text-gray-600 text-xs leading-none bg-transparent border-none cursor-pointer">
-          ✕
-        </button>
-      )}
-    </div>
-  );
-}
 
 
 
 export default function CashierPage() {
+  const { session, stats, loading, openSession, closeSession, switchCashier } = usePOSSession();
+ const [showOpenSession,   setShowOpenSession]   = useState(false);
+  const [showSwitchCashier, setShowSwitchCashier] = useState(false);
   const [category, setCategory] = useState<string>("All");
   const [search, setSearch] = useState<string>("");
 
@@ -179,10 +157,34 @@ export default function CashierPage() {
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
             <span className="text-[14px] font-semibold text-gray-900">POS — Shop #1</span>
-            <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium">● Session open</span>
+          {loading ? (
+  <span className="text-[11px] text-gray-400">Loading…</span>
+) : session ? (
+  <>
+    <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium">
+      ● {session.name}
+    </span>
+    <span className="text-[11px] text-gray-500">
+      👤 {session.cashierId.name}
+    </span>
+    <button
+      onClick={() => setShowSwitchCashier(true)}
+      className="text-[11px] text-blue-500 hover:underline"
+    >
+      Switch
+    </button>
+  </>
+) : (
+  <button
+    onClick={() => setShowOpenSession(true)}
+    className="text-[11px] bg-red-50 text-red-600 px-2.5 py-0.5 rounded-full font-medium hover:bg-red-100"
+  >
+    ○ No session — click to open
+  </button>
+)}
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[11px] text-gray-400 hidden sm:block">⌨ Keyboard shortcuts: Esc · Del · 0-9</span>
+           
             <POSSearchBar search={search} setSearch={setSearch} />
             <span className="text-[13px] text-gray-500 font-medium">👤 Admin</span>
             <span className="text-[12px] text-gray-400"><ClockDisplay /></span>

@@ -15,6 +15,7 @@ import { ErrorMiddleware } from "./middleware/error.js";
 import categoryRouter from "./routes/categories.route.js";
 import contactRouter from "./routes/contact.route.js";
 import reportRouter from "./routes/reportRoutes.js";
+import POSRouter from "./routes/pos.routes.js";
 
 
 export const app = express();
@@ -61,7 +62,7 @@ app.use("/api/v1", addressRouter);
 app.use("/api/v1",categoryRouter);
 app.use("/api/v1",contactRouter);
 app.use("/api/v1",reportRouter);
-
+app.use("/api/v1",POSRouter)
 
 
 // test route
