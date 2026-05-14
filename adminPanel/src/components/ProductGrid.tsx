@@ -99,6 +99,7 @@ console.log(apiProducts)
           price: p.price,
           qty: 1,
           note: "",
+          unitPrice: p.price,
           size: selectedSize,
           color: selectedColor,
           material: selectedMaterial,

@@ -45,8 +45,7 @@ export function CartPanel({
         .map((item) => {
           if (item.id !== id) return item;
 
-          if (mode === "Qty")
-            return { ...item, qty: Math.max(1, val) };
+          if (mode === "Qty") return { ...item, qty: Math.max(1, val) };
 
           if (mode === "Disc")
             return {
@@ -54,12 +53,11 @@ export function CartPanel({
               discount: Math.min(100, Math.max(0, val)),
             };
 
-          if (mode === "Price")
-            return { ...item, price: Math.max(0, val) };
+          if (mode === "Price") return { ...item, price: Math.max(0, val) };
 
           return item;
         })
-        .filter((item) => item.qty > 0)
+        .filter((item) => item.qty > 0),
     );
   };
 
@@ -70,9 +68,9 @@ export function CartPanel({
         .map((item) =>
           item.id === id
             ? { ...item, qty: Math.max(1, item.qty + delta) }
-            : item
+            : item,
         )
-        .filter((item) => item.qty > 0)
+        .filter((item) => item.qty > 0),
     );
   };
 
@@ -92,7 +90,7 @@ export function CartPanel({
       const num = parseFloat(next);
       if (!isNaN(num)) updateItem(selectedId, num);
     },
-    [selectedId, buffer, mode]
+    [selectedId, buffer, mode],
   );
 
   // ─── REMOVE ITEM ───
@@ -115,10 +113,7 @@ export function CartPanel({
         setBuffer("");
       }
 
-      if (
-        (e.key === "Delete" || e.key === "Backspace") &&
-        selectedId
-      ) {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
         if (e.key === "Backspace") {
           handleNumpad("del");
           return;
@@ -137,7 +132,6 @@ export function CartPanel({
 
   return (
     <div className="w-72 bg-white border-l flex flex-col">
-
       {/* ─── HEADER ─── */}
       <div className="px-5 py-3 border-b">
         <div className="text-[15px] font-semibold">{orderName}</div>
@@ -145,10 +139,7 @@ export function CartPanel({
         <div className="flex justify-between text-xs text-gray-400 mt-1">
           <span>{cart.length} items</span>
 
-          <button
-            onClick={onOpenCustomer}
-            className="text-blue-600"
-          >
+          <button onClick={onOpenCustomer} className="text-blue-600">
             {customer ? customer.name : "Add customer"}
           </button>
         </div>
@@ -157,9 +148,7 @@ export function CartPanel({
         <button
           onClick={onOpenNote}
           className={`mt-2 text-left text-xs ${
-            orderNote
-              ? "text-amber-600"
-              : "text-gray-400 hover:text-gray-600"
+            orderNote ? "text-amber-600" : "text-gray-400 hover:text-gray-600"
           }`}
         >
           📝 {orderNote || "Add order note…"}
@@ -182,9 +171,7 @@ export function CartPanel({
               setBuffer("");
             }}
             className={`px-5 py-3 border-b cursor-pointer ${
-              selectedId === item.id
-                ? "bg-blue-50"
-                : "hover:bg-gray-50"
+              selectedId === item.id ? "bg-blue-50" : "hover:bg-gray-50"
             }`}
           >
             <div className="flex justify-between text-sm font-medium">
@@ -228,19 +215,46 @@ export function CartPanel({
                 +
               </button>
 
-              <span className="ml-2">
-                × ${fmt(item.price)}
-              </span>
+              <span className="ml-2">× ${fmt(item.price)}</span>
             </div>
           </div>
         ))}
       </div>
 
       {/* ─── TOTALS ─── */}
+      {/* ─── TOTALS ─── */}
       <div className="px-5 py-4 bg-gray-50 border-t">
         <div className="flex justify-between text-xs">
           <span>Subtotal</span>
           <span>${fmt(subtotal)}</span>
+        </div>
+
+        {/* 🔥 ADD GLOBAL DISCOUNT HERE */}
+        <div className="flex items-center justify-between text-xs mt-2">
+          <span>Discount %</span>
+
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={globalDiscount}
+            onChange={(e) =>
+              setGlobalDiscount(
+                Math.max(0, Math.min(100, Number(e.target.value))),
+              )
+            }
+            className="w-16 text-right border rounded px-1 py-0.5 text-xs"
+          />
+        </div>
+
+        <div className="flex justify-between text-xs mt-1">
+          <span>Discount Amount</span>
+          <span>-${fmt(discountAmt)}</span>
+        </div>
+
+        <div className="flex justify-between text-xs mt-1">
+          <span>After Discount</span>
+          <span>${fmt(discountedSubtotal)}</span>
         </div>
 
         <div className="flex justify-between text-xs mt-1">
@@ -253,7 +267,6 @@ export function CartPanel({
           <span>${fmt(total)}</span>
         </div>
       </div>
-
       {/* ─── PAY BUTTON ─── */}
       <button
         onClick={() => cart.length > 0 && onOpenPayment()}

@@ -1,8 +1,11 @@
 export interface CartItem {
   note: string;
+
   id: number;
   name: string;
-  price: number;
+
+  price: number;      
+  unitPrice: number;  
   qty: number;
   discount?: number;
 
@@ -50,7 +53,10 @@ export function fmt(n: number) {
 }
 
 export function calcLineTotal(item: CartItem) {
-  return item.price * item.qty * (1 - (item.discount || 0) / 100);
+  const base = item.price * item.qty;
+  const discount = item.discount || 0;
+
+  return base - (base * discount) / 100;
 }
 
 export function calcOrderTotals(cart: CartItem[]) {
