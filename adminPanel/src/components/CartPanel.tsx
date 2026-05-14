@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback, useEffect } from "react";
 import {
   CartItem,
   Customer,
@@ -7,7 +8,6 @@ import {
   calcLineTotal,
 } from "@/types/pos";
 
-import { useState, useCallback, useEffect } from "react";
 import { calcTotal, Discount } from "./posPricing";
 
 export function CartPanel({
@@ -29,136 +29,51 @@ export function CartPanel({
   orderNote: string;
   onOpenNote: () => void;
 }) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [buffer, setBuffer] = useState("");
 
-  // ✅ GLOBAL DISCOUNT (NOW WORKING)
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // ⭐ PROFESSIONAL DISCOUNT STATE (Odoo style)
   const [discount, setDiscount] = useState<Discount>({
     type: "percent",
     value: 0,
   });
 
-  // ✅ SINGLE SOURCE OF TRUTH
-  const { subtotal, discountAmt, afterDiscount, tax, total } = calcTotal(
-    cart,
-    discount,
-  );
+  const totals = calcTotal(cart, discount);
 
-  // ─────────────────────────────
-  // UPDATE ITEM
-  // ─────────────────────────────
-  const updateItem = (id: number, val: number) => {
-    setCart(
-      cart
-        .map((item) =>
-          item.id === id
-            ? { ...item, qty: Math.max(1, val) }
-            : item,
-        )
-        .filter((item) => item.qty > 0),
-    );
-  };
-
-  // ─────────────────────────────
-  // QTY +/- (PROFESSIONAL FIX)
-  // ─────────────────────────────
+  // ─── QTY UPDATE ───
   const changeQty = (id: number, delta: number) => {
     setCart(
-      cart
-        .map((item) =>
-          item.id === id
-            ? { ...item, qty: Math.max(1, item.qty + delta) }
-            : item,
-        )
-        .filter((item) => item.qty > 0),
+      cart.map(item =>
+        item.id === id
+          ? { ...item, qty: Math.max(1, item.qty + delta) }
+          : item
+      )
     );
   };
 
-  // ─────────────────────────────
-  // DISCOUNT INPUT HANDLER ⭐ IMPORTANT
-  // ─────────────────────────────
-  const handleDiscountChange = (value: number) => {
-    setDiscount((prev) => ({
+  // ─── REMOVE ITEM ───
+  const removeItem = (id: number) => {
+    setCart(cart.filter(i => i.id !== id));
+  };
+
+  // ─── DISCOUNT UPDATE (PROFESSIONAL CONTROL) ───
+  const updateDiscount = (value: number) => {
+    setDiscount(prev => ({
       ...prev,
       value: Math.max(0, Math.min(100, value)),
     }));
   };
 
-  // ─────────────────────────────
-  // NUMPAD
-  // ─────────────────────────────
-  const handleNumpad = useCallback(
-    (key: string) => {
-      if (!selectedId) return;
-
-      let next = buffer;
-
-      if (key === "del") next = buffer.slice(0, -1);
-      else next = buffer + key;
-
-      setBuffer(next);
-
-      const num = parseFloat(next);
-      if (!isNaN(num)) updateItem(selectedId, num);
-    },
-    [selectedId, buffer],
-  );
-
-  // ─────────────────────────────
-  // REMOVE
-  // ─────────────────────────────
-  const removeItem = (id: number) => {
-    setCart(cart.filter((i) => i.id !== id));
-
-    if (selectedId === id) {
-      setSelectedId(null);
-      setBuffer("");
-    }
-  };
-
-  // ─────────────────────────────
-  // KEYBOARD
-  // ─────────────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-      if (e.key === "Escape") {
-        setSelectedId(null);
-        setBuffer("");
-      }
-
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-        if (e.key === "Backspace") {
-          handleNumpad("del");
-          return;
-        }
-        removeItem(selectedId);
-      }
-
-      if (/^[0-9.]$/.test(e.key) && selectedId) {
-        handleNumpad(e.key);
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [selectedId, handleNumpad]);
-
-  // ─────────────────────────────
-  // UI
-  // ─────────────────────────────
+  // ─── UI ───
   return (
     <div className="w-72 bg-white border-l flex flex-col">
 
       {/* HEADER */}
       <div className="px-5 py-3 border-b">
-        <div className="text-[15px] font-semibold">{orderName}</div>
+        <div className="text-lg font-semibold">{orderName}</div>
 
         <div className="flex justify-between text-xs text-gray-400 mt-1">
           <span>{cart.length} items</span>
-
           <button onClick={onOpenCustomer} className="text-blue-600">
             {customer ? customer.name : "Add customer"}
           </button>
@@ -166,7 +81,7 @@ export function CartPanel({
 
         <button
           onClick={onOpenNote}
-          className="mt-2 text-left text-xs text-gray-500"
+          className="mt-2 text-xs text-left text-gray-500"
         >
           📝 {orderNote || "Add order note…"}
         </button>
@@ -174,68 +89,70 @@ export function CartPanel({
 
       {/* CART */}
       <div className="flex-1 overflow-y-auto">
-        {cart.map((item) => (
+        {cart.map(item => (
           <div
             key={item.id}
-            onClick={() => {
-              setSelectedId(item.id);
-              setBuffer("");
-            }}
-            className="px-5 py-3 border-b cursor-pointer hover:bg-gray-50"
+            onClick={() => setSelectedId(item.id)}
+            className="px-5 py-3 border-b hover:bg-gray-50"
           >
-            <div className="flex justify-between text-sm font-medium">
+            <div className="flex justify-between text-sm">
               <span>{item.name}</span>
               <span>${fmt(calcLineTotal(item))}</span>
             </div>
 
-            <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+            <div className="flex items-center gap-2 mt-1 text-xs">
               <button onClick={() => changeQty(item.id, -1)}>-</button>
               <span>{item.qty}</span>
               <button onClick={() => changeQty(item.id, 1)}>+</button>
+
+              <button
+                onClick={() => removeItem(item.id)}
+                className="ml-auto text-red-500"
+              >
+                remove
+              </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* TOTALS (PROFESSIONAL ODOO STYLE) */}
+      {/* TOTALS (REAL POS STYLE) */}
       <div className="px-5 py-4 bg-gray-50 border-t">
 
         <div className="flex justify-between text-xs">
           <span>Subtotal</span>
-          <span>${fmt(subtotal)}</span>
+          <span>${fmt(totals.subtotal)}</span>
         </div>
 
-        {/* ⭐ DISCOUNT INPUT (FIXED) */}
+        {/* ⭐ DISCOUNT (PROFESSIONAL CONTROL) */}
         <div className="flex justify-between text-xs mt-2">
           <span>Discount %</span>
           <input
             type="number"
             value={discount.value}
-            onChange={(e) =>
-              handleDiscountChange(Number(e.target.value))
-            }
-            className="w-16 text-right border px-1 rounded"
+            onChange={(e) => updateDiscount(Number(e.target.value))}
+            className="w-14 text-right border px-1 rounded"
           />
         </div>
 
         <div className="flex justify-between text-xs mt-1">
           <span>Discount</span>
-          <span>-${fmt(discountAmt)}</span>
+          <span>-${fmt(totals.discountAmt)}</span>
         </div>
 
         <div className="flex justify-between text-xs mt-1">
           <span>After Discount</span>
-          <span>${fmt(afterDiscount)}</span>
+          <span>${fmt(totals.afterDiscount)}</span>
         </div>
 
         <div className="flex justify-between text-xs mt-1">
           <span>Tax</span>
-          <span>${fmt(tax)}</span>
+          <span>${fmt(totals.tax)}</span>
         </div>
 
         <div className="flex justify-between text-lg font-bold mt-2">
           <span>Total</span>
-          <span>${fmt(total)}</span>
+          <span>${fmt(totals.total)}</span>
         </div>
       </div>
 
@@ -244,7 +161,7 @@ export function CartPanel({
         onClick={() => cart.length > 0 && onOpenPayment()}
         className="m-3 h-11 bg-blue-600 text-white rounded-xl"
       >
-        Pay ${fmt(total)}
+        Pay ${fmt(totals.total)}
       </button>
     </div>
   );

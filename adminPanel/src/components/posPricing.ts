@@ -21,10 +21,8 @@ export function calcTax(amount: number, rate = 0.1) {
 
 export function calcTotal(cart: CartItem[], discount: Discount) {
   const subtotal = calcSubtotal(cart);
-
   const discountAmt = calcDiscountAmount(subtotal, discount);
   const afterDiscount = Math.max(0, subtotal - discountAmt);
-
   const tax = calcTax(afterDiscount);
 
   return {
