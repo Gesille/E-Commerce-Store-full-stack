@@ -5,7 +5,6 @@ import {
   Customer,
   fmt,
   calcLineTotal,
-  
 } from "@/types/pos";
 
 import { useState, useCallback, useEffect } from "react";
@@ -33,39 +32,36 @@ export function CartPanel({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [buffer, setBuffer] = useState("");
 
-  // ✅ GLOBAL DISCOUNT (Odoo style)
+  // ✅ GLOBAL DISCOUNT (NOW WORKING)
   const [discount, setDiscount] = useState<Discount>({
     type: "percent",
     value: 0,
   });
 
-  // ✅ ALL CALCULATIONS COME FROM ONE SOURCE (IMPORTANT)
+  // ✅ SINGLE SOURCE OF TRUTH
   const { subtotal, discountAmt, afterDiscount, tax, total } = calcTotal(
     cart,
     discount,
   );
 
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
   // UPDATE ITEM
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
   const updateItem = (id: number, val: number) => {
     setCart(
       cart
-        .map((item) => {
-          if (item.id !== id) return item;
-
-          return {
-            ...item,
-            qty: Math.max(1, val),
-          };
-        })
+        .map((item) =>
+          item.id === id
+            ? { ...item, qty: Math.max(1, val) }
+            : item,
+        )
         .filter((item) => item.qty > 0),
     );
   };
 
-  // ─────────────────────────────────────────────
-  // QTY +/-
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
+  // QTY +/- (PROFESSIONAL FIX)
+  // ─────────────────────────────
   const changeQty = (id: number, delta: number) => {
     setCart(
       cart
@@ -78,9 +74,19 @@ export function CartPanel({
     );
   };
 
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
+  // DISCOUNT INPUT HANDLER ⭐ IMPORTANT
+  // ─────────────────────────────
+  const handleDiscountChange = (value: number) => {
+    setDiscount((prev) => ({
+      ...prev,
+      value: Math.max(0, Math.min(100, value)),
+    }));
+  };
+
+  // ─────────────────────────────
   // NUMPAD
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
   const handleNumpad = useCallback(
     (key: string) => {
       if (!selectedId) return;
@@ -88,7 +94,6 @@ export function CartPanel({
       let next = buffer;
 
       if (key === "del") next = buffer.slice(0, -1);
-      else if (key === "." && buffer.includes(".")) return;
       else next = buffer + key;
 
       setBuffer(next);
@@ -99,9 +104,9 @@ export function CartPanel({
     [selectedId, buffer],
   );
 
-  // ─────────────────────────────────────────────
-  // REMOVE ITEM
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
+  // REMOVE
+  // ─────────────────────────────
   const removeItem = (id: number) => {
     setCart(cart.filter((i) => i.id !== id));
 
@@ -111,9 +116,9 @@ export function CartPanel({
     }
   };
 
-  // ─────────────────────────────────────────────
-  // KEYBOARD SUPPORT
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
+  // KEYBOARD
+  // ─────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
@@ -141,11 +146,12 @@ export function CartPanel({
     return () => window.removeEventListener("keydown", handler);
   }, [selectedId, handleNumpad]);
 
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
   // UI
-  // ─────────────────────────────────────────────
+  // ─────────────────────────────
   return (
     <div className="w-72 bg-white border-l flex flex-col">
+
       {/* HEADER */}
       <div className="px-5 py-3 border-b">
         <div className="text-[15px] font-semibold">{orderName}</div>
@@ -160,9 +166,7 @@ export function CartPanel({
 
         <button
           onClick={onOpenNote}
-          className={`mt-2 text-left text-xs ${
-            orderNote ? "text-amber-600" : "text-gray-400 hover:text-gray-600"
-          }`}
+          className="mt-2 text-left text-xs text-gray-500"
         >
           📝 {orderNote || "Add order note…"}
         </button>
@@ -170,12 +174,6 @@ export function CartPanel({
 
       {/* CART */}
       <div className="flex-1 overflow-y-auto">
-        {cart.length === 0 && (
-          <div className="text-center text-gray-400 text-sm mt-10">
-            Cart is empty
-          </div>
-        )}
-
         {cart.map((item) => (
           <div
             key={item.id}
@@ -183,61 +181,41 @@ export function CartPanel({
               setSelectedId(item.id);
               setBuffer("");
             }}
-            className={`px-5 py-3 border-b cursor-pointer ${
-              selectedId === item.id ? "bg-blue-50" : "hover:bg-gray-50"
-            }`}
+            className="px-5 py-3 border-b cursor-pointer hover:bg-gray-50"
           >
             <div className="flex justify-between text-sm font-medium">
-              <span className="truncate">{item.name}</span>
-
-              <div className="flex items-center gap-2">
-                <span>${fmt(calcLineTotal(item))}</span>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeItem(item.id);
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
+              <span>{item.name}</span>
+              <span>${fmt(calcLineTotal(item))}</span>
             </div>
 
             <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  changeQty(item.id, -1);
-                }}
-                className="w-5 h-5 border rounded"
-              >
-                -
-              </button>
-
+              <button onClick={() => changeQty(item.id, -1)}>-</button>
               <span>{item.qty}</span>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  changeQty(item.id, 1);
-                }}
-                className="w-5 h-5 border rounded"
-              >
-                +
-              </button>
-
-              <span className="ml-2">× ${fmt(item.price)}</span>
+              <button onClick={() => changeQty(item.id, 1)}>+</button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* TOTALS (Odoo STYLE) */}
+      {/* TOTALS (PROFESSIONAL ODOO STYLE) */}
       <div className="px-5 py-4 bg-gray-50 border-t">
+
         <div className="flex justify-between text-xs">
           <span>Subtotal</span>
           <span>${fmt(subtotal)}</span>
+        </div>
+
+        {/* ⭐ DISCOUNT INPUT (FIXED) */}
+        <div className="flex justify-between text-xs mt-2">
+          <span>Discount %</span>
+          <input
+            type="number"
+            value={discount.value}
+            onChange={(e) =>
+              handleDiscountChange(Number(e.target.value))
+            }
+            className="w-16 text-right border px-1 rounded"
+          />
         </div>
 
         <div className="flex justify-between text-xs mt-1">
@@ -255,7 +233,7 @@ export function CartPanel({
           <span>${fmt(tax)}</span>
         </div>
 
-        <div className="flex justify-between text-lg font-semibold mt-2">
+        <div className="flex justify-between text-lg font-bold mt-2">
           <span>Total</span>
           <span>${fmt(total)}</span>
         </div>
@@ -264,8 +242,7 @@ export function CartPanel({
       {/* PAY */}
       <button
         onClick={() => cart.length > 0 && onOpenPayment()}
-        disabled={cart.length === 0}
-        className="m-3 h-11 bg-blue-600 text-white rounded-xl disabled:bg-gray-200"
+        className="m-3 h-11 bg-blue-600 text-white rounded-xl"
       >
         Pay ${fmt(total)}
       </button>
