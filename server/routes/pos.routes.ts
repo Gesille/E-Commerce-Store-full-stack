@@ -12,15 +12,15 @@ const POSRouter = Router();
 
 POSRouter.use(isAuthenticated);
 
-POSRouter.post("/session/open", authorizeRoles("admin"), openSession);
-POSRouter.post("/session/close", authorizeRoles("admin"), closeSession);
-POSRouter.get("/session/active", getActiveSession);
+POSRouter.post("/open-session", authorizeRoles("admin"), openSession);
+POSRouter.post("/close-session", authorizeRoles("admin"), closeSession);
+POSRouter.get("/active-session", getActiveSession);
 POSRouter.post(
-  "/session/switch-cashier",
+  "/switch-cashier",
   authorizeRoles("admin"),
   switchCashier,
 );
 
-POSRouter.post("/order", createOrder);
+POSRouter.post("/session-order", createOrder);
 
 export default POSRouter;
