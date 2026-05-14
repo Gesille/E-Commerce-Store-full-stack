@@ -91,7 +91,7 @@ const POSSidebar = () => {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItem("/pos/dashboard", <LayoutDashboard size={16} />, "Dashboard")}
+              {navItem("/pos", <LayoutDashboard size={16} />, "Dashboard")}
               {navItem("/pos/cashier", <ScanBarcode size={16} />, "Cashier")}
               {navItem("/pos/orders", <ClipboardList size={16} />, "POS Orders")}
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
