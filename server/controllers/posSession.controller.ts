@@ -121,12 +121,13 @@ export const openSession = CatchAsyncError(
       return next(new ErrorHandler("Failed to create session in Odoo", 500));
     }
 
-    await odooRequest("pos.session", "open_ui", [[sessionId]]);
-
-    const sessions = await odooRequest("pos.session", "read", [[sessionId]], {
-      fields: ["id", "name", "state", "config_id", "user_id", "start_at"],
-    });
-
+   await odooRequest("pos.session", "action_pos_session_open", [sessionId]);
+   const sessions = await odooRequest(
+  "pos.session",
+  "read",
+  [[sessionId]],
+  { fields: ["id", "name", "state", "config_id", "user_id", "start_at"] }
+);
     const session = sessions?.[0] ?? { id: sessionId };
 
     // Create the opening cashier's shift log
