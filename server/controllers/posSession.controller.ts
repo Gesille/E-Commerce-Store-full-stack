@@ -3,11 +3,7 @@ import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
 
-// ══════════════════════════════════════════════════════════════════
-//  OPEN SESSION
-//  POST /api/pos/session/open
-//  Body: { configId: number }
-// ══════════════════════════════════════════════════════════════════
+
 export const openSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { configId } = req.body;
@@ -16,7 +12,6 @@ export const openSession = CatchAsyncError(
       return next(new ErrorHandler("configId مطلوب", 400));
     }
 
-    // ── تحقق ما في جلسة مفتوحة بالفعل لنفس الـ config ──────────────
     const existing = await odooRequest<any[]>(
       "pos.session",
       "search_read",
@@ -61,11 +56,7 @@ export const openSession = CatchAsyncError(
   }
 );
 
-// ══════════════════════════════════════════════════════════════════
-//  CLOSE SESSION
-//  POST /api/pos/session/close
-//  Body: { sessionId: number }
-// ══════════════════════════════════════════════════════════════════
+
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -74,7 +65,7 @@ export const closeSession = CatchAsyncError(
       return next(new ErrorHandler("sessionId مطلوب", 400));
     }
 
-    // ── تحقق الجلسة موجودة ومفتوحة ──────────────────────────────────
+
     const sessions = await odooRequest<any[]>(
       "pos.session",
       "search_read",
@@ -88,7 +79,7 @@ export const closeSession = CatchAsyncError(
       );
     }
 
-    // ── إغلاق الجلسة ─────────────────────────────────────────────────
+
     await odooRequest(
       "pos.session",
       "action_pos_session_closing_control",
