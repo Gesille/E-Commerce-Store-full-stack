@@ -9,10 +9,10 @@ export const openSession = CatchAsyncError(
     const { configId } = req.body;
 
     if (!configId) {
-      return next(new ErrorHandler("configId مطلوب", 400));
+      return next(new ErrorHandler("configId is required", 400));
     }
 
-    const existing = await odooRequest<any[]>(
+    const existing = await odooRequest(
       "pos.session",
       "search_read",
       [[["state", "=", "opened"], ["config_id", "=", configId]]],
@@ -22,26 +22,26 @@ export const openSession = CatchAsyncError(
     if (existing?.length) {
       return next(
         new ErrorHandler(
-          `جلسة مفتوحة بالفعل لهذا الـ config: ${existing[0].name}`,
+          `A session is already open for this config: ${existing[0].name}`,
           409
         )
       );
     }
 
-    // ── إنشاء الجلسة ─────────────────────────────────────────────────
-    const sessionId = await odooRequest<number>("pos.session", "create", [
+    // ── Create session ────────────────────────────────────────────────
+    const sessionId = await odooRequest("pos.session", "create", [
       { config_id: configId },
     ]);
 
     if (!sessionId) {
-      return next(new ErrorHandler("فشل إنشاء الجلسة في Odoo", 500));
+      return next(new ErrorHandler("Failed to create session in Odoo", 500));
     }
 
-    // ── فتح الجلسة ───────────────────────────────────────────────────
+    // ── Open session ──────────────────────────────────────────────────
     await odooRequest("pos.session", "action_pos_session_open", [[sessionId]]);
 
-    // ── جلب بيانات الجلسة الجديدة ────────────────────────────────────
-    const sessions = await odooRequest<any[]>(
+    // ── Fetch new session data ────────────────────────────────────────
+    const sessions = await odooRequest(
       "pos.session",
       "read",
       [[sessionId]],
@@ -50,7 +50,7 @@ export const openSession = CatchAsyncError(
 
     res.status(201).json({
       status: "success",
-      message: "تم فتح الجلسة بنجاح",
+      message: "Session opened successfully",
       session: sessions?.[0] ?? { id: sessionId },
     });
   }
@@ -62,11 +62,10 @@ export const closeSession = CatchAsyncError(
     const { sessionId } = req.body;
 
     if (!sessionId) {
-      return next(new ErrorHandler("sessionId مطلوب", 400));
+      return next(new ErrorHandler("sessionId is required", 400));
     }
 
-
-    const sessions = await odooRequest<any[]>(
+    const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [[["id", "=", sessionId], ["state", "=", "opened"]]],
@@ -75,10 +74,9 @@ export const closeSession = CatchAsyncError(
 
     if (!sessions?.length) {
       return next(
-        new ErrorHandler("الجلسة غير موجودة أو مغلقة بالفعل", 404)
+        new ErrorHandler("Session not found or already closed", 404)
       );
     }
-
 
     await odooRequest(
       "pos.session",
@@ -88,7 +86,7 @@ export const closeSession = CatchAsyncError(
 
     res.status(200).json({
       status: "success",
-      message: "تم إغلاق الجلسة بنجاح",
+      message: "Session closed successfully",
       sessionId,
     });
   }
@@ -100,7 +98,7 @@ export const closeSession = CatchAsyncError(
 // ══════════════════════════════════════════════════════════════════
 export const getActiveSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const sessions = await odooRequest<any[]>(
+    const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [[["state", "=", "opened"]]],
@@ -120,10 +118,10 @@ export const getActiveSession = CatchAsyncError(
 
     const session = sessions?.[0] ?? null;
 
-    // ── إذا في جلسة، جلب إحصائياتها ─────────────────────────────────
+    // ── If a session exists, fetch its stats ──────────────────────────
     let stats = null;
     if (session) {
-      const orders = await odooRequest<any[]>(
+      const orders = await odooRequest(
         "pos.order",
         "search_read",
         [[["session_id", "=", session.id], ["state", "=", "paid"]]],
@@ -132,7 +130,7 @@ export const getActiveSession = CatchAsyncError(
 
       stats = {
         orderCount: orders.length,
-        totalRevenue: orders.reduce((s, o) => s + (o.amount_total ?? 0), 0),
+        totalRevenue: orders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0),
       };
     }
 
@@ -154,11 +152,11 @@ export const switchCashier = CatchAsyncError(
     const { newCashierId } = req.body;
 
     if (!newCashierId) {
-      return next(new ErrorHandler("newCashierId مطلوب", 400));
+      return next(new ErrorHandler("newCashierId is required", 400));
     }
 
-    // ── جلب الجلسة المفتوحة ───────────────────────────────────────────
-    const sessions = await odooRequest<any[]>(
+    // ── Fetch the open session ────────────────────────────────────────
+    const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [[["state", "=", "opened"]]],
@@ -171,22 +169,22 @@ export const switchCashier = CatchAsyncError(
     const session = sessions?.[0];
 
     if (!session) {
-      return next(new ErrorHandler("لا توجد جلسة مفتوحة", 404));
+      return next(new ErrorHandler("No open session found", 404));
     }
 
-    // ── منع التبديل لنفس الكاشير ──────────────────────────────────────
+    // ── Prevent switching to the same cashier ─────────────────────────
     if (session.user_id?.[0] === Number(newCashierId)) {
-      return next(new ErrorHandler("هذا الكاشير نشط بالفعل", 400));
+      return next(new ErrorHandler("This cashier is already active", 400));
     }
 
-    // ── تحديث الكاشير في Odoo ─────────────────────────────────────────
+    // ── Update cashier in Odoo ────────────────────────────────────────
     await odooRequest("pos.session", "write", [
       [session.id],
       { user_id: Number(newCashierId) },
     ]);
 
-    // ── جلب الجلسة بعد التحديث ───────────────────────────────────────
-    const updated = await odooRequest<any[]>(
+    // ── Fetch session after update ────────────────────────────────────
+    const updated = await odooRequest(
       "pos.session",
       "read",
       [[session.id]],
@@ -195,7 +193,7 @@ export const switchCashier = CatchAsyncError(
 
     res.status(200).json({
       status: "success",
-      message: "تم تغيير الكاشير بنجاح",
+      message: "Cashier switched successfully",
       session: updated?.[0],
     });
   }
@@ -219,8 +217,8 @@ interface PaymentLine {
   amount: number;
 }
 
-// payment method IDs — عدّلها حسب الـ IDs الحقيقية في Odoo عندك
-// جلبها عبر: GET /api/pos/payment-methods
+// Payment method IDs — update these to match the real IDs in your Odoo instance
+// Fetch them via: GET /api/pos/payment-methods
 const PAYMENT_METHOD_IDS: Record<string, number> = {
   cash:   1,
   card:   2,
@@ -243,15 +241,15 @@ export const createOrder = CatchAsyncError(
 
     // ── Validation ────────────────────────────────────────────────────
     if (!cart?.length) {
-      return next(new ErrorHandler("السلة فارغة", 400));
+      return next(new ErrorHandler("Cart is empty", 400));
     }
 
     if (!paymentLines?.length) {
-      return next(new ErrorHandler("طريقة الدفع مطلوبة", 400));
+      return next(new ErrorHandler("Payment method is required", 400));
     }
 
-    // ── جلب الجلسة المفتوحة ───────────────────────────────────────────
-    const sessions = await odooRequest<any[]>(
+    // ── Fetch the open session ────────────────────────────────────────
+    const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [[["state", "=", "opened"]]],
@@ -261,21 +259,21 @@ export const createOrder = CatchAsyncError(
     const session = sessions?.[0];
 
     if (!session) {
-      return next(new ErrorHandler("لا توجد جلسة POS مفتوحة", 409));
+      return next(new ErrorHandler("No open POS session found", 409));
     }
 
-    // ── حساب المبالغ ──────────────────────────────────────────────────
-    const amountPaid = paymentLines.reduce((s, p) => s + p.amount, 0);
+    // ── Calculate amounts ─────────────────────────────────────────────
+    const amountPaid = paymentLines.reduce((s: number, p: PaymentLine) => s + p.amount, 0);
 
     const subtotal = cart.reduce(
-      (s, item) => s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+      (s: number, item: CartItem) => s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
       0
     );
 
     const amountReturn = Math.max(0, amountPaid - subtotal);
 
-    // ── إنشاء الطلب مع الـ lines مباشرة (أفضل من loop منفصل) ─────────
-    const orderLines = cart.map((item) => [
+    // ── Build order lines ─────────────────────────────────────────────
+    const orderLines = cart.map((item: CartItem) => [
       0, 0,
       {
         product_id: item.productId,
@@ -287,7 +285,7 @@ export const createOrder = CatchAsyncError(
       },
     ]);
 
-    const orderId = await odooRequest<number>("pos.order", "create", [
+    const orderId = await odooRequest("pos.order", "create", [
       {
         session_id: session.id,
         partner_id: customerId ?? false,
@@ -301,16 +299,16 @@ export const createOrder = CatchAsyncError(
     ]);
 
     if (!orderId) {
-      return next(new ErrorHandler("فشل إنشاء الطلب في Odoo", 500));
+      return next(new ErrorHandler("Failed to create order in Odoo", 500));
     }
 
-    // ── تسجيل المدفوعات ───────────────────────────────────────────────
+    // ── Register payments ─────────────────────────────────────────────
     for (const p of paymentLines) {
       const methodId = PAYMENT_METHOD_IDS[p.method];
 
       if (!methodId) {
         return next(
-          new ErrorHandler(`طريقة الدفع غير معروفة: ${p.method}`, 400)
+          new ErrorHandler(`Unknown payment method: ${p.method}`, 400)
         );
       }
 
@@ -323,12 +321,12 @@ export const createOrder = CatchAsyncError(
       ]);
     }
 
-    // ── تأكيد الدفع ───────────────────────────────────────────────────
+    // ── Confirm payment ───────────────────────────────────────────────
     await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
 
     res.status(201).json({
       status: "success",
-      message: "تم إنشاء الطلب بنجاح",
+      message: "Order created successfully",
       orderId,
     });
   }
@@ -343,10 +341,10 @@ export const getSessionOrders = CatchAsyncError(
     const sessionId = Number(req.params.sessionId);
 
     if (!sessionId) {
-      return next(new ErrorHandler("sessionId مطلوب", 400));
+      return next(new ErrorHandler("sessionId is required", 400));
     }
 
-    const orders = await odooRequest<any[]>(
+    const orders = await odooRequest(
       "pos.order",
       "search_read",
       [[["session_id", "=", sessionId]]],
@@ -381,7 +379,7 @@ export const getSessionOrders = CatchAsyncError(
 // ══════════════════════════════════════════════════════════════════
 export const getProducts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const products = await odooRequest<any[]>(
+    const products = await odooRequest(
       "product.product",
       "search_read",
       [[["available_in_pos", "=", true], ["active", "=", true]]],
@@ -418,7 +416,7 @@ export const getCustomers = CatchAsyncError(
     const domain: any[] = [["customer_rank", ">", 0]];
     if (search) domain.push(["name", "ilike", search]);
 
-    const customers = await odooRequest<any[]>(
+    const customers = await odooRequest(
       "res.partner",
       "search_read",
       [domain],
@@ -446,10 +444,10 @@ export const createCustomer = CatchAsyncError(
     const { name, phone, email } = req.body;
 
     if (!name) {
-      return next(new ErrorHandler("اسم الزبون مطلوب", 400));
+      return next(new ErrorHandler("Customer name is required", 400));
     }
 
-    const customerId = await odooRequest<number>("res.partner", "create", [
+    const customerId = await odooRequest("res.partner", "create", [
       {
         name,
         phone: phone ?? false,
@@ -460,19 +458,19 @@ export const createCustomer = CatchAsyncError(
 
     res.status(201).json({
       status: "success",
-      message: "تم إنشاء الزبون بنجاح",
+      message: "Customer created successfully",
       customerId,
     });
   }
 );
 
 // ══════════════════════════════════════════════════════════════════
-//  GET PAYMENT METHODS  ← مهم لمعرفة الـ IDs الحقيقية
+//  GET PAYMENT METHODS  ← useful for finding real IDs
 //  GET /api/pos/payment-methods
 // ══════════════════════════════════════════════════════════════════
 export const getPaymentMethods = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const methods = await odooRequest<any[]>(
+    const methods = await odooRequest(
       "pos.payment.method",
       "search_read",
       [[["active", "=", true]]],
@@ -492,7 +490,7 @@ export const getPaymentMethods = CatchAsyncError(
 // ══════════════════════════════════════════════════════════════════
 export const getPOSConfigs = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configs = await odooRequest<any[]>(
+    const configs = await odooRequest(
       "pos.config",
       "search_read",
       [[["active", "=", true]]],
