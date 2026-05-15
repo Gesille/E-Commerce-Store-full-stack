@@ -45,4 +45,3 @@ export const odooRequest = async (
 
   return data.result;
 };
-
