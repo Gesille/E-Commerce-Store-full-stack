@@ -9,7 +9,8 @@ const emailRegexPattern: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const ROLES = {
   USER: "user",
   ADMIN: "admin",
-};
+  CASHIER:"cashier"
+} as const;
 
 export interface IUser extends Document {
   name: string;

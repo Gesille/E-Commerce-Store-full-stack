@@ -1,39 +1,118 @@
 import { Router } from "express";
 
-import { isAuthenticated } from "../middleware/auth.js";
+import { isAuthenticated, authorizeRoles } from "../middleware/auth.js";
 import { createOrder } from "../controllers/order.controller.js";
 import {
-  getPOSConfigs,
-  getPaymentMethods,
-  getActiveSession,
   openSession,
   closeSession,
-  switchCashier,
+  getActiveSession,
+  startCashierShift,
+  pauseCashierShift,
+  resumeCashierShift,
+  endCashierShift,
+  getActiveShifts,
+  getSessionOrders,
+  getSessionReport,
   getProducts,
   getCustomers,
   createCustomer,
-  getSessionOrders,
+  getPaymentMethods,
+  getPOSConfigs,
 } from "../controllers/posSession.controller.js";
 
-const router = Router();
+const POSRouter = Router();
 
-// ── Configs & Setup ──────────────────────────────────────────────
-router.get("/configs", isAuthenticated, getPOSConfigs);
-router.get("/payment-methods", isAuthenticated, getPaymentMethods);
+POSRouter.post(
+  "/session/open",
+  isAuthenticated,
+  authorizeRoles("admin"),
+  openSession,
+);
 
-// ── Sessions ─────────────────────────────────────────────────────
-router.get("/session/active", isAuthenticated, getActiveSession);
-router.post("/session/open", isAuthenticated, openSession);
-router.post("/session/close", isAuthenticated, closeSession);
-router.post("/session/switch-cashier", isAuthenticated, switchCashier);
+POSRouter.post(
+  "/session/close",
+  isAuthenticated,
+  authorizeRoles("admin"),
+  closeSession,
+);
 
-// ── Products & Customers ─────────────────────────────────────────
-router.get("/products", isAuthenticated, getProducts);
-router.get("/customers", isAuthenticated, getCustomers);
-router.post("/customers", isAuthenticated, createCustomer);
+POSRouter.get(
+  "/session/active",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getActiveSession,
+);
 
-// ── Orders ───────────────────────────────────────────────────────
-router.post("/order", isAuthenticated, createOrder);
-router.get("/orders/:sessionId", isAuthenticated, getSessionOrders);
+POSRouter.post(
+  "/shift/start",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  startCashierShift,
+);
 
-export default router;
+POSRouter.post(
+  "/shift/pause",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  pauseCashierShift,
+);
+
+POSRouter.post(
+  "/shift/resume",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  resumeCashierShift,
+);
+
+POSRouter.post(
+  "/shift/end",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  endCashierShift,
+);
+
+POSRouter.get(
+  "/shift/active",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getActiveShifts,
+);
+
+POSRouter.post(
+  "/order",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  createOrder,
+);
+
+POSRouter.get(
+  "/orders/:sessionId",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getSessionOrders,
+);
+
+POSRouter.get(
+  "/session/:sessionId/report",
+  isAuthenticated,
+  authorizeRoles("admin"),
+  getSessionReport,
+);
+
+POSRouter.get("/products", isAuthenticated, getProducts);
+POSRouter.get("/customers", isAuthenticated, getCustomers);
+POSRouter.post(
+  "/customers",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  createCustomer,
+);
+POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
+POSRouter.get(
+  "/configs",
+  isAuthenticated,
+  authorizeRoles("admin"),
+  getPOSConfigs,
+);
+
+export default POSRouter;

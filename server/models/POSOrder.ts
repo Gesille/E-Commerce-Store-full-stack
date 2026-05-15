@@ -18,22 +18,34 @@ export type OrderStatus = "draft" | "paid" | "refunded" | "cancelled";
 
 export interface IPOSOrder extends Document {
   sessionId: mongoose.Types.ObjectId;
-  cashierId: mongoose.Types.ObjectId;   
-  openedBy: mongoose.Types.ObjectId;   
+
+  shiftId: mongoose.Types.ObjectId;
+
+  cashierId: mongoose.Types.ObjectId;
+
+  openedBy: mongoose.Types.ObjectId;
+
+  odooOrderId?: number;
+
   customerId?: mongoose.Types.ObjectId;
   customerName?: string;
+
   cart: ICartItem[];
   paymentLines: IPaymentLine[];
+
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
   total: number;
   amountPaid: number;
   change: number;
+
   note?: string;
   status: OrderStatus;
   receiptNumber: string;
+
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const cartItemSchema = new Schema<ICartItem>(
@@ -45,7 +57,7 @@ const cartItemSchema = new Schema<ICartItem>(
     discount: { type: Number, default: 0, min: 0, max: 100 },
     barcode: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const paymentLineSchema = new Schema<IPaymentLine>(
@@ -57,24 +69,48 @@ const paymentLineSchema = new Schema<IPaymentLine>(
     },
     amount: { type: Number, required: true, min: 0 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const posOrderSchema = new Schema<IPOSOrder>(
   {
-    sessionId: { type: Schema.Types.ObjectId, ref: "POSSession", required: true },
-    cashierId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    openedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    sessionId: {
+      type: Schema.Types.ObjectId,
+      ref: "POSSession",
+      required: true,
+    },
+    shiftId: {
+      type: Schema.Types.ObjectId,
+      ref: "CashierShiftLog",
+      required: true,
+    },
+
+    cashierId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    openedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    odooOrderId: { type: Number, index: true, sparse: true },
+
     customerId: { type: Schema.Types.ObjectId, ref: "User" },
     customerName: { type: String },
+
     cart: { type: [cartItemSchema], required: true },
     paymentLines: { type: [paymentLineSchema], default: [] },
+
     subtotal: { type: Number, required: true },
     taxAmount: { type: Number, default: 0 },
     discountAmount: { type: Number, default: 0 },
     total: { type: Number, required: true },
     amountPaid: { type: Number, default: 0 },
     change: { type: Number, default: 0 },
+
     note: { type: String },
     status: {
       type: String,
@@ -83,11 +119,14 @@ const posOrderSchema = new Schema<IPOSOrder>(
     },
     receiptNumber: { type: String, required: true, unique: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 posOrderSchema.index({ sessionId: 1, createdAt: -1 });
-posOrderSchema.index({ cashierId: 1 });
+
+posOrderSchema.index({ cashierId: 1, createdAt: -1 });
+
+posOrderSchema.index({ shiftId: 1, status: 1 });
 
 const POSOrder: Model<IPOSOrder> =
   mongoose.models.POSOrder ||
