@@ -108,7 +108,7 @@ export const openSession = CatchAsyncError(
       );
     }
 
-    // Create & open the Odoo session
+    // Create the Odoo session
     const sessionId = await odooRequest("pos.session", "create", [
       { config_id: configId },
     ]);
@@ -117,6 +117,10 @@ export const openSession = CatchAsyncError(
       return next(new ErrorHandler("Failed to create session in Odoo", 500));
     }
 
+    // ✅ Step 1: confirm opening control (moves state from opening_control → opened)
+    await odooRequest("pos.session", "action_pos_session_opening_control", [[sessionId]]);
+
+    // ✅ Step 2: fully open the session
     await odooRequest("pos.session", "action_pos_session_open", [[sessionId]]);
 
     const sessions = await odooRequest(
@@ -131,8 +135,8 @@ export const openSession = CatchAsyncError(
     // Create the opening cashier's shift log
     const shiftLog = await CashierShiftLog.create({
       odooSessionId: sessionId,
-      cashierId: cashier._id,       // primary identity: MongoDB
-      odooPartnerId: cashier.odooPartnerId, // Odoo mapping only
+      cashierId: cashier._id,
+      odooPartnerId: cashier.odooPartnerId,
       state: "active" as ShiftState,
       stateHistory: [{ toState: "active", at: new Date(), reason: "Session opened" }],
     });
