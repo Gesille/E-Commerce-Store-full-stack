@@ -1,26 +1,39 @@
 import { Router } from "express";
+
+import { isAuthenticated } from "../middleware/auth.js";
 import { createOrder } from "../controllers/order.controller.js";
 import {
+  getPOSConfigs,
+  getPaymentMethods,
+  getActiveSession,
   openSession,
   closeSession,
-  getActiveSession,
   switchCashier,
+  getProducts,
+  getCustomers,
+  createCustomer,
+  getSessionOrders,
 } from "../controllers/posSession.controller.js";
-import { isAuthenticated, authorizeRoles } from "../middleware/auth.js";
 
-const POSRouter = Router();
+const router = Router();
 
-POSRouter.use(isAuthenticated);
+// ── Configs & Setup ──────────────────────────────────────────────
+router.get("/configs", isAuthenticated, getPOSConfigs);
+router.get("/payment-methods", isAuthenticated, getPaymentMethods);
 
-POSRouter.post("/open-session", authorizeRoles("admin"), openSession);
-POSRouter.post("/close-session", authorizeRoles("admin"), closeSession);
-POSRouter.get("/active-session", getActiveSession);
-POSRouter.post(
-  "/switch-cashier",
-  authorizeRoles("admin"),
-  switchCashier,
-);
+// ── Sessions ─────────────────────────────────────────────────────
+router.get("/session/active", isAuthenticated, getActiveSession);
+router.post("/session/open", isAuthenticated, openSession);
+router.post("/session/close", isAuthenticated, closeSession);
+router.post("/session/switch-cashier", isAuthenticated, switchCashier);
 
-POSRouter.post("/session-order", createOrder);
+// ── Products & Customers ─────────────────────────────────────────
+router.get("/products", isAuthenticated, getProducts);
+router.get("/customers", isAuthenticated, getCustomers);
+router.post("/customers", isAuthenticated, createCustomer);
 
-export default POSRouter;
+// ── Orders ───────────────────────────────────────────────────────
+router.post("/order", isAuthenticated, createOrder);
+router.get("/orders/:sessionId", isAuthenticated, getSessionOrders);
+
+export default router;
