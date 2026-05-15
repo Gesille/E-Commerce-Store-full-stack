@@ -110,7 +110,9 @@ export const openSession = CatchAsyncError(
 
     // 1. Create session in Odoo
     const sessionId = await odooRequest("pos.session", "create", [
-      { config_id: configId },
+      { config_id: configId ,
+         cash_register_balance_start: 0
+      },
     ]);
 
     if (!sessionId) {
