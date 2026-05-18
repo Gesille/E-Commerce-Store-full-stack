@@ -47,9 +47,15 @@ export default function CashierPage() {
   // Fetches the active session on mount and keeps it live.
   const {
     data: sessionData,
-    isLoading: sessionLoading,
+    isLoading,
+    isFetching,
+    isError,
     refetch: refetchSession,
   } = useGetActiveSessionQuery();
+
+  // Show spinner only on the very first load (no data yet).
+  // Once we have data OR the request errored, stop showing "Loading…".
+  const sessionLoading = isLoading && !sessionData && !isError;
 
   const session = sessionData?.session ?? null;
   const stats = sessionData?.stats ?? null;
