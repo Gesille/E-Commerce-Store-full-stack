@@ -252,7 +252,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     openSession: builder.mutation<OpenSessionResponse, OpenSessionBody>({
       query: (body) => ({
-        url: "pos/session/open",
+        url: "/session/open",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -264,7 +264,7 @@ export const posApi = apiSlice.injectEndpoints({
       ConfirmOpeningBalanceBody
     >({
       query: (body) => ({
-        url: "pos/session/confirm-opening",
+        url: "/session/confirm-opening",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -273,7 +273,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     closeSession: builder.mutation<APIResponse, CloseSessionBody>({
       query: (body) => ({
-        url: "pos/session/close",
+        url: "/session/close",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -282,7 +282,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     getActiveSession: builder.query<ActiveSessionResponse, number>({
       query: (configId) => ({
-        url: "pos/session/active",
+        url: "/session/active",
         method: "GET",
         params: { configId },
         credentials: "include" as const,
@@ -291,7 +291,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     getSessionOrders: builder.query<SessionOrdersResponse, number>({
       query: (sessionId) => ({
-        url: `pos/orders/${sessionId}`,
+        url: `/orders/${sessionId}`,
         method: "GET",
         credentials: "include" as const,
       }),
@@ -299,7 +299,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     getSessionReport: builder.query<SessionReportResponse, number>({
       query: (sessionId) => ({
-        url: `pos/session/${sessionId}/report`,
+        url: `/session/${sessionId}/report`,
         method: "GET",
         credentials: "include" as const,
       }),
@@ -419,7 +419,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     getPOSConfigs: builder.query<POSConfigsResponse, void>({
       query: () => ({
-        url: "pos/configs",
+        url: "/configs",
         method: "GET",
         credentials: "include" as const,
       }),
