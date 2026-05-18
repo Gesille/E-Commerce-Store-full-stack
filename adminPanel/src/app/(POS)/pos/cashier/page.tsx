@@ -309,16 +309,26 @@ export default function CashierPage() {
         />
       )}
 
-      {/* Switch Cashier */}
-      {showSwitchCashier && session && (
-        <SwitchCashierModal
-          currentCashierId={cashierName}
-          onSwitch={async (_newCashierId) => {
-            setShowSwitchCashier(false);
-          }}
-          onClose={() => setShowSwitchCashier(false)}
-        />
-      )}
+   {showSwitchCashier && session && (
+  <SwitchCashierModal
+    currentCashierId={
+      typeof session.activeShift?.cashierId === "object"
+        ? session.activeShift.cashierId._id
+        : session.activeShift?.cashierId ?? ""
+    }
+    configId={session.session.config_id?.[0] ?? activeConfigId ?? 0}
+    currentShift={session.activeShift}
+    onSwitch={(newCashierId, newShift) => {
+
+      onSessionOpened({
+        session: session.session,
+        activeShift: newShift,
+      });
+      setShowSwitchCashier(false);
+    }}
+    onClose={() => setShowSwitchCashier(false)}
+  />
+)}
 
       {/* Customer */}
       {showCustomer && (

@@ -173,14 +173,49 @@ export const openSession = CatchAsyncError(
       }
     );
 
-    if (existing?.length) {
-      return next(
-        new ErrorHandler(
-          `A session is already open for this config: ${existing[0].name}`,
-          409
-        )
-      );
-    }
+ if (existing?.length) {
+  const existingSession = existing[0];
+
+  // ابحث عن shift نشط للكاشير هذا في السيشن الموجودة
+  const existingShift = await CashierShiftLog.findOne({
+    odooSessionId: existingSession.id,
+    cashierId: cashier._id,
+    state: { $in: ["active", "paused"] },
+  });
+
+  // لو ما في shift، أنشئ واحد جديد
+  if (!existingShift) {
+    const newShift = await CashierShiftLog.create({
+      odooSessionId: existingSession.id,
+      cashierId: cashier._id,
+      odooPartnerId: cashier.odooPartnerId,
+      state: "active" as ShiftState,
+      stateHistory: [
+        {
+          toState: "active",
+          at: new Date(),
+          reason: "Joined existing open session",
+        },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      requiresOpeningBalance: false,
+      session: existingSession,
+      activeShift: newShift,
+      message: "Joined existing open session",
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    requiresOpeningBalance: false,
+    session: existingSession,
+    activeShift: existingShift,
+    message: "Resumed existing session and shift",
+  });
+}
 
     // 1. Create Odoo session
     const sessionId = await odooRequest(
