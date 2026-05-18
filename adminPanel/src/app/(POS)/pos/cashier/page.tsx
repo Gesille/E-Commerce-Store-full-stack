@@ -53,18 +53,12 @@ export default function CashierPage() {
     isError,
     refetch: refetchSession,
   } = useGetActiveSessionQuery();
-
+// Add a timeout fallback so "Loading…" doesn't show forever
+const sessionLoading = (isLoading || isFetching) && !sessionData && !isError;
 
   const session = sessionData?.session ?? null;
 
-const [loadTimeout, setLoadTimeout] = useState(false);
 
-useEffect(() => {
-  const t = setTimeout(() => setLoadTimeout(true), 5000);
-  return () => clearTimeout(t);
-}, []);
-
-const sessionLoading = isLoading && !sessionData && !isError && !loadTimeout;
 
   const [activeShift, setActiveShift] = useState<Shift | null>(
     () => sessionData?.activeShifts?.[0] ?? null
