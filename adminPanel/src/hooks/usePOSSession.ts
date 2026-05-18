@@ -75,7 +75,7 @@ const {
   data,
   isLoading,
   refetch,
-} = useGetActiveSessionQuery(configId!, {
+} = useGetActiveSessionQuery(configId ?? 0, {
   skip: !configId,
 
   refetchOnFocus: true,
