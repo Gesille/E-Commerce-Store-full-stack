@@ -24,11 +24,14 @@ async function resolveCashier(cashierId: string) {
   return user;
 }
 
-async function fetchOpenOdooSession() {
+async function fetchOpenOdooSession(configId: number) {
   const sessions = await odooRequest(
     "pos.session",
     "search_read",
-    [[["state", "=", "opened"]]],
+    [[
+      ["state", "=", "opened"],
+      ["config_id", "=", configId],
+    ]],
     {
       fields: [
         "id",
@@ -42,9 +45,9 @@ async function fetchOpenOdooSession() {
       limit: 1,
     }
   );
+
   return sessions?.[0] ?? null;
 }
-
 async function computeShiftTotalsFromOrders(shiftId: string) {
   const result = await POSOrder.aggregate([
     { $match: { shiftId: shiftId, status: "paid" } },
@@ -396,8 +399,9 @@ export const confirmOpeningBalance = CatchAsyncError(
           ],
         });
       }
+const { configId } = req.body;
 
-      const session = await fetchOpenOdooSession();
+const session = await fetchOpenOdooSession(configId);
       return res.status(200).json({
         status: "success",
         message: "Session was already opened",
@@ -562,7 +566,9 @@ export const closeSession = CatchAsyncError(
  */
 export const getActiveSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const session = await fetchOpenOdooSession();
+  const configId = Number(req.query.configId);
+
+const session = await fetchOpenOdooSession(configId);
 
     let stats = null;
     let activeShifts: any[] = [];
@@ -615,7 +621,9 @@ export const startCashierShift = CatchAsyncError(
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
 
-    const session = await fetchOpenOdooSession();
+   const { configId } = req.body;
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
@@ -660,7 +668,9 @@ export const pauseCashierShift = CatchAsyncError(
     if (!cashierId)
       return next(new ErrorHandler("cashierId is required", 400));
 
-    const session = await fetchOpenOdooSession();
+   const { configId } = req.body;
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
@@ -699,7 +709,9 @@ export const resumeCashierShift = CatchAsyncError(
     if (!cashierId)
       return next(new ErrorHandler("cashierId is required", 400));
 
-    const session = await fetchOpenOdooSession();
+   const { configId } = req.body;
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
@@ -738,7 +750,9 @@ export const endCashierShift = CatchAsyncError(
     if (!cashierId)
       return next(new ErrorHandler("cashierId is required", 400));
 
-    const session = await fetchOpenOdooSession();
+   const { configId } = req.body;
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
@@ -790,7 +804,9 @@ export const endCashierShift = CatchAsyncError(
 /** GET /api/pos/shift/active */
 export const getActiveShifts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const session = await fetchOpenOdooSession();
+   const configId = Number(req.query.configId);
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
@@ -847,7 +863,9 @@ export const createOrder = CatchAsyncError(
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
 
-    const session = await fetchOpenOdooSession();
+   const { configId } = req.body;
+
+const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 

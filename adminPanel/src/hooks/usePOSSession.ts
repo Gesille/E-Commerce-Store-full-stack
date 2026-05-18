@@ -66,22 +66,21 @@ export interface UsePOSSessionReturn {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function usePOSSession(): UsePOSSessionReturn {
+export function usePOSSession(configId?: number): UsePOSSessionReturn {
   // Optimistic local state so the UI updates instantly after open/close
   const [localSession, setLocalSession] = useState<ActiveSession | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ── RTK Query ─────────────────────────────────────────────────────────────
-  const {
-    data,
-    isLoading,
-    refetch,
-  } = useGetActiveSessionQuery(undefined, {
-    // Refresh whenever the window regains focus (cashier switches tabs, etc.)
-    refetchOnFocus: true,
-    // Don't hammer the server — 30-second cache
-    pollingInterval: 30_000,
-  });
+const {
+  data,
+  isLoading,
+  refetch,
+} = useGetActiveSessionQuery(configId!, {
+  skip: !configId,
+
+  refetchOnFocus: true,
+  pollingInterval: 30_000,
+});
 
   const [openSessionMutation] = useOpenSessionMutation();
   const [confirmOpeningBalanceMutation] = useConfirmOpeningBalanceMutation();

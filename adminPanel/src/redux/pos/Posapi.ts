@@ -293,15 +293,17 @@ export const posApi = createApi({
       invalidatesTags: ["Session", "Shift", "Order"],
     }),
 
-    getActiveSession: builder.query<
-      ActiveSessionResponse,
-      void
-    >({
-      query: () => "/session/active",
+   getActiveSession: builder.query<
+  ActiveSessionResponse,
+  number
+>({
+  query: (configId) => ({
+    url: "/session/active",
+    params: { configId },
+  }),
 
-      providesTags: ["Session"],
-    }),
-
+  providesTags: ["Session"],
+}),
     // ─────────────────────────────────────────
     // SHIFTS
     // ─────────────────────────────────────────
