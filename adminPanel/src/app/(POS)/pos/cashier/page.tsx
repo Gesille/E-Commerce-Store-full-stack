@@ -157,13 +157,15 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Derived display values ─────────────────────────────────────────────────
-  const cashierName =
-    // session.session.user_id is [id, name] in Odoo style
-    (session?.session?.user_id as [number, string] | undefined)?.[1] ??
-    session?.activeShift?.cashierId ??
-    "Cashier";
+const shiftCashier = session?.activeShift?.cashierId;
 
+const cashierName =
+  (session?.session?.user_id as [number, string] | undefined)?.[1] ??
+  (typeof shiftCashier === "object"
+    ? shiftCashier.name
+    : shiftCashier) ??
+  "Cashier";
+console.log("SESSION:", session);
   return (
     <>
       <div
@@ -202,7 +204,7 @@ export default function CashierPage() {
               <>
                 {/* Green "live" badge */}
                 <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium">
-                  ● {session.session.name}
+                 ● {session?.session?.name ?? "Active Session"}
                 </span>
 
                 {/* Current cashier */}
@@ -240,7 +242,7 @@ export default function CashierPage() {
           <div className="flex items-center gap-4">
             <POSSearchBar search={search} setSearch={setSearch} />
             <span className="text-[13px] text-gray-500 font-medium">
-              👤 Admin
+              👤 {cashierName}
             </span>
             <span className="text-[12px] text-gray-400">
               <ClockDisplay />
@@ -300,7 +302,7 @@ export default function CashierPage() {
       {/* Switch Cashier */}
       {showSwitchCashier && session && (
         <SwitchCashierModal
-          currentCashierId={session.activeShift?.cashierId ?? ""}
+          currentCashierId={cashierName}
           onSwitch={async (_newCashierId) => {
             // The SwitchCashierModal handles the API call internally.
             // Just close and let the polling refetch update the badge.

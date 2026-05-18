@@ -22,11 +22,19 @@ export interface ShiftStateHistory {
   at: string;
   reason?: string;
 }
-
 export interface Shift {
   _id: string;
   odooSessionId: number;
-  cashierId: string;
+
+  cashierId:
+    | string
+    | {
+        _id: string;
+        name: string;
+        email?: string;
+        role?: string;
+      };
+
   odooPartnerId: number;
   state: "active" | "paused" | "closed";
   startTime: string;
