@@ -100,7 +100,7 @@ POSRouter.get(
 );
 
 POSRouter.get("/products", isAuthenticated, getProducts);
-POSRouter.get("/customers", isAuthenticated, getCustomers);
+POSRouter.get("/get-customers", isAuthenticated, getCustomers);
 POSRouter.post(
   "/customers",
   isAuthenticated,

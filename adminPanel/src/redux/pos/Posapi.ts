@@ -26,7 +26,7 @@ export const posApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     openSession: builder.mutation<OpenSessionResponse, OpenSessionBody>({
       query: (body) => ({
-        url: "/session/open",
+        url: "session/open",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -38,7 +38,7 @@ export const posApi = apiSlice.injectEndpoints({
       ConfirmOpeningBalanceBody
     >({
       query: (body) => ({
-        url: "/session/confirm-opening",
+        url: "session/confirm-opening",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -47,7 +47,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     closeSession: builder.mutation<APIResponse, CloseSessionBody>({
       query: (body) => ({
-        url: "/session/close",
+        url: "session/close",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -56,28 +56,28 @@ export const posApi = apiSlice.injectEndpoints({
 
     getActiveSession: builder.query<ActiveSessionResponse, number>({
       query: (configId) => ({
-        url: "/session/active",
+        url: "session/active",
         params: { configId },
         credentials: "include" as const,
       }),
     }),
     getSessionOrders: builder.query<SessionOrdersResponse, number>({
       query: (sessionId) => ({
-        url: `/orders/${sessionId}`,
+        url: `orders/${sessionId}`,
         credentials: "include" as const,
       }),
     }),
 
     getSessionReport: builder.query<SessionReportResponse, number>({
       query: (sessionId) => ({
-        url: `/session/${sessionId}/report`,
+        url: `session/${sessionId}/report`,
         credentials: "include" as const,
       }),
     }),
 
     startCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/start",
+        url: "shift/start",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -86,7 +86,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     pauseCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/pause",
+        url: "shift/pause",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -95,7 +95,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     resumeCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/resume",
+        url: "shift/resume",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -104,7 +104,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     endCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/end",
+        url: "shift/end",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -113,7 +113,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     getActiveShifts: builder.query<ActiveShiftsResponse, number>({
       query: (configId) => ({
-        url: "/shift/active",
+        url: "shift/active",
         params: { configId },
         credentials: "include" as const,
       }),
@@ -121,7 +121,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     createOrder: builder.mutation<CreateOrderResponse, CreateOrderBody>({
       query: (body) => ({
-        url: "/order",
+        url: "order",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -130,14 +130,14 @@ export const posApi = apiSlice.injectEndpoints({
 
     getProducts: builder.query<ProductsResponse, void>({
       query: () => ({
-        url: "/products",
+        url: "products",
         credentials: "include" as const,
       }),
     }),
 
     getCustomers: builder.query<CustomersResponse, string | void>({
       query: (search = "") => ({
-        url: "/customers",
+        url: "get-customers",
         params: search ? { search } : undefined,
         credentials: "include" as const,
       }),
@@ -145,7 +145,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     createCustomer: builder.mutation<APIResponse, CreateCustomerBody>({
       query: (body) => ({
-        url: "/customers",
+        url: "customers",
         method: "POST",
         body,
         credentials: "include" as const,
@@ -154,14 +154,14 @@ export const posApi = apiSlice.injectEndpoints({
 
     getPaymentMethods: builder.query<PaymentMethodsResponse, void>({
       query: () => ({
-        url: "/payment-methods",
+        url: "payment-methods",
         credentials: "include" as const,
       }),
     }),
 
     getPOSConfigs: builder.query<POSConfigsResponse, void>({
       query: () => ({
-        url: "/configs",
+        url: "configs",
         credentials: "include" as const,
       }),
     }),
