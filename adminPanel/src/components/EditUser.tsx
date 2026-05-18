@@ -36,7 +36,7 @@ const formSchema = z.object({
   phone: z.string().min(10).max(15).optional().or(z.literal("")),
   address: z.string().min(2).optional().or(z.literal("")),
   city: z.string().min(2).optional().or(z.literal("")),
-  role: z.enum(["admin", "user"]),
+  role: z.enum(["admin", "user", "cashier"], { message: "Role must be admin, user, or cashier" }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
