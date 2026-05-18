@@ -25,7 +25,7 @@ const POSRouter = Router();
 POSRouter.post(
   "/session/open",
   isAuthenticated,
-  authorizeRoles("admin"),
+  authorizeRoles("admin","cashier"),
   openSession,
 );
 
