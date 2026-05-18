@@ -20,6 +20,8 @@ import {
   type Session,
   type Shift,
 } from "@/redux/pos/Posapi";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/redux/store";
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
 
