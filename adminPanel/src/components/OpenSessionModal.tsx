@@ -1,19 +1,17 @@
 "use client";
 
-import { POSConfig, Session, Shift, useConfirmOpeningBalanceMutation, useGetPOSConfigsQuery, useOpenSessionMutation } from "@/redux/pos/Posapi";
 import { useState, useEffect, useRef } from "react";
-
+import {
+  useOpenSessionMutation,
+  useConfirmOpeningBalanceMutation,
+  useGetPOSConfigsQuery,
+  type POSConfig,
+  type Session,
+  type Shift,
+} from "@/redux/pos/Posapi";
+import { useGetAllUsersQuery ,type User} from "@/redux/user/userApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-// NOTE: Replace this with a real API query (e.g. useGetCashiersQuery) when your
-// backend exposes a /api/pos/cashiers endpoint. For now we keep mock data only
-// for cashiers since it is the only resource not yet in posApi.ts.
-interface Cashier {
-  _id: string;
-  name: string;
-  email: string;
-}
 
 type SessionType = "daily" | "long_term";
 type ModalStep = "configure" | "opening_balance" | "success";
@@ -31,15 +29,6 @@ interface OpenSessionModalProps {
   onSessionOpened: (result: OpenSessionResult) => void;
   onClose: () => void;
 }
-
-// ─── Temporary mock cashiers ──────────────────────────────────────────────────
-// TODO: Replace with useGetCashiersQuery() once /api/pos/cashiers is ready.
-
-const MOCK_CASHIERS: Cashier[] = [
-  { _id: "1", name: "Ahmed Al-Rashid", email: "ahmed@shop.com" },
-  { _id: "2", name: "Sara Hassan",     email: "sara@shop.com" },
-  { _id: "3", name: "Mohamed Salim",   email: "mo@shop.com" },
-];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -132,8 +121,15 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
 
   const configs: POSConfig[] = configsData?.configs ?? [];
 
-  // ── Cashiers: still using mock data (replace with API query when ready) ────
-  const cashiers = MOCK_CASHIERS;
+  // ── RTK Query: fetch real users from the database ─────────────────────────
+  // Shows all users with role "user". Change to "admin" if your cashiers are admins.
+  const {
+    data: allUsers,
+    isLoading: usersLoading,
+    isError: usersError,
+  } = useGetAllUsersQuery();
+
+  const cashiers: User[] = (allUsers ?? []).filter((u:any) => u.role === "user");
 
   const handleNext = async () => {
     if (!cashierId) {
@@ -162,21 +158,35 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
       <div>
         <FieldLabel>Active cashier</FieldLabel>
         <div className="relative">
-          <select
-            value={cashierId}
-            onChange={(e) => setCashierId(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 pr-8 h-10 text-[13px] text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white appearance-none transition"
-          >
-            <option value="">Select cashier…</option>
-            {cashiers.map((c) => (
-              <option key={c._id} value={c._id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">
-            ▼
-          </span>
+          {usersLoading ? (
+            <div className="w-full border border-gray-200 rounded-xl h-10 flex items-center px-3 gap-2 text-[13px] text-gray-400">
+              <SpinnerIcon />
+              Loading cashiers…
+            </div>
+          ) : usersError ? (
+            <div className="w-full border border-red-100 bg-red-50 rounded-xl h-10 flex items-center px-3 text-[13px] text-red-500">
+              Failed to load cashiers
+            </div>
+          ) : (
+            <>
+              <select
+                value={cashierId}
+                onChange={(e) => setCashierId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 pr-8 h-10 text-[13px] text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white appearance-none transition"
+              >
+                <option value="">Select cashier…</option>
+                {cashiers.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                    {c.email ? ` — ${c.email}` : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">
+                ▼
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -256,7 +266,7 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
         <button
           type="button"
           onClick={handleNext}
-          disabled={loading || !cashierId || configId === "" || configsLoading}
+          disabled={loading || !cashierId || configId === "" || configsLoading || usersLoading}
           className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors flex items-center justify-center gap-2"
         >
           {loading ? (
@@ -462,9 +472,12 @@ export function OpenSessionModal({
   const [sessionName, setSessionName] = useState<string>("");
   const [confirmedBalance, setConfirmedBalance] = useState<number>(0);
 
-  // ── RTK Query mutations (replace raw fetch calls) ──────────────────────────
+  // ── RTK Query mutations ────────────────────────────────────────────────────
   const [openSession] = useOpenSessionMutation();
   const [confirmOpeningBalance] = useConfirmOpeningBalanceMutation();
+
+  // ── RTK Query: users (needed to resolve cashier name after step 1) ─────────
+  const { data: allUsers } = useGetAllUsersQuery();
 
   // ─── Step 1 handler ─────────────────────────────────────────────────────────
   const handleConfigure = async (data: {
@@ -472,14 +485,13 @@ export function OpenSessionModal({
     configId: number;
     type: SessionType;
   }) => {
-    // .unwrap() re-throws RTK Query errors so the try/catch in StepConfigure catches them
     const result = await openSession({
       configId: data.configId,
       cashierId: data.cashierId,
     }).unwrap();
 
-    // Resolve cashier display name for later steps
-    const cashier = MOCK_CASHIERS.find((c) => c._id === data.cashierId);
+    // Resolve cashier display name from the real users list
+    const cashier = (allUsers ?? []).find((u:any) => u._id === data.cashierId);
     setCashierName(cashier?.name ?? "Cashier");
     setPendingCashierId(data.cashierId);
 
