@@ -37,7 +37,7 @@ function ClockDisplay() {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
-  const { session, stats, loading, openSession, closeSession, switchCashier } = usePOSSession();
+
 
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
@@ -166,7 +166,7 @@ export default function CashierPage() {
             </svg>
             <span className="text-[14px] font-semibold text-gray-900">POS — Shop #1</span>
 
-            {loading ? (
+            {/* {loading ? (
               <span className="text-[11px] text-gray-400">Loading…</span>
             ) : session ? (
               <>
@@ -190,7 +190,7 @@ export default function CashierPage() {
               >
                 ○ No session — click to open
               </button>
-            )}
+            )} */}
           </div>
 
           <div className="flex items-center gap-4">
@@ -238,7 +238,7 @@ export default function CashierPage() {
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
 
       {/* Open Session */}
-      {showOpenSession && (
+      {/* {showOpenSession && (
         <OpenSessionModal
           onOpen={async (payload) => {
             await openSession(payload);
@@ -246,10 +246,10 @@ export default function CashierPage() {
           }}
           onClose={() => setShowOpenSession(false)}
         />
-      )}
+      )} */}
 
       {/* Switch Cashier */}
-      {showSwitchCashier && session && (
+      {/* {showSwitchCashier && session && (
         <SwitchCashierModal
           currentCashierId={session.cashierId._id}
           onSwitch={async (newCashierId) => {
@@ -258,7 +258,7 @@ export default function CashierPage() {
           }}
           onClose={() => setShowSwitchCashier(false)}
         />
-      )}
+      )} */}
 
       {/* Customer */}
       {showCustomer && (
