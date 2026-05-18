@@ -11,9 +11,15 @@ import { NoteModal } from "@/components/NoteModal";
 import { ProductGrid } from "@/components/ProductGrid";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { POSSearchBar } from "@/components/POSSearchBar";
-
 import { OpenSessionModal } from "@/components/OpenSessionModal";
 import { SwitchCashierModal } from "@/components/SwitchCashierModal";
+import {
+  useGetActiveSessionQuery,
+  useCloseSessionMutation,
+  useStartCashierShiftMutation,
+  type Session,
+  type Shift,
+} from "@/redux/pos/Posapi";
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
 
@@ -37,8 +43,35 @@ function ClockDisplay() {
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
+  // ── Session state ──────────────────────────────────────────────────────────
+  // Fetches the active session on mount and keeps it live.
+  const {
+    data: sessionData,
+    isLoading: sessionLoading,
+    refetch: refetchSession,
+  } = useGetActiveSessionQuery();
 
+  const session = sessionData?.session ?? null;
+  const stats = sessionData?.stats ?? null;
 
+  // Track the currently active cashier shift so we can show the cashier name
+  // and pass it to SwitchCashierModal.  We seed this from the live query but
+  // update it immediately when a new session is opened or a cashier switches.
+  const [activeShift, setActiveShift] = useState<Shift | null>(
+    () => sessionData?.activeShifts?.[0] ?? null
+  );
+
+  // Keep activeShift in sync whenever the query refreshes on its own.
+  useEffect(() => {
+    const shift = sessionData?.activeShifts?.[0] ?? null;
+    setActiveShift(shift);
+  }, [sessionData]);
+
+  // ── RTK mutations ──────────────────────────────────────────────────────────
+  const [closeSession] = useCloseSessionMutation();
+  const [startCashierShift] = useStartCashierShiftMutation();
+
+  // ── UI state ───────────────────────────────────────────────────────────────
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
   const [category, setCategory] = useState<string>("All");
@@ -69,6 +102,8 @@ export default function CashierPage() {
   const activeMeta = orderMeta[activeOrderId] || { customer: null, note: "" };
   const { total } = calcOrderTotals(activeOrder?.cart || []);
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
   const updateCart = (newCart: CartItem[]) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === activeOrderId ? { ...o, cart: newCart } : o))
@@ -96,10 +131,6 @@ export default function CashierPage() {
 
   const handlePaymentConfirm = (lines: PaymentLine[]) => {
     if (!activeOrder) return;
-
-    // TODO: POST to your backend here
-    // await fetch("/api/pos/complete-order", { ... });
-
     setReceipt({ order: { ...activeOrder }, paymentLines: lines });
     setShowPayment(false);
   };
@@ -118,7 +149,32 @@ export default function CashierPage() {
     setReceipt(null);
   };
 
-  // Barcode scanner support
+  // ── OpenSessionModal callback ──────────────────────────────────────────────
+  // Called by OpenSessionModal once the session is fully open.
+  const handleSessionOpened = ({
+    session: newSession,
+    activeShift: newShift,
+  }: {
+    session: Session;
+    activeShift: Shift;
+  }) => {
+    setActiveShift(newShift);
+    setShowOpenSession(false);
+    // Refresh the active-session query so the top-bar updates immediately.
+    refetchSession();
+  };
+
+  // ── SwitchCashierModal callback ────────────────────────────────────────────
+  // Ends the current cashier's shift and starts one for the new cashier.
+  const handleSwitchCashier = async (newCashierId: string) => {
+    if (!session) return;
+
+    await startCashierShift({ cashierId: newCashierId });
+    setShowSwitchCashier(false);
+    refetchSession();
+  };
+
+  // ── Barcode scanner ────────────────────────────────────────────────────────
   useEffect(() => {
     let barcodeBuffer = "";
     let barcodeTimer: ReturnType<typeof setTimeout>;
@@ -144,6 +200,18 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // ── Resolve cashier display name ───────────────────────────────────────────
+  // The active shift stores the cashier's MongoDB ID as a string; the session
+  // query returns activeShifts with a populated cashierId object on the old
+  // hook but here we work with the raw Shift type. Adjust the field name below
+  // to match your actual populated Shift shape.
+  const cashierName =
+    (activeShift as any)?.cashierId?.name ??
+    activeShift?.cashierId ??
+    "Cashier";
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <>
       <div className="flex flex-col bg-gray-50" style={{ height: "calc(100vh - 60px)" }}>
@@ -166,7 +234,7 @@ export default function CashierPage() {
             </svg>
             <span className="text-[14px] font-semibold text-gray-900">POS — Shop #1</span>
 
-            {/* {loading ? (
+            {sessionLoading ? (
               <span className="text-[11px] text-gray-400">Loading…</span>
             ) : session ? (
               <>
@@ -174,7 +242,7 @@ export default function CashierPage() {
                   ● {session.name}
                 </span>
                 <span className="text-[11px] text-gray-500">
-                  👤 {session.cashierId.name}
+                  👤 {cashierName}
                 </span>
                 <button
                   onClick={() => setShowSwitchCashier(true)}
@@ -190,7 +258,7 @@ export default function CashierPage() {
               >
                 ○ No session — click to open
               </button>
-            )} */}
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -238,27 +306,25 @@ export default function CashierPage() {
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
 
       {/* Open Session */}
-      {/* {showOpenSession && (
+      {showOpenSession && (
         <OpenSessionModal
-          onOpen={async (payload) => {
-            await openSession(payload);
-            setShowOpenSession(false);
-          }}
+          onSessionOpened={handleSessionOpened}
           onClose={() => setShowOpenSession(false)}
         />
-      )} */}
+      )}
 
       {/* Switch Cashier */}
-      {/* {showSwitchCashier && session && (
+      {showSwitchCashier && session && (
         <SwitchCashierModal
-          currentCashierId={session.cashierId._id}
-          onSwitch={async (newCashierId) => {
-            await switchCashier(newCashierId);
-            setShowSwitchCashier(false);
-          }}
+          currentCashierId={
+            typeof activeShift?.cashierId === "object"
+              ? (activeShift.cashierId as any)._id
+              : activeShift?.cashierId ?? ""
+          }
+          onSwitch={handleSwitchCashier}
           onClose={() => setShowSwitchCashier(false)}
         />
-      )} */}
+      )}
 
       {/* Customer */}
       {showCustomer && (
