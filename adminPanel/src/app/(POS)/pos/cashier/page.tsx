@@ -127,7 +127,7 @@ export default function CashierPage() {
       setOrderMeta({ [newId]: { customer: null, note: "" } });
     } else {
       setOrders(remaining);
-      setActiveOrderId(remaining[0].id);
+      setActiveOrderId(remaining[0]!.id);
     }
     setReceipt(null);
   };

@@ -77,11 +77,9 @@ const {
   refetch,
 } = useGetActiveSessionQuery(configId ?? 0, {
   skip: !configId,
-
   refetchOnFocus: true,
   pollingInterval: 30_000,
 });
-
   const [openSessionMutation] = useOpenSessionMutation();
   const [confirmOpeningBalanceMutation] = useConfirmOpeningBalanceMutation();
   const [closeSessionMutation] = useCloseSessionMutation();
