@@ -9,11 +9,10 @@ import {
   useOpenSessionMutation,
   useConfirmOpeningBalanceMutation,
   useCloseSessionMutation,
-  useStartCashierShiftMutation,
-  type Session,
-  type Shift,
-  type OpenSessionBody,
+ 
+ 
 } from "@/redux/pos/Posapi";
+import { OpenSessionBody, Session, Shift } from "@/types/session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

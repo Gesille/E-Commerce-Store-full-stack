@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import {
   Order,
   CartItem,
-  Product,
-  Category,
   calcOrderTotals,
   Customer,
   PaymentLine,
@@ -23,13 +21,13 @@ import { OpenSessionModal } from "@/components/OpenSessionModal";
 import { SwitchCashierModal } from "@/components/SwitchCashierModal";
 import { usePOSSession } from "@/hooks/usePOSSession";
 
-
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
 
 function ClockDisplay() {
   const [time, setTime] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   );
+
   useEffect(() => {
     const t = setInterval(
       () =>
@@ -37,20 +35,25 @@ function ClockDisplay() {
           new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
-          })
+          }),
         ),
-      60_000
+      60_000,
     );
     return () => clearInterval(t);
   }, []);
+
   return <>{time}</>;
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
-  // ── Session management via the custom hook ─────────────────────────────────
-  const { session, loading, onSessionOpened, closeSession } = usePOSSession();
+  // ── configId — يُحفظ بعد فتح السيشن ويُمرَّر للهوك ───────────────────────
+  const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
+
+  // ── Session management ─────────────────────────────────────────────────────
+  const { session, loading, onSessionOpened, closeSession } =
+    usePOSSession(activeConfigId);
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [showOpenSession, setShowOpenSession] = useState(false);
@@ -58,23 +61,28 @@ export default function CashierPage() {
   const [category, setCategory] = useState<string>("All");
   const [search, setSearch] = useState<string>("");
 
-  // Auto-open the session modal when there is no active session
+  // افتح مودال السيشن تلقائياً إذا ما في سيشن
   useEffect(() => {
     if (!loading && !session) {
       setShowOpenSession(true);
     }
   }, [loading, session]);
 
-  // ── Orders ─────────────────────────────────────────────────────────────────
+  type OrderMeta = { customer: Customer | null; note: string };
+
+  const initialOrderId = 1;
+
   const [orders, setOrders] = useState<Order[]>([
-    { id: 1, name: "Order 1", cart: [], createdAt: new Date() },
+    { id: initialOrderId, name: "Order 1", cart: [], createdAt: new Date() },
   ]);
-  const [activeOrderId, setActiveOrderId] = useState<number>(1);
 
-  const [orderMeta, setOrderMeta] = useState<
-    Record<number, { customer: Customer | null; note: string }>
-  >({ 1: { customer: null, note: "" } });
+  const [activeOrderId, setActiveOrderId] = useState<number>(initialOrderId);
 
+  const initMeta: Record<number, OrderMeta> = {};
+  initMeta[initialOrderId] = { customer: null, note: "" };
+
+  const [orderMeta, setOrderMeta] =
+    useState<Record<number, OrderMeta>>(initMeta);
   // ── Modals ─────────────────────────────────────────────────────────────────
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -91,10 +99,12 @@ export default function CashierPage() {
   // ── Cart helpers ───────────────────────────────────────────────────────────
   const updateCart = (newCart: CartItem[]) =>
     setOrders((prev) =>
-      prev.map((o) => (o.id === activeOrderId ? { ...o, cart: newCart } : o))
+      prev.map((o) => (o.id === activeOrderId ? { ...o, cart: newCart } : o)),
     );
 
-  const setMeta = (patch: Partial<{ customer: Customer | null; note: string }>) =>
+  const setMeta = (
+    patch: Partial<{ customer: Customer | null; note: string }>,
+  ) =>
     setOrderMeta((prev) => ({
       ...prev,
       [activeOrderId]: { ...activeMeta, ...patch },
@@ -122,12 +132,14 @@ export default function CashierPage() {
     const newId = Date.now();
     const remaining = orders.filter((o) => o.id !== activeOrderId);
     if (remaining.length === 0) {
-      setOrders([{ id: newId, name: "Order 1", cart: [], createdAt: new Date() }]);
+      setOrders([
+        { id: newId, name: "Order 1", cart: [], createdAt: new Date() },
+      ]);
       setActiveOrderId(newId);
       setOrderMeta({ [newId]: { customer: null, note: "" } });
     } else {
       setOrders(remaining);
-      setActiveOrderId(remaining[0]!.id);
+      setActiveOrderId(remaining[0].id);
     }
     setReceipt(null);
   };
@@ -157,22 +169,21 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-const shiftCashier = session?.activeShift?.cashierId;
+  // ── Cashier name ───────────────────────────────────────────────────────────
+  const shiftCashier = session?.activeShift?.cashierId;
+  const cashierName =
+    (session?.session?.user_id as [number, string] | undefined)?.[1] ??
+    (typeof shiftCashier === "object" ? shiftCashier.name : shiftCashier) ??
+    "Cashier";
 
-const cashierName =
-  (session?.session?.user_id as [number, string] | undefined)?.[1] ??
-  (typeof shiftCashier === "object"
-    ? shiftCashier.name
-    : shiftCashier) ??
-  "Cashier";
-console.log("SESSION:", session);
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <div
         className="flex flex-col bg-gray-50"
         style={{ height: "calc(100vh - 60px)" }}
       >
-        {/* ── Top bar ─────────────────────────────────────────────────────── */}
+        {/* ── Top bar ───────────────────────────────────────────────────────── */}
         <div className="h-12 bg-white border-b border-gray-100 flex items-center justify-between px-5 shrink-0">
           <div className="flex items-center gap-3">
             {/* Store icon */}
@@ -195,24 +206,21 @@ console.log("SESSION:", session);
               POS — Shop #1
             </span>
 
-            {/* ── Session badge ─────────────────────────────────────────── */}
+            {/* Session badge */}
             {loading ? (
               <span className="text-[11px] text-gray-400 animate-pulse">
                 Loading session…
               </span>
             ) : session ? (
               <>
-                {/* Green "live" badge */}
                 <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium">
-                 ● {session?.session?.name ?? "Active Session"}
+                  ● {session.session.name}
                 </span>
 
-                {/* Current cashier */}
                 <span className="text-[11px] text-gray-500">
                   👤 {cashierName}
                 </span>
 
-                {/* Switch cashier */}
                 <button
                   onClick={() => setShowSwitchCashier(true)}
                   className="text-[11px] text-blue-500 hover:underline bg-transparent border-none cursor-pointer p-0"
@@ -220,7 +228,6 @@ console.log("SESSION:", session);
                   Switch
                 </button>
 
-                {/* Close session (optional — remove if you don't want it here) */}
                 <button
                   onClick={closeSession}
                   className="text-[11px] text-red-400 hover:text-red-600 hover:underline bg-transparent border-none cursor-pointer p-0 ml-1"
@@ -229,7 +236,6 @@ console.log("SESSION:", session);
                 </button>
               </>
             ) : (
-              /* No session — prompt the cashier to open one */
               <button
                 onClick={() => setShowOpenSession(true)}
                 className="text-[11px] bg-red-50 text-red-600 px-2.5 py-0.5 rounded-full font-medium hover:bg-red-100 border-none cursor-pointer transition"
@@ -250,7 +256,7 @@ console.log("SESSION:", session);
           </div>
         </div>
 
-        {/* ── Body ────────────────────────────────────────────────────────── */}
+        {/* ── Body ──────────────────────────────────────────────────────────── */}
         <div className="flex flex-1 overflow-hidden">
           <CategorySidebar selected={category} setSelected={setCategory} />
 
@@ -283,17 +289,21 @@ console.log("SESSION:", session);
         </div>
       </div>
 
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      {/* ── Modals ────────────────────────────────────────────────────────────── */}
 
       {/* Open Session */}
       {showOpenSession && (
         <OpenSessionModal
           onSessionOpened={(result) => {
-            onSessionOpened(result);        // update hook state
+            // ✅ احفظ الـ configId عشان الهوك يقدر يجيب السيشن
+            const configId = result.session.config_id?.[0];
+            if (configId) setActiveConfigId(configId);
+
+            onSessionOpened(result);
             setShowOpenSession(false);
           }}
           onClose={() => {
-            // Only allow closing if there's already an active session
+            // لا تسمح بالإغلاق إلا إذا في سيشن مفتوحة
             if (session) setShowOpenSession(false);
           }}
         />
@@ -304,8 +314,6 @@ console.log("SESSION:", session);
         <SwitchCashierModal
           currentCashierId={cashierName}
           onSwitch={async (_newCashierId) => {
-            // The SwitchCashierModal handles the API call internally.
-            // Just close and let the polling refetch update the badge.
             setShowSwitchCashier(false);
           }}
           onClose={() => setShowSwitchCashier(false)}

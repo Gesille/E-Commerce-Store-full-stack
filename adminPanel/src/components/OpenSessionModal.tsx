@@ -5,11 +5,10 @@ import {
   useOpenSessionMutation,
   useConfirmOpeningBalanceMutation,
   useGetPOSConfigsQuery,
-  type POSConfig,
-  type Session,
-  type Shift,
+
 } from "@/redux/pos/Posapi";
 import { useGetAllUsersQuery ,type User} from "@/redux/user/userApi";
+import { POSConfig, Session, Shift } from "@/types/session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
