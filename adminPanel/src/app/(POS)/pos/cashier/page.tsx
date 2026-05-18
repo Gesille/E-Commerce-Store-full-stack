@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, CartItem, Product, Category, calcOrderTotals, Customer, PaymentLine } from "@/types/pos";
+import { Order, CartItem, calcOrderTotals, Customer, PaymentLine } from "@/types/pos";
 import CustomerModal from "@/components/CustomerModal";
 import PaymentModal from "@/components/PaymentModal";
 import { CartPanel } from "@/components/CartPanel";
@@ -20,8 +20,6 @@ import {
   type Session,
   type Shift,
 } from "@/redux/pos/Posapi";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
 
