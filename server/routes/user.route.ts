@@ -32,7 +32,7 @@ userRouter.put('/update-user',isAuthenticated,authorizeRoles("admin"),updateUser
 userRouter.delete('/delete-user/:id',updateAccessToken,isAuthenticated,authorizeRoles("admin"),deleteUser);
 console.log(userRouter.stack);
 
-// 📊 Analytics routes (Admin only)
+
 userRouter.get(
   "/top-spenders",
   updateAccessToken,

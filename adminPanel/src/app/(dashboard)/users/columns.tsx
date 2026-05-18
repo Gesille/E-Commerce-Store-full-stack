@@ -133,6 +133,7 @@ export const createColumns = ({
           <SelectContent>
             <SelectItem value="user">User</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
+             <SelectItem value="cashier">Cashier</SelectItem>
           </SelectContent>
         </Select>
       );

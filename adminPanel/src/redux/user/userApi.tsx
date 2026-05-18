@@ -1,6 +1,6 @@
 import { apiSlice } from "../api/apiSlice";
 
-export type UserRole = "admin" | "user";
+export type UserRole = "admin" | "user" | "cashier";
 type Address = {
   street?: string;
   city?: string;
