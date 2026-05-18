@@ -1,7 +1,6 @@
-// src/store/api/posApi.ts
+// src/redux/pos/posApi.ts
 
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../store";
+import { apiSlice } from "../api/apiSlice";
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -22,6 +21,7 @@ export interface ShiftStateHistory {
   at: string;
   reason?: string;
 }
+
 export interface Shift {
   _id: string;
   odooSessionId: number;
@@ -36,11 +36,15 @@ export interface Shift {
       };
 
   odooPartnerId: number;
+
   state: "active" | "paused" | "closed";
+
   startTime: string;
   endTime?: string;
+
   totalOrders?: number;
   totalSales?: number;
+
   stateHistory: ShiftStateHistory[];
 }
 
@@ -92,13 +96,18 @@ export interface POSOrder {
   shiftId?: string;
   cashierId?: string;
   customerId?: number;
+
   cart: CartItem[];
+
   paymentLines: PaymentLine[];
+
   subtotal: number;
   total: number;
   amountPaid: number;
   change: number;
+
   note?: string;
+
   status?: string;
   receiptNumber?: string;
 }
@@ -124,13 +133,17 @@ export interface CloseSessionBody {
 
 export interface CashierShiftBody {
   cashierId: string;
+  configId: number;
   reason?: string;
 }
 
 export interface CreateOrderBody {
   cart: CartItem[];
   paymentLines: PaymentLine[];
+
   cashierId: string;
+  configId: number;
+
   customerId?: number;
   note?: string;
 }
@@ -142,7 +155,7 @@ export interface CreateCustomerBody {
 }
 
 // ─────────────────────────────────────────────────────────────
-// RESPONSE TYPES
+// RESPONSES
 // ─────────────────────────────────────────────────────────────
 
 export interface APIResponse {
@@ -153,18 +166,23 @@ export interface APIResponse {
 
 export interface ActiveSessionResponse extends APIResponse {
   session: Session | null;
+
   stats: {
     orderCount: number;
     totalRevenue: number;
   } | null;
+
   activeShifts: Shift[];
 }
 
 export interface OpenSessionResponse extends APIResponse {
   requiresOpeningBalance: boolean;
+
   session?: Session;
   sessionId?: number;
+
   activeShift?: Shift;
+
   state?: string;
 }
 
@@ -210,61 +228,35 @@ export interface SessionOrdersResponse extends APIResponse {
 
 export interface SessionReportResponse extends APIResponse {
   odooSessionId: number;
+
   summary: {
     totalOrders: number;
     totalSales: number;
     cashierCount: number;
   };
+
   cashierBreakdown: any[];
 }
 
 // ─────────────────────────────────────────────────────────────
-// API SLICE
+// API
 // ─────────────────────────────────────────────────────────────
 
-export const posApi = createApi({
-  reducerPath: "posApi",
-
-  baseQuery: fetchBaseQuery({
-    baseUrl: "/api/pos",
-
-    prepareHeaders: (headers, { getState }) => {
-      const token = (getState() as RootState).auth?.token;
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-
-      return headers;
-    },
-  }),
-
-  tagTypes: [
-    "Session",
-    "Shift",
-    "Order",
-    "Product",
-    "Customer",
-    "PaymentMethod",
-    "POSConfig",
-  ],
+export const posApi = apiSlice.injectEndpoints({
+  overrideExisting: true,
 
   endpoints: (builder) => ({
     // ─────────────────────────────────────────
     // SESSION
     // ─────────────────────────────────────────
 
-    openSession: builder.mutation<
-      OpenSessionResponse,
-      OpenSessionBody
-    >({
+    openSession: builder.mutation<OpenSessionResponse, OpenSessionBody>({
       query: (body) => ({
-        url: "/session/open",
+        url: "pos/session/open",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Session", "Shift"],
     }),
 
     confirmOpeningBalance: builder.mutation<
@@ -272,209 +264,165 @@ export const posApi = createApi({
       ConfirmOpeningBalanceBody
     >({
       query: (body) => ({
-        url: "/session/confirm-opening",
+        url: "pos/session/confirm-opening",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Session", "Shift"],
     }),
 
-    closeSession: builder.mutation<
-      APIResponse,
-      CloseSessionBody
-    >({
+    closeSession: builder.mutation<APIResponse, CloseSessionBody>({
       query: (body) => ({
-        url: "/session/close",
+        url: "pos/session/close",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Session", "Shift", "Order"],
     }),
 
-   getActiveSession: builder.query<
-  ActiveSessionResponse,
-  number
->({
-  query: (configId) => ({
-    url: "/session/active",
-    params: { configId },
-  }),
+    getActiveSession: builder.query<ActiveSessionResponse, number>({
+      query: (configId) => ({
+        url: "pos/session/active",
+        method: "GET",
+        params: { configId },
+        credentials: "include" as const,
+      }),
+    }),
 
-  providesTags: ["Session"],
-}),
+    getSessionOrders: builder.query<SessionOrdersResponse, number>({
+      query: (sessionId) => ({
+        url: `pos/orders/${sessionId}`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+    }),
+
+    getSessionReport: builder.query<SessionReportResponse, number>({
+      query: (sessionId) => ({
+        url: `pos/session/${sessionId}/report`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+    }),
+
     // ─────────────────────────────────────────
     // SHIFTS
     // ─────────────────────────────────────────
 
-    startCashierShift: builder.mutation<
-      APIResponse,
-      CashierShiftBody
-    >({
+    startCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/start",
+        url: "pos/shift/start",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Shift"],
     }),
 
-    pauseCashierShift: builder.mutation<
-      APIResponse,
-      CashierShiftBody
-    >({
+    pauseCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/pause",
+        url: "pos/shift/pause",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Shift"],
     }),
 
-    resumeCashierShift: builder.mutation<
-      APIResponse,
-      CashierShiftBody
-    >({
+    resumeCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/resume",
+        url: "pos/shift/resume",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Shift"],
     }),
 
-    endCashierShift: builder.mutation<
-      APIResponse,
-      CashierShiftBody
-    >({
+    endCashierShift: builder.mutation<APIResponse, CashierShiftBody>({
       query: (body) => ({
-        url: "/shift/end",
+        url: "pos/shift/end",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Shift"],
     }),
 
-    getActiveShifts: builder.query<
-      ActiveShiftsResponse,
-      void
-    >({
-      query: () => "/shift/active",
-
-      providesTags: ["Shift"],
+    getActiveShifts: builder.query<ActiveShiftsResponse, number>({
+      query: (configId) => ({
+        url: "pos/shift/active",
+        method: "GET",
+        params: { configId },
+        credentials: "include" as const,
+      }),
     }),
 
     // ─────────────────────────────────────────
     // ORDERS
     // ─────────────────────────────────────────
 
-    createOrder: builder.mutation<
-      CreateOrderResponse,
-      CreateOrderBody
-    >({
+    createOrder: builder.mutation<CreateOrderResponse, CreateOrderBody>({
       query: (body) => ({
-        url: "/order",
+        url: "pos/order",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Order", "Session"],
-    }),
-
-    getSessionOrders: builder.query<
-      SessionOrdersResponse,
-      number
-    >({
-      query: (sessionId) => `/orders/${sessionId}`,
-
-      providesTags: (_result, _err, sessionId) => [
-        { type: "Order", id: sessionId },
-      ],
-    }),
-
-    getSessionReport: builder.query<
-      SessionReportResponse,
-      number
-    >({
-      query: (sessionId) =>
-        `/session/${sessionId}/report`,
-
-      providesTags: (_result, _err, sessionId) => [
-        { type: "Session", id: `report-${sessionId}` },
-      ],
     }),
 
     // ─────────────────────────────────────────
     // PRODUCTS
     // ─────────────────────────────────────────
 
-    getProducts: builder.query<
-      ProductsResponse,
-      void
-    >({
-      query: () => "/products",
-
-      providesTags: ["Product"],
+    getProducts: builder.query<ProductsResponse, void>({
+      query: () => ({
+        url: "pos/products",
+        method: "GET",
+        credentials: "include" as const,
+      }),
     }),
 
     // ─────────────────────────────────────────
     // CUSTOMERS
     // ─────────────────────────────────────────
 
-    getCustomers: builder.query<
-      CustomersResponse,
-      string | void
-    >({
+    getCustomers: builder.query<CustomersResponse, string | void>({
       query: (search = "") => ({
-        url: "/customers",
+        url: "pos/customers",
+        method: "GET",
         params: search ? { search } : undefined,
+        credentials: "include" as const,
       }),
-
-      providesTags: ["Customer"],
     }),
 
-    createCustomer: builder.mutation<
-      APIResponse,
-      CreateCustomerBody
-    >({
+    createCustomer: builder.mutation<APIResponse, CreateCustomerBody>({
       query: (body) => ({
-        url: "/customers",
+        url: "pos/customers",
         method: "POST",
         body,
+        credentials: "include" as const,
       }),
-
-      invalidatesTags: ["Customer"],
     }),
 
     // ─────────────────────────────────────────
     // PAYMENT METHODS
     // ─────────────────────────────────────────
 
-    getPaymentMethods: builder.query<
-      PaymentMethodsResponse,
-      void
-    >({
-      query: () => "/payment-methods",
-
-      providesTags: ["PaymentMethod"],
+    getPaymentMethods: builder.query<PaymentMethodsResponse, void>({
+      query: () => ({
+        url: "pos/payment-methods",
+        method: "GET",
+        credentials: "include" as const,
+      }),
     }),
 
     // ─────────────────────────────────────────
     // POS CONFIGS
     // ─────────────────────────────────────────
 
-    getPOSConfigs: builder.query<
-      POSConfigsResponse,
-      void
-    >({
-      query: () => "/configs",
-
-      providesTags: ["POSConfig"],
+    getPOSConfigs: builder.query<POSConfigsResponse, void>({
+      query: () => ({
+        url: "pos/configs",
+        method: "GET",
+        credentials: "include" as const,
+      }),
     }),
   }),
 });
