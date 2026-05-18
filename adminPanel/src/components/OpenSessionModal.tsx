@@ -128,7 +128,7 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
     isError: usersError,
   } = useGetAllUsersQuery();
 
-  const cashiers: User[] = (allUsers ?? []).filter((u:any) => u.role === "user");
+  const cashiers: User[] = (allUsers ?? []).filter((u:any) => u.role === "admin" || u.role === "cashier");
 
   const handleNext = async () => {
     if (!cashierId) {
