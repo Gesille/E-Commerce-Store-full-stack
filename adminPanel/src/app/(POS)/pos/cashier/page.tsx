@@ -20,8 +20,7 @@ import {
   type Session,
   type Shift,
 } from "@/redux/pos/Posapi";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
+
 
 // ─── CLOCK ────────────────────────────────────────────────────────────────────
 
@@ -55,16 +54,18 @@ export default function CashierPage() {
     refetch: refetchSession,
   } = useGetActiveSessionQuery();
 
-  // Show spinner only on the very first load (no data yet).
-  // Once we have data OR the request errored, stop showing "Loading…".
-  const sessionLoading = isLoading && !sessionData && !isError;
 
   const session = sessionData?.session ?? null;
-  const stats = sessionData?.stats ?? null;
 
-  // Track the currently active cashier shift so we can show the cashier name
-  // and pass it to SwitchCashierModal.  We seed this from the live query but
-  // update it immediately when a new session is opened or a cashier switches.
+const [loadTimeout, setLoadTimeout] = useState(false);
+
+useEffect(() => {
+  const t = setTimeout(() => setLoadTimeout(true), 5000);
+  return () => clearTimeout(t);
+}, []);
+
+const sessionLoading = isLoading && !sessionData && !isError && !loadTimeout;
+
   const [activeShift, setActiveShift] = useState<Shift | null>(
     () => sessionData?.activeShifts?.[0] ?? null
   );
