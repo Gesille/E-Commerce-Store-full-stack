@@ -21,6 +21,7 @@ import { OpenSessionModal } from "@/components/OpenSessionModal";
 import { SwitchCashierModal } from "@/components/SwitchCashierModal";
 import { usePOSSession } from "@/hooks/usePOSSession";
 import { useGetAllUsersQuery } from "@/redux/user/userApi";
+import { CloseSessionConfirmModal } from "@/components/CloseSessionConfirmModal";
 
 // clock component for top-right corner
 function ClockDisplay() {
@@ -45,22 +46,18 @@ function ClockDisplay() {
   return <>{time}</>;
 }
 
-
 export default function CashierPage() {
-
   const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
 
- 
   const { session, loading, onSessionOpened, closeSession } =
     usePOSSession(activeConfigId);
 
- 
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
   const [category, setCategory] = useState<string>("All");
   const [search, setSearch] = useState<string>("");
 
-  
   useEffect(() => {
     if (!loading && !session) {
       setShowOpenSession(true);
@@ -168,7 +165,7 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-   const { data: allUsers } = useGetAllUsersQuery();
+  const { data: allUsers } = useGetAllUsersQuery();
   const shiftCashier = session?.activeShift?.cashierId;
   const cashierName = (() => {
     if (!session?.activeShift) return "Cashier";
@@ -238,7 +235,7 @@ export default function CashierPage() {
                 </button>
 
                 <button
-                  onClick={closeSession}
+                  onClick={() => setShowCloseConfirm(true)}
                   className="text-[11px] text-red-400 hover:text-red-600 hover:underline bg-transparent border-none cursor-pointer p-0 ml-1"
                 >
                   Close session
@@ -298,46 +295,38 @@ export default function CashierPage() {
         </div>
       </div>
 
-      {/* ── Modals ────────────────────────────────────────────────────────────── */}
-
       {/* Open Session */}
       {showOpenSession && (
         <OpenSessionModal
           onSessionOpened={(result) => {
-            // ✅ احفظ الـ configId عشان الهوك يقدر يجيب السيشن
             const configId = result.session.config_id?.[0];
             if (configId) setActiveConfigId(configId);
-
             onSessionOpened(result);
             setShowOpenSession(false);
           }}
-          onClose={() => {
-            // لا تسمح بالإغلاق إلا إذا في سيشن مفتوحة
-            if (session) setShowOpenSession(false);
-          }}
+          onClose={() => setShowOpenSession(false)}
         />
       )}
 
-   {showSwitchCashier && session && (
-  <SwitchCashierModal
-    currentCashierId={
-      typeof session.activeShift?.cashierId === "object"
-        ? session.activeShift.cashierId._id
-        : session.activeShift?.cashierId ?? ""
-    }
-    configId={session.session.config_id?.[0] ?? activeConfigId ?? 0}
-    currentShift={session.activeShift}
-    onSwitch={(newCashierId, newShift) => {
-
-      onSessionOpened({
-        session: session.session,
-        activeShift: newShift,
-      });
-      setShowSwitchCashier(false);
-    }}
-    onClose={() => setShowSwitchCashier(false)}
-  />
-)}
+      {showSwitchCashier && session && (
+        <SwitchCashierModal
+          currentCashierId={
+            typeof session.activeShift?.cashierId === "object"
+              ? session.activeShift.cashierId._id
+              : (session.activeShift?.cashierId ?? "")
+          }
+          configId={session.session.config_id?.[0] ?? activeConfigId ?? 0}
+          currentShift={session.activeShift}
+          onSwitch={(newCashierId, newShift) => {
+            onSessionOpened({
+              session: session.session,
+              activeShift: newShift,
+            });
+            setShowSwitchCashier(false);
+          }}
+          onClose={() => setShowSwitchCashier(false)}
+        />
+      )}
 
       {/* Customer */}
       {showCustomer && (
@@ -377,6 +366,16 @@ export default function CashierPage() {
           paymentLines={receipt.paymentLines}
           onClose={() => setReceipt(null)}
           onNewOrder={handleNewOrderAfterReceipt}
+        />
+      )}
+      {showCloseConfirm && session && (
+        <CloseSessionConfirmModal
+          session={session}
+          onConfirm={async () => {
+            await closeSession();
+            setShowCloseConfirm(false);
+          }}
+          onClose={() => setShowCloseConfirm(false)}
         />
       )}
     </>

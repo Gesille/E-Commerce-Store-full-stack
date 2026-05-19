@@ -18,6 +18,7 @@ import {
   createCustomer,
   getPaymentMethods,
   getPOSConfigs,
+  confirmOpeningBalance,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -35,7 +36,12 @@ POSRouter.post(
   authorizeRoles("admin"),
   closeSession,
 );
-
+POSRouter.post(
+  "/session/confirm-opening",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  confirmOpeningBalance,
+);
 POSRouter.get(
   "/session/active",
   isAuthenticated,
