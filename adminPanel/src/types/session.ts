@@ -175,8 +175,9 @@ export interface OpenSessionResponse extends APIResponse {
 }
 
 export interface ConfirmOpeningBalanceResponse extends APIResponse {
-  session: Session;
-  activeShift: Shift;
+   sessionId: number;
+  cashierId: string;
+  configId: number;
   openingBalance: number;
 }
 

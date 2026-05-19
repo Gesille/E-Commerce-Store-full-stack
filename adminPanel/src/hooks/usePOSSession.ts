@@ -26,11 +26,12 @@ export interface UsePOSSessionReturn {
     { requiresBalance: true; sessionId: number } | { requiresBalance: false }
   >;
 
-  confirmBalance: (args: {
-    sessionId: number;
-    cashierId: string;
-    openingBalance: number;
-  }) => Promise<void>;
+ confirmBalance: (args: {
+  sessionId: number;
+  cashierId: string;
+  configId: number;
+  openingBalance: number;
+}) => Promise<void>;
 
 closeSession: (sessionId: number) => Promise<void>;
 
@@ -98,11 +99,12 @@ export function usePOSSession(configId?: number): UsePOSSessionReturn {
   );
 
   const confirmBalance = useCallback(
-    async (args: {
-      sessionId: number;
-      cashierId: string;
-      openingBalance: number;
-    }) => {
+  async (args: {
+    sessionId: number;
+    cashierId: string;
+    configId: number;
+    openingBalance: number;
+  }) => {
       setError(null);
       try {
         const result = await confirmOpeningBalanceMutation(args).unwrap();

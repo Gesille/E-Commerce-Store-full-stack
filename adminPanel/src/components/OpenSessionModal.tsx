@@ -462,6 +462,7 @@ export function OpenSessionModal({
   const [step, setStep] = useState<ModalStep>("configure");
   const [pendingSessionId, setPendingSessionId] = useState<number | null>(null);
   const [pendingCashierId, setPendingCashierId] = useState<string>("");
+  const [pendingConfigId, setPendingConfigId] = useState<number>(0);
   const [cashierName, setCashierName] = useState<string>("");
   const [sessionName, setSessionName] = useState<string>("");
   const [confirmedBalance, setConfirmedBalance] = useState<number>(0);
@@ -488,6 +489,7 @@ export function OpenSessionModal({
     const cashier = (allUsers ?? []).find((u: any) => u._id === data.cashierId);
     setCashierName(nameFromShift ?? cashier?.name ?? "Cashier");
     setPendingCashierId(data.cashierId);
+    setPendingConfigId(data.configId);
     if (result.requiresOpeningBalance) {
       if (!result.sessionId) {
         throw new Error("No session ID returned from server.");
@@ -512,12 +514,12 @@ export function OpenSessionModal({
       throw new Error("No pending session found.");
     }
 
-    // .unwrap() re-throws RTK Query errors so the try/catch in StepOpeningBalance catches them
-    const result = await confirmOpeningBalance({
-      sessionId: pendingSessionId,
-      cashierId: pendingCashierId,
-      openingBalance: balance,
-    }).unwrap();
+ const result = await confirmOpeningBalance({
+  sessionId: pendingSessionId,
+  cashierId: pendingCashierId,
+  configId: pendingConfigId,
+  openingBalance: balance,
+}).unwrap();
 
     setSessionName(result.session?.name ?? "");
     setConfirmedBalance(balance);
