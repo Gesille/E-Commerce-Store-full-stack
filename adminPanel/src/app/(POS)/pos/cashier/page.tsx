@@ -220,7 +220,10 @@ export default function CashierPage() {
             ) : session ? (
               <>
                 <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-medium">
-                  ● {session.session.name}
+                  ●{" "}
+                  {session.session.name && session.session.name !== "."
+                    ? session.session.name
+                    : (session.session.config_id?.[1] ?? "Session Open")}
                 </span>
 
                 <span className="text-[11px] text-gray-500">

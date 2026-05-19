@@ -445,7 +445,7 @@ export const closeSession = CatchAsyncError(
       [
         [
           ["id", "=", sessionId],
-          ["state", "=", "opened"],
+          ["state", "in", ["opened", "closing_control"]],
         ],
       ],
       { fields: ["id", "name", "state"], limit: 1 },

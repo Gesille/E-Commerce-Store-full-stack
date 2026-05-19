@@ -126,7 +126,7 @@ export function usePOSSession(configId?: number): UsePOSSessionReturn {
 
     setError(null);
     try {
-      await closeSessionMutation({ sessionId }).unwrap();
+      await closeSessionMutation({ sessionId: Number(sessionId) }).unwrap();
       setLocalSession(null);
     } catch (err: any) {
       const msg =
