@@ -19,7 +19,7 @@ import {
   getPaymentMethods,
   getPOSConfigs,
   confirmOpeningBalance,
-  debugSessionState,
+  
   debugPOSConfig,
 } from "../controllers/posSession.controller.js";
 
