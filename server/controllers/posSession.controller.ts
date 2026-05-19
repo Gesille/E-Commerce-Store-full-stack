@@ -325,9 +325,6 @@ export const confirmOpeningBalance = CatchAsyncError(
       configId,
     } = req.body;
 
-    // ─────────────────────────────────────────────
-    // Validation
-    // ─────────────────────────────────────────────
     if (!sessionId) {
       return next(new ErrorHandler("sessionId is required", 400));
     }
@@ -340,66 +337,53 @@ export const confirmOpeningBalance = CatchAsyncError(
       return next(new ErrorHandler("configId is required", 400));
     }
 
-    // ─────────────────────────────────────────────
-    // Resolve cashier
-    // ─────────────────────────────────────────────
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
-
     if (!cashier) return;
 
-    // ─────────────────────────────────────────────
-    // Read current session
-    // ─────────────────────────────────────────────
-    let currentSessions: any[] = [];
+    // --------------------------------------------------
+    // READ SESSION
+    // --------------------------------------------------
 
-    try {
-      currentSessions = await odooRequest(
-        "pos.session",
-        "read",
-        [[sessionId]],
-        {
-          fields: [
-            "id",
-            "name",
-            "state",
-            "config_id",
-            "cash_register_balance_start",
-            "cash_register_balance_end_real",
-          ],
-        },
-      );
-    } catch (err) {
-      console.error("[POS] Failed to read session:", err);
-
-      return next(
-        new ErrorHandler("Failed to read POS session from Odoo", 500),
-      );
-    }
+    const currentSessions = await odooRequest(
+      "pos.session",
+      "read",
+      [[sessionId]],
+      {
+        fields: [
+          "id",
+          "name",
+          "state",
+          "config_id",
+          "cash_register_balance_start",
+        ],
+      },
+    );
 
     const current = currentSessions?.[0];
 
-    console.log("[POS] Current session:", current);
+    console.log("[POS] SESSION:", current);
 
     if (!current) {
-      return next(new ErrorHandler("Session not found in Odoo", 404));
+      return next(new ErrorHandler("Session not found", 404));
     }
 
-    // ─────────────────────────────────────────────
-    // Already opened
-    // ─────────────────────────────────────────────
+    // --------------------------------------------------
+    // ALREADY OPEN
+    // --------------------------------------------------
+
     if (current.state === "opened") {
-      let existingShift = await CashierShiftLog.findOne({
+      const existingShift = await CashierShiftLog.findOne({
         odooSessionId: sessionId,
         cashierId: cashier._id,
         state: { $in: ["active", "paused"] },
       });
 
       if (!existingShift) {
-        existingShift = await CashierShiftLog.create({
+        await CashierShiftLog.create({
           odooSessionId: sessionId,
           cashierId: cashier._id,
           odooPartnerId: cashier.odooPartnerId,
-          state: "active" as ShiftState,
+          state: "active",
           stateHistory: [
             {
               toState: "active",
@@ -410,39 +394,45 @@ export const confirmOpeningBalance = CatchAsyncError(
         });
       }
 
-      const populated = await populateShift(existingShift._id);
+      const session = await fetchOpenOdooSession(configId);
+
+      const shift = await CashierShiftLog.findOne({
+        odooSessionId: sessionId,
+        cashierId: cashier._id,
+      })
+        .populate("cashierId", "name email role")
+        .lean();
 
       return res.status(200).json({
         success: true,
         message: "Session already opened",
-        session: current,
-        activeShift: populated,
+        session,
+        activeShift: shift,
       });
     }
 
-    // ─────────────────────────────────────────────
-    // Must be opening_control
-    // ─────────────────────────────────────────────
+    // --------------------------------------------------
+    // MUST BE opening_control
+    // --------------------------------------------------
+
     if (current.state !== "opening_control") {
       return next(
         new ErrorHandler(
-          `Session is not awaiting opening balance. Current state: ${current.state}`,
+          `Invalid session state: ${current.state}`,
           409,
         ),
       );
     }
 
-    // ─────────────────────────────────────────────
-    // Write opening balance
-    // ─────────────────────────────────────────────
+    // --------------------------------------------------
+    // WRITE OPENING BALANCE
+    // --------------------------------------------------
+
     try {
       await odooRequest("pos.session", "write", [
         [sessionId],
         {
           cash_register_balance_start:
-            Number(openingBalance) || 0,
-
-          cash_register_balance_end_real:
             Number(openingBalance) || 0,
         },
       ]);
@@ -452,10 +442,7 @@ export const confirmOpeningBalance = CatchAsyncError(
         openingBalance,
       );
     } catch (err) {
-      console.error(
-        "[POS] Failed to write opening balance:",
-        err,
-      );
+      console.error("[POS] Failed writing balance:", err);
 
       return next(
         new ErrorHandler(
@@ -465,71 +452,82 @@ export const confirmOpeningBalance = CatchAsyncError(
       );
     }
 
-    // ─────────────────────────────────────────────
-    // Open session
-    // ─────────────────────────────────────────────
+    // --------------------------------------------------
+    // DISABLE CASH CONTROL
+    // IMPORTANT
+    // --------------------------------------------------
+
     try {
-      await odooRequest(
+      await odooRequest("pos.config", "write", [
+        [configId],
+        {
+          cash_control: false,
+        },
+      ]);
+
+      console.log("[POS] cash_control disabled");
+    } catch (err) {
+      console.error("[POS] Could not disable cash control:", err);
+    }
+
+    // --------------------------------------------------
+    // OPEN SESSION
+    // --------------------------------------------------
+
+    try {
+      const result = await odooRequest(
         "pos.session",
         "action_pos_session_open",
         [[sessionId]],
       );
 
-      console.log("[POS] action_pos_session_open called");
+      console.log("[POS] OPEN RESULT:", result);
     } catch (err: any) {
       console.error(
-        "[POS] action_pos_session_open failed:",
-        err?.message,
+        "[POS] action_pos_session_open ERROR:",
+        err,
       );
 
       return next(
         new ErrorHandler(
-          err?.message || "Failed to open session",
+          err?.message ||
+            "Failed calling action_pos_session_open",
           500,
         ),
       );
     }
 
-    // ─────────────────────────────────────────────
-    // Poll session until opened
-    // ─────────────────────────────────────────────
-    let session: any = null;
+    // --------------------------------------------------
+    // WAIT
+    // --------------------------------------------------
 
-    for (let i = 0; i < 20; i++) {
-      const result = await odooRequest(
-        "pos.session",
-        "read",
-        [[sessionId]],
-        {
-          fields: [
-            "id",
-            "name",
-            "state",
-            "config_id",
-            "user_id",
-            "start_at",
-            "cash_register_balance_start",
-          ],
-        },
-      );
+    await new Promise((resolve) =>
+      setTimeout(resolve, 3000),
+    );
 
-      session = result?.[0];
+    // --------------------------------------------------
+    // READ AGAIN
+    // --------------------------------------------------
 
-      console.log(
-        `[POS] Poll ${i + 1}/20 -> ${session?.state}`,
-      );
+    const verify = await odooRequest(
+      "pos.session",
+      "read",
+      [[sessionId]],
+      {
+        fields: [
+          "id",
+          "name",
+          "state",
+          "cash_register_balance_start",
+        ],
+      },
+    );
 
-      if (session?.state === "opened") {
-        break;
-      }
+    const session = verify?.[0];
 
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+    console.log("[POS] FINAL SESSION:", session);
 
-    // ─────────────────────────────────────────────
-    // Final validation
-    // ─────────────────────────────────────────────
-    if (session?.state !== "opened") {
+    if (!session || session.state !== "opened") {
       return next(
         new ErrorHandler(
           `Session failed to open after balance confirmation. State: ${session?.state}`,
@@ -538,34 +536,32 @@ export const confirmOpeningBalance = CatchAsyncError(
       );
     }
 
-    // ─────────────────────────────────────────────
-    // Create shift
-    // ─────────────────────────────────────────────
+    // --------------------------------------------------
+    // CREATE SHIFT
+    // --------------------------------------------------
+
     const shiftLog = await CashierShiftLog.create({
       odooSessionId: sessionId,
       cashierId: cashier._id,
       odooPartnerId: cashier.odooPartnerId,
-      state: "active" as ShiftState,
+      state: "active",
       stateHistory: [
         {
           toState: "active",
           at: new Date(),
-          reason: `Session opened with opening balance ${openingBalance}`,
+          reason: `Session opened with balance ${openingBalance}`,
         },
       ],
     });
 
     const populated = await populateShift(shiftLog._id);
 
-    // ─────────────────────────────────────────────
-    // Success response
-    // ─────────────────────────────────────────────
     return res.status(201).json({
       success: true,
-      message: "Opening balance confirmed successfully",
+      message: "POS session opened successfully",
       session,
       activeShift: populated,
-      openingBalance: Number(openingBalance) || 0,
+      openingBalance,
     });
   },
 );
