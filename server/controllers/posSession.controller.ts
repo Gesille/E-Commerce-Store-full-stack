@@ -452,17 +452,13 @@ export const closeSession = CatchAsyncError(
     );
 
     if (!sessions?.length) {
-      // Check if it exists at all (any state)
-      const anyState = await odooRequest("pos.session", "search_read", [
-        [[["id", "=", sessionId]]],
-        { fields: ["id", "state"], limit: 1 },
-      ]);
+      return next(new ErrorHandler("Session not found in Odoo", 404));
+    }
 
-      if (!anyState?.length) {
-        return next(new ErrorHandler("Session not found in Odoo", 404));
-      }
+    const session = sessions[0];
 
-      // Session exists but is already closed — treat as success
+    // Already closed — just sync MongoDB and return success
+    if (session.state === "closed") {
       await CashierShiftLog.updateMany(
         { odooSessionId: sessionId, state: { $ne: "closed" } },
         {
@@ -485,6 +481,7 @@ export const closeSession = CatchAsyncError(
       });
     }
 
+    // Close all active/paused shifts in MongoDB
     const now = new Date();
 
     await CashierShiftLog.updateMany(
@@ -501,6 +498,7 @@ export const closeSession = CatchAsyncError(
       },
     );
 
+    // Close session in Odoo
     await odooRequest("pos.session", "action_pos_session_closing_control", [
       [sessionId],
     ]);
