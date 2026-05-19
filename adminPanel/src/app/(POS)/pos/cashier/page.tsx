@@ -48,10 +48,12 @@ function ClockDisplay() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CashierPage() {
-const [activeConfigId, setActiveConfigId] = useState<number | undefined>(() => {
-  const saved = localStorage.getItem("pos_active_config_id");
-  return saved ? Number(saved) : undefined;
-});
+  const [activeConfigId, setActiveConfigId] = useState<number | undefined>(
+    () => {
+      const saved = localStorage.getItem("pos_active_config_id");
+      return saved ? Number(saved) : undefined;
+    },
+  );
 
   const { session, loading, onSessionOpened, closeSession } =
     usePOSSession(activeConfigId);
@@ -63,10 +65,12 @@ const [activeConfigId, setActiveConfigId] = useState<number | undefined>(() => {
   const [search, setSearch] = useState<string>("");
 
   useEffect(() => {
-    if (!loading && !session) {
+    if (!loading && !session && activeConfigId !== undefined) {
+      setShowOpenSession(true);
+    } else if (!loading && !session && activeConfigId === undefined) {
       setShowOpenSession(true);
     }
-  }, [loading, session]);
+  }, [loading, session, activeConfigId]);
 
   type OrderMeta = { customer: Customer | null; note: string };
 
@@ -317,12 +321,11 @@ const [activeConfigId, setActiveConfigId] = useState<number | undefined>(() => {
       {showOpenSession && (
         <OpenSessionModal
           onSessionOpened={(result) => {
-          
-            const configId = result.session.config_id?.[0];
-           if (configId) {
-    setActiveConfigId(Number(configId));
-    localStorage.setItem("pos_active_config_id", String(configId)); 
-  }
+            setActiveConfigId(result.configId);
+            localStorage.setItem(
+              "pos_active_config_id",
+              String(result.configId),
+            );
             onSessionOpened(result);
             setShowOpenSession(false);
           }}

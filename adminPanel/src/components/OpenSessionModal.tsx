@@ -16,6 +16,7 @@ type ModalStep = "configure" | "opening_balance" | "success";
 interface OpenSessionResult {
   session: Session;
   activeShift: Shift;
+  configId: number;
 }
 
 interface OpenSessionModalProps {
@@ -504,6 +505,7 @@ export function OpenSessionModal({
       onSessionOpened({
         session: result.session as Session,
         activeShift: result.activeShift as Shift,
+        configId: data.configId,
       });
     }
   };
@@ -527,6 +529,7 @@ export function OpenSessionModal({
     onSessionOpened({
       session: result.session,
       activeShift: result.activeShift,
+       configId: pendingConfigId,
     });
   };
 
