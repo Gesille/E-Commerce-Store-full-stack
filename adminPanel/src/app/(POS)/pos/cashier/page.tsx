@@ -48,7 +48,10 @@ function ClockDisplay() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CashierPage() {
-  const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
+const [activeConfigId, setActiveConfigId] = useState<number | undefined>(() => {
+  const saved = localStorage.getItem("pos_active_config_id");
+  return saved ? Number(saved) : undefined;
+});
 
   const { session, loading, onSessionOpened, closeSession } =
     usePOSSession(activeConfigId);
@@ -314,9 +317,12 @@ export default function CashierPage() {
       {showOpenSession && (
         <OpenSessionModal
           onSessionOpened={(result) => {
-            // FIX: guard against missing config_id (e.g. Odoo returns false)
+          
             const configId = result.session.config_id?.[0];
-            if (configId) setActiveConfigId(Number(configId));
+           if (configId) {
+    setActiveConfigId(Number(configId));
+    localStorage.setItem("pos_active_config_id", String(configId)); 
+  }
             onSessionOpened(result);
             setShowOpenSession(false);
           }}

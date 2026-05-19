@@ -127,6 +127,7 @@ const closeSession = useCallback(async (sessionId: number) => {
   try {
     await closeSessionMutation({ sessionId }).unwrap();
     setLocalSession(null);
+    localStorage.removeItem("pos_active_config_id");
   } catch (err: any) {
     const msg = err?.data?.message ?? err?.message ?? "Failed to close session.";
     setError(msg);
