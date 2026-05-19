@@ -328,15 +328,16 @@ export const confirmOpeningBalance = CatchAsyncError(
       return next(new ErrorHandler("cashierId is required", 400));
     }
 
-    // resolve cashier
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
 
-    // 1. Read current session from Odoo
-    let currentSessions: any[] = [];
+    // ─────────────────────────────────────────────────────────────
+    // 1. READ SESSION
+    // ─────────────────────────────────────────────────────────────
+    let current: any = null;
 
     try {
-      currentSessions = await odooRequest(
+      const sessions = await odooRequest(
         "pos.session",
         "read",
         [[sessionId]],
@@ -350,35 +351,34 @@ export const confirmOpeningBalance = CatchAsyncError(
           ],
         },
       );
+
+      current = sessions?.[0];
     } catch (err) {
-      console.error("[POS] Failed to read session from Odoo:", err);
+      console.error("[POS] Failed to read session:", err);
 
       return next(
         new ErrorHandler("Failed to read POS session from Odoo", 500),
       );
     }
 
-    const current = currentSessions?.[0];
-
-    console.log(
-      "[POS] Current session state before confirm:",
-      current?.state,
-    );
-
     if (!current) {
       return next(new ErrorHandler("Session not found in Odoo", 404));
     }
 
-    // 2. If already opened → ensure shift exists and return
+    console.log("[POS] Current state:", current.state);
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. IF ALREADY OPENED
+    // ─────────────────────────────────────────────────────────────
     if (current.state === "opened") {
-      let existingShift = await CashierShiftLog.findOne({
+      let shift = await CashierShiftLog.findOne({
         odooSessionId: sessionId,
         cashierId: cashier._id,
         state: { $in: ["active", "paused"] },
       });
 
-      if (!existingShift) {
-        existingShift = await CashierShiftLog.create({
+      if (!shift) {
+        shift = await CashierShiftLog.create({
           odooSessionId: sessionId,
           cashierId: cashier._id,
           odooPartnerId: cashier.odooPartnerId,
@@ -393,127 +393,125 @@ export const confirmOpeningBalance = CatchAsyncError(
         });
       }
 
-      const resolvedConfigId = current.config_id?.[0];
-
-      if (!resolvedConfigId) {
-        return next(
-          new ErrorHandler("No config_id found on session", 500),
-        );
-      }
-
-      const session = await fetchOpenOdooSession(resolvedConfigId);
-
-      const populatedShift = await CashierShiftLog.findById(
-        existingShift._id,
-      )
-        .populate("cashierId", "name email role")
-        .lean();
+      const populated = await populateShift(shift._id);
 
       return res.status(200).json({
-        status: "success",
-        message: "Session was already opened",
-        session,
-        activeShift: populatedShift,
+        success: true,
+        message: "Session already opened",
+        session: current,
+        activeShift: populated,
       });
     }
 
-    // 3. Guard state
+    // ─────────────────────────────────────────────────────────────
+    // 3. MUST BE opening_control
+    // ─────────────────────────────────────────────────────────────
     if (current.state !== "opening_control") {
       return next(
         new ErrorHandler(
-          `Session is not awaiting opening balance (state: ${current.state})`,
+          `Session is not awaiting opening balance. Current state: ${current.state}`,
           409,
         ),
       );
     }
 
-    // 4. Write opening balance
+    // ─────────────────────────────────────────────────────────────
+    // 4. WRITE OPENING BALANCE
+    // ─────────────────────────────────────────────────────────────
     try {
       await odooRequest("pos.session", "write", [
         [sessionId],
         {
-          cash_register_balance_start:
-            Number(openingBalance) || 0,
+          cash_register_balance_start: Number(openingBalance) || 0,
         },
       ]);
 
       console.log(
-        "[POS] Opening balance written:",
-        openingBalance,
+        "[POS] Opening balance saved:",
+        Number(openingBalance) || 0,
       );
     } catch (err) {
-      console.error(
-        "[POS] Failed to write opening balance:",
-        err,
-      );
+      console.error("[POS] Failed writing opening balance:", err);
 
       return next(
-        new ErrorHandler(
-          "Failed to set opening cash balance in Odoo",
-          500,
-        ),
+        new ErrorHandler("Failed to write opening balance", 500),
       );
     }
 
-    // 5. Disable cash control on config
+    // ─────────────────────────────────────────────────────────────
+    // 5. OPEN SESSION
+    // IMPORTANT:
+    // DO NOT DISABLE cash_control
+    // DO NOT FORCE WRITE state=open
+    // ─────────────────────────────────────────────────────────────
     try {
-      const resolvedConfigId = current.config_id?.[0];
-
-      if (!resolvedConfigId) {
-        throw new Error("No config_id found on session");
-      }
-
-      await odooRequest("pos.config", "write", [
-        [resolvedConfigId],
-        {
-          cash_control: false,
-        },
+      await odooRequest("pos.session", "action_pos_session_open", [
+        [sessionId],
       ]);
 
-      console.log("[POS] cash_control disabled");
-    } catch (err: any) {
-      console.error(
-        "[POS] Could not disable cash_control:",
-        err?.response?.data || err,
-      );
-    }
-
-    // 6. Open session properly
-    try {
-      await odooRequest(
-        "pos.session",
-        "action_pos_session_open",
-        [[sessionId]],
-      );
-
-      console.log("[POS] action_pos_session_open called");
+      console.log("[POS] action_pos_session_open executed");
     } catch (err: any) {
       console.error(
         "[POS] action_pos_session_open failed:",
-        err?.response?.data || err,
+        err?.message || err,
       );
-    }
 
-    // 7. Poll until opened
-    const session = await pollUntilOpened(sessionId);
-
-    console.log(
-      "[POS] Session state after polling:",
-      session?.state,
-    );
-
-    if (session?.state !== "opened") {
       return next(
         new ErrorHandler(
-          `Session failed to open after balance confirmation. State: ${
-            session?.state ?? "unknown"
-          }`,
+          err?.message || "Failed to open POS session",
           500,
         ),
       );
     }
 
-    // 8. Create shift log
+    // ─────────────────────────────────────────────────────────────
+    // 6. RE-READ SESSION
+    // ─────────────────────────────────────────────────────────────
+    let updated: any = null;
+
+    try {
+      const sessions = await odooRequest(
+        "pos.session",
+        "read",
+        [[sessionId]],
+        {
+          fields: [
+            "id",
+            "name",
+            "state",
+            "config_id",
+            "cash_register_balance_start",
+            "start_at",
+          ],
+        },
+      );
+
+      updated = sessions?.[0];
+    } catch (err) {
+      console.error("[POS] Failed to re-read session:", err);
+
+      return next(
+        new ErrorHandler("Failed to verify session state", 500),
+      );
+    }
+
+    console.log("[POS] Final session state:", updated?.state);
+
+    // ─────────────────────────────────────────────────────────────
+    // 7. VERIFY OPENED
+    // ─────────────────────────────────────────────────────────────
+    if (updated?.state !== "opened") {
+      return next(
+        new ErrorHandler(
+          `Session failed to open. Current state: ${updated?.state}`,
+          500,
+        ),
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 8. CREATE SHIFT
+    // ─────────────────────────────────────────────────────────────
     const shiftLog = await CashierShiftLog.create({
       odooSessionId: sessionId,
       cashierId: cashier._id,
@@ -523,19 +521,20 @@ export const confirmOpeningBalance = CatchAsyncError(
         {
           toState: "active",
           at: new Date(),
-          reason: `Session opened with opening balance: ${openingBalance}`,
+          reason: `Session opened with opening balance ${openingBalance}`,
         },
       ],
     });
 
     const populated = await populateShift(shiftLog._id);
 
-    // 9. Success response
-    return res.status(201).json({
-      status: "success",
-      message:
-        "Opening balance confirmed. POS session is now open.",
-      session,
+    // ─────────────────────────────────────────────────────────────
+    // 9. SUCCESS
+    // ─────────────────────────────────────────────────────────────
+    return res.status(200).json({
+      success: true,
+      message: "Opening balance confirmed successfully",
+      session: updated,
       activeShift: populated,
       openingBalance: Number(openingBalance) || 0,
     });
