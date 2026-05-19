@@ -11,7 +11,7 @@ import POSOrder from "../models/POSOrder.js";
 async function resolveCashier(cashierId: string) {
   const user = await userModel.findById(cashierId);
   if (!user) throw new ErrorHandler("Cashier not found", 404);
-  if (user.role !== "cashier")
+  if (user.role !== "cashier" && user.role !== "admin")
     throw new ErrorHandler("User is not a cashier", 403);
   if (!user.odooPartnerId)
     throw new ErrorHandler(
