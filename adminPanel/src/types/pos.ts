@@ -1,36 +1,36 @@
 export interface CartItem {
   note: string;
-
   id: number;
   name: string;
-
-  price: number;      
-  unitPrice: number;  
+  price: number;
+  unitPrice: number;
   qty: number;
   discount?: number;
-
   size?: string;
   color?: string;
   material?: string;
+  
 }
+
 export interface Order {
   id: number;
   name: string;
   cart: CartItem[];
   createdAt: Date;
 }
+
 export interface Product {
   id: string | number;
   name: string;
-  reference:string;
+  reference: string;
   shortDescription: string;
   description: string;
   price: number;
   sizes: string[];
   colors: string[];
   images?: Record<string, string>;
-  stock:number;
-  materials:string[]
+  stock: number;
+  materials: string[];
 }
 export interface Category {
   odooCategoryId: string | number;

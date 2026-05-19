@@ -9,6 +9,7 @@ import {
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { calcTotal, Discount } from "./posPricing";
+import { LineNoteModal } from "./LineNoteModal";
 
 // ─── Discount Pill Button ───────────────────────────────────────────────────
 function DiscountToggle({
@@ -67,12 +68,14 @@ function CartRow({
   onSelect,
   onChangeQty,
   onRemove,
+  onOpenNote
 }: {
   item: CartItem;
   selected: boolean;
   onSelect: () => void;
   onChangeQty: (delta: number) => void;
   onRemove: () => void;
+  onOpenNote: () => void;
 }) {
   return (
     <div
@@ -93,6 +96,21 @@ function CartRow({
           <p className="text-[11px] text-gray-400 mt-0.5">
             ${fmt(item.price)} × {item.qty}
           </p>
+          {item.note ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenNote(); }}
+              className="mt-1 text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-md px-1.5 py-0.5 max-w-full truncate text-left hover:bg-amber-100 transition-colors"
+            >
+              📝 {item.note}
+            </button>
+          ) : selected ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenNote(); }}
+              className="mt-1 text-[10px] text-gray-400 hover:text-indigo-500 transition-colors"
+            >
+              + Add note
+            </button>
+          ) : null}
         </div>
 
         <div className="flex flex-col items-end gap-1">
@@ -222,7 +240,14 @@ export function CartPanel({
   }, [selectedId, handleNumpad]);
 
   const hasDiscount = discount.value > 0;
+const [noteItemId, setNoteItemId] = useState<number | null>(null);
+const noteItem = noteItemId !== null ? cart.find((i) => i.id === noteItemId) ?? null : null;
 
+const saveLineNote = (note: string) => {
+  if (noteItemId === null) return;
+  setCart(cart.map((i) => (i.id === noteItemId ? { ...i, note } : i)));
+  setNoteItemId(null);
+};
   return (
     <div
       className="w-[300px] flex flex-col border-l border-gray-100 bg-white"
@@ -292,6 +317,7 @@ export function CartPanel({
               onSelect={() => { setSelectedId(item.id); setBuffer(""); }}
               onChangeQty={(d) => changeQty(item.id, d)}
               onRemove={() => removeItem(item.id)}
+              onOpenNote={() => setNoteItemId(item.id)}
             />
           ))
         )}
@@ -440,6 +466,14 @@ export function CartPanel({
           {cart.length === 0 ? "Cart empty" : `Pay $${fmt(total)}`}
         </button>
       </div>
+      {noteItem && (
+        <LineNoteModal
+          item={noteItem}
+          onSave={saveLineNote}
+          onClose={() => setNoteItemId(null)}
+        />
+      )}
+      
     </div>
   );
 }
