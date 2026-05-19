@@ -33,7 +33,7 @@ POSRouter.post(
 POSRouter.post(
   "/session/close",
   isAuthenticated,
-  authorizeRoles("admin"),
+  authorizeRoles("admin","cashier"),
   closeSession,
 );
 POSRouter.post(
