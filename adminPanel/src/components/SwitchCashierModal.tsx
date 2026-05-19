@@ -12,7 +12,11 @@ interface SwitchCashierModalProps {
   currentCashierId: string;
   configId: number;
   currentShift: Shift | null;
-  onSwitch: (newCashierId: string, newShift: Shift) => void;
+  onSwitch: (
+    newCashierId: string,
+    newShift: Shift,
+    newCashierName: string,
+  ) => void;
   onClose: () => void;
 }
 
@@ -31,9 +35,8 @@ export function SwitchCashierModal({
   const [endCashierShift] = useEndCashierShiftMutation();
   const [startCashierShift] = useStartCashierShiftMutation();
 
-  // فلتر الكاشيرز — استثني الكاشير الحالي
   const cashiers: User[] = (allUsers ?? []).filter(
-    (u: any) => u.role === "cashier" && u._id !== currentCashierId
+    (u: any) => u.role === "cashier" && u._id !== currentCashierId,
   );
 
   const handleSwitch = async () => {
@@ -46,7 +49,6 @@ export function SwitchCashierModal({
     setError("");
 
     try {
-      // 1. أنهِ shift الكاشير الحالي
       if (currentShift && currentShift.state !== "closed") {
         await endCashierShift({
           cashierId:
@@ -57,17 +59,22 @@ export function SwitchCashierModal({
         }).unwrap();
       }
 
-      // 2. ابدأ shift جديد للكاشير الجديد
       const result = await startCashierShift({
         cashierId: selected,
         configId,
       }).unwrap();
+      const newShift = (result as any).shift as Shift;
+      const populatedCashier = newShift.cashierId as any;
+      const cashierName =
+        typeof populatedCashier === "object"
+          ? populatedCashier.name
+          : (cashiers.find((c) => c._id === selected)?.name ?? selected);
 
-      onSwitch(selected, (result as any).shift as Shift);
+      onSwitch(selected, newShift, cashierName);
       onClose();
     } catch (err: any) {
       setError(
-        err?.data?.message ?? err?.message ?? "Failed to switch cashier."
+        err?.data?.message ?? err?.message ?? "Failed to switch cashier.",
       );
     } finally {
       setLoading(false);

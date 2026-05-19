@@ -5,13 +5,11 @@ import {
   useOpenSessionMutation,
   useConfirmOpeningBalanceMutation,
   useGetPOSConfigsQuery,
-
 } from "@/redux/pos/Posapi";
-import { useGetAllUsersQuery ,type User} from "@/redux/user/userApi";
+import { useGetAllUsersQuery, type User } from "@/redux/user/userApi";
 import { POSConfig, Session, Shift } from "@/types/session";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
+// types for the modal steps and results
 type SessionType = "daily" | "long_term";
 type ModalStep = "configure" | "opening_balance" | "success";
 
@@ -21,15 +19,9 @@ interface OpenSessionResult {
 }
 
 interface OpenSessionModalProps {
-  /**
-   * Called when the session is fully open and ready.
-   * The parent should update its global POS state here.
-   */
   onSessionOpened: (result: OpenSessionResult) => void;
   onClose: () => void;
 }
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StepDots({ current }: { current: 1 | 2 | 3 }) {
   return (
@@ -41,8 +33,8 @@ function StepDots({ current }: { current: 1 | 2 | 3 }) {
             n === current
               ? "w-5 h-2 bg-blue-600"
               : n < current
-              ? "w-2 h-2 bg-blue-300"
-              : "w-2 h-2 bg-gray-200"
+                ? "w-2 h-2 bg-blue-300"
+                : "w-2 h-2 bg-gray-200"
           }`}
         />
       ))}
@@ -93,8 +85,6 @@ function SpinnerIcon() {
   );
 }
 
-// ─── Step 1 : Configure ───────────────────────────────────────────────────────
-
 interface StepConfigureProps {
   onNext: (data: {
     cashierId: string;
@@ -111,7 +101,6 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ── RTK Query: fetch POS configs from the API ──────────────────────────────
   const {
     data: configsData,
     isLoading: configsLoading,
@@ -120,15 +109,15 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
 
   const configs: POSConfig[] = configsData?.configs ?? [];
 
-  // ── RTK Query: fetch real users from the database ─────────────────────────
-  // Shows all users with role "user". Change to "admin" if your cashiers are admins.
   const {
     data: allUsers,
     isLoading: usersLoading,
     isError: usersError,
   } = useGetAllUsersQuery();
 
-  const cashiers: User[] = (allUsers ?? []).filter((u:any) => u.role === "cashier");
+  const cashiers: User[] = (allUsers ?? []).filter(
+    (u: any) => u.role === "cashier",
+  );
 
   const handleNext = async () => {
     if (!cashierId) {
@@ -265,7 +254,13 @@ function StepConfigure({ onNext, onClose }: StepConfigureProps) {
         <button
           type="button"
           onClick={handleNext}
-          disabled={loading || !cashierId || configId === "" || configsLoading || usersLoading}
+          disabled={
+            loading ||
+            !cashierId ||
+            configId === "" ||
+            configsLoading ||
+            usersLoading
+          }
           className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors flex items-center justify-center gap-2"
         >
           {loading ? (
@@ -471,14 +466,11 @@ export function OpenSessionModal({
   const [sessionName, setSessionName] = useState<string>("");
   const [confirmedBalance, setConfirmedBalance] = useState<number>(0);
 
-  // ── RTK Query mutations ────────────────────────────────────────────────────
   const [openSession] = useOpenSessionMutation();
   const [confirmOpeningBalance] = useConfirmOpeningBalanceMutation();
 
-  // ── RTK Query: users (needed to resolve cashier name after step 1) ─────────
   const { data: allUsers } = useGetAllUsersQuery();
 
-  // ─── Step 1 handler ─────────────────────────────────────────────────────────
   const handleConfigure = async (data: {
     cashierId: string;
     configId: number;
@@ -488,14 +480,15 @@ export function OpenSessionModal({
       configId: data.configId,
       cashierId: data.cashierId,
     }).unwrap();
-
-    // Resolve cashier display name from the real users list
-    const cashier = (allUsers ?? []).find((u:any) => u._id === data.cashierId);
-    setCashierName(cashier?.name ?? "Cashier");
+    const shiftCashier = (result as any).activeShift?.cashierId;
+    const nameFromShift =
+      shiftCashier && typeof shiftCashier === "object"
+        ? shiftCashier.name
+        : null;
+    const cashier = (allUsers ?? []).find((u: any) => u._id === data.cashierId);
+    setCashierName(nameFromShift ?? cashier?.name ?? "Cashier");
     setPendingCashierId(data.cashierId);
-
     if (result.requiresOpeningBalance) {
-      // ── Branch A: backend needs opening cash confirmed ───────────────────
       if (!result.sessionId) {
         throw new Error("No session ID returned from server.");
       }

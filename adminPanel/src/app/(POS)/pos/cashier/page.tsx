@@ -20,9 +20,9 @@ import { POSSearchBar } from "@/components/POSSearchBar";
 import { OpenSessionModal } from "@/components/OpenSessionModal";
 import { SwitchCashierModal } from "@/components/SwitchCashierModal";
 import { usePOSSession } from "@/hooks/usePOSSession";
+import { useGetAllUsersQuery } from "@/redux/user/userApi";
 
-// ─── CLOCK ────────────────────────────────────────────────────────────────────
-
+// clock component for top-right corner
 function ClockDisplay() {
   const [time, setTime] = useState(() =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -45,23 +45,22 @@ function ClockDisplay() {
   return <>{time}</>;
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function CashierPage() {
-  // ── configId — يُحفظ بعد فتح السيشن ويُمرَّر للهوك ───────────────────────
+
   const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
 
-  // ── Session management ─────────────────────────────────────────────────────
+ 
   const { session, loading, onSessionOpened, closeSession } =
     usePOSSession(activeConfigId);
 
-  // ── UI state ───────────────────────────────────────────────────────────────
+ 
   const [showOpenSession, setShowOpenSession] = useState(false);
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
   const [category, setCategory] = useState<string>("All");
   const [search, setSearch] = useState<string>("");
 
-  // افتح مودال السيشن تلقائياً إذا ما في سيشن
+  
   useEffect(() => {
     if (!loading && !session) {
       setShowOpenSession(true);
@@ -169,14 +168,24 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // ── Cashier name ───────────────────────────────────────────────────────────
+   const { data: allUsers } = useGetAllUsersQuery();
   const shiftCashier = session?.activeShift?.cashierId;
-  const cashierName =
-    (session?.session?.user_id as [number, string] | undefined)?.[1] ??
-    (typeof shiftCashier === "object" ? shiftCashier.name : shiftCashier) ??
-    "Cashier";
+  const cashierName = (() => {
+    if (!session?.activeShift) return "Cashier";
 
-  // ─────────────────────────────────────────────────────────────────────────
+    // لو object مع name — استخدمه مباشرة
+    if (typeof shiftCashier === "object" && shiftCashier !== null) {
+      return shiftCashier.name ?? "Cashier";
+    }
+
+    // لو string (ID) — ابحث في الـ users list
+    if (typeof shiftCashier === "string") {
+      const user = (allUsers ?? []).find((u: any) => u._id === shiftCashier);
+      return user?.name ?? shiftCashier;
+    }
+
+    return "Cashier";
+  })();
   return (
     <>
       <div
