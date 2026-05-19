@@ -47,7 +47,7 @@ export const posApi = apiSlice.injectEndpoints({
 
     closeSession: builder.mutation<APIResponse, CloseSessionBody>({
       query: (body) => ({
-        url: "session/close",
+        url: "session-close",
         method: "POST",
         body,
         credentials: "include" as const,

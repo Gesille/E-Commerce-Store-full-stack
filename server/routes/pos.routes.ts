@@ -31,7 +31,7 @@ POSRouter.post(
 );
 
 POSRouter.post(
-  "/session/close",
+  "/session-close",
   isAuthenticated,
   authorizeRoles("admin","cashier"),
   closeSession,
@@ -117,7 +117,7 @@ POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
 POSRouter.get(
   "/configs",
   isAuthenticated,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "cashier"),
   getPOSConfigs,
 );
 
