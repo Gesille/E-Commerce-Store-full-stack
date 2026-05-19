@@ -70,7 +70,8 @@ async function populateShift(shiftId: any) {
 async function pollUntilOpened(sessionId: number) {
   let session: any = null;
 
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 20; i++) {
+    // was 15
     const result = await odooRequest("pos.session", "read", [[sessionId]], {
       fields: [
         "id",
@@ -84,36 +85,15 @@ async function pollUntilOpened(sessionId: number) {
     });
 
     session = result?.[0];
-    console.log(`[POS] Poll attempt ${i + 1}: session state = ${session?.state}`);
+    console.log(`[POS] Poll ${i + 1}/20: state = ${session?.state}`);
 
     if (session?.state === "opened") break;
 
-    if (session?.state === "opening_control") {
-      // Try set_cashbox_pos first (Odoo 16/17)
-      try {
-        await odooRequest("pos.session", "set_cashbox_pos", [
-          [sessionId],
-          session?.cash_register_balance_start ?? 0,
-          null,
-        ]);
-        console.log(`[POS] set_cashbox_pos succeeded on attempt ${i + 1}`);
-      } catch (cashboxErr) {
-        console.warn(`[POS] set_cashbox_pos failed on attempt ${i + 1}:`, cashboxErr);
-
-        // Fall back to classic open action (Odoo 14/15)
-        try {
-          await odooRequest("pos.session", "action_pos_session_open", [[sessionId]]);
-          console.log(`[POS] action_pos_session_open succeeded on attempt ${i + 1}`);
-        } catch (openErr) {
-          console.error(`[POS] action_pos_session_open also failed on attempt ${i + 1}:`, openErr);
-        }
-      }
-    }
-
-    await new Promise((r) => setTimeout(r, 800));
+    // Don't retry open calls in the poll — they've already been attempted above.
+    // Just wait and re-read.
+    await new Promise((r) => setTimeout(r, 1200)); // was 800ms
   }
 
-  console.log(`[POS] Final session state after polling: ${session?.state}`);
   return session;
 }
 
@@ -353,11 +333,21 @@ export const confirmOpeningBalance = CatchAsyncError(
         "pos.session",
         "read",
         [[sessionId]],
-        { fields: ["id", "name", "state", "config_id", "cash_register_balance_start"] },
+        {
+          fields: [
+            "id",
+            "name",
+            "state",
+            "config_id",
+            "cash_register_balance_start",
+          ],
+        },
       );
     } catch (err) {
       console.error("[POS] Failed to read session from Odoo:", err);
-      return next(new ErrorHandler("Failed to read POS session from Odoo", 500));
+      return next(
+        new ErrorHandler("Failed to read POS session from Odoo", 500),
+      );
     }
 
     const current = currentSessions?.[0];
@@ -393,7 +383,9 @@ export const confirmOpeningBalance = CatchAsyncError(
 
       const resolvedConfigId = configId ?? current.config_id?.[0];
       if (!resolvedConfigId) {
-        return next(new ErrorHandler("configId is required to fetch session", 400));
+        return next(
+          new ErrorHandler("configId is required to fetch session", 400),
+        );
       }
 
       const session = await fetchOpenOdooSession(resolvedConfigId);
@@ -401,7 +393,9 @@ export const confirmOpeningBalance = CatchAsyncError(
         odooSessionId: sessionId,
         cashierId: cashier._id,
         state: { $in: ["active", "paused"] },
-      }).populate("cashierId", "name email role").lean();
+      })
+        .populate("cashierId", "name email role")
+        .lean();
 
       return res.status(200).json({
         status: "success",
@@ -430,28 +424,65 @@ export const confirmOpeningBalance = CatchAsyncError(
       console.log("[POS] Opening balance written:", openingBalance);
     } catch (err) {
       console.error("[POS] Failed to write opening balance:", err);
-      return next(new ErrorHandler("Failed to set opening cash balance in Odoo", 500));
+      return next(
+        new ErrorHandler("Failed to set opening cash balance in Odoo", 500),
+      );
     }
 
     // 5. Try set_cashbox_pos (Odoo 16/17), fall back to action_pos_session_open (Odoo 14/15)
-    try {
-      await odooRequest("pos.session", "set_cashbox_pos", [
-        [sessionId],
-        Number(openingBalance) || 0,
-        null,
-      ]);
-      console.log("[POS] set_cashbox_pos call succeeded");
-    } catch (cashboxErr) {
-      console.warn("[POS] set_cashbox_pos not available, falling back:", cashboxErr);
+    // 5. Try every known method to transition opening_control → opened
+    const openAttempts: Array<{ label: string; fn: () => Promise<any> }> = [
+      {
+        // Odoo 16/17: pass configId (not null) as third arg
+        label: "set_cashbox_pos(with configId)",
+        fn: () =>
+          odooRequest("pos.session", "set_cashbox_pos", [
+            [sessionId],
+            Number(openingBalance) || 0,
+            configId ?? null, // <-- pass real configId here
+          ]),
+      },
+      {
+        // Odoo 16/17: null configId variant
+        label: "set_cashbox_pos(null configId)",
+        fn: () =>
+          odooRequest("pos.session", "set_cashbox_pos", [
+            [sessionId],
+            Number(openingBalance) || 0,
+            null,
+          ]),
+      },
+      {
+        // Odoo 14/15 classic
+        label: "action_pos_session_open",
+        fn: () =>
+          odooRequest("pos.session", "action_pos_session_open", [[sessionId]]),
+      },
+      {
+        // Some Odoo builds expose this button method directly
+        label: "button_open",
+        fn: () => odooRequest("pos.session", "button_open", [[sessionId]]),
+      },
+      {
+        // Nuclear option: write state directly (requires superuser/admin Odoo credentials)
+        label: "write state=opened",
+        fn: () =>
+          odooRequest("pos.session", "write", [
+            [sessionId],
+            { state: "opened" },
+          ]),
+      },
+    ];
+
+    for (const attempt of openAttempts) {
       try {
-        await odooRequest("pos.session", "action_pos_session_open", [[sessionId]]);
-        console.log("[POS] action_pos_session_open fallback succeeded");
-      } catch (openErr) {
-        console.error("[POS] action_pos_session_open also failed:", openErr);
-        // Do not return error yet — poll first to see if Odoo opened it anyway
+        await attempt.fn();
+        console.log(`[POS] ${attempt.label} succeeded`);
+        break; // stop on first success
+      } catch (err: any) {
+        console.warn(`[POS] ${attempt.label} failed:`, err?.message ?? err);
       }
     }
-
     // 6. Poll until the session is fully opened
     const session = await pollUntilOpened(sessionId);
     console.log("[POS] Session state after polling:", session?.state);
@@ -1221,16 +1252,28 @@ export const getPOSConfigs = CatchAsyncError(
   },
 );
 
-
 export const debugSessionState = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
 
     // Read raw session
-    const sessionData = await odooRequest("pos.session", "read", [[sessionId]], {
-      fields: ["id", "name", "state", "config_id", "cash_register_balance_start",
-               "cash_register_id", "rescue", "user_id"],
-    });
+    const sessionData = await odooRequest(
+      "pos.session",
+      "read",
+      [[sessionId]],
+      {
+        fields: [
+          "id",
+          "name",
+          "state",
+          "config_id",
+          "cash_register_balance_start",
+          "cash_register_id",
+          "rescue",
+          "user_id",
+        ],
+      },
+    );
 
     // Check what methods exist on pos.session
     let availableMethods: any = null;
@@ -1246,7 +1289,9 @@ export const debugSessionState = CatchAsyncError(
     const results: Record<string, any> = {};
 
     try {
-      await odooRequest("pos.session", "action_pos_session_open", [[sessionId]]);
+      await odooRequest("pos.session", "action_pos_session_open", [
+        [sessionId],
+      ]);
       results["action_pos_session_open"] = "SUCCESS";
     } catch (e: any) {
       results["action_pos_session_open"] = e?.message ?? e;
@@ -1254,7 +1299,9 @@ export const debugSessionState = CatchAsyncError(
 
     try {
       await odooRequest("pos.session", "set_cashbox_pos", [
-        [sessionId], 0, null,
+        [sessionId],
+        0,
+        null,
       ]);
       results["set_cashbox_pos"] = "SUCCESS";
     } catch (e: any) {
