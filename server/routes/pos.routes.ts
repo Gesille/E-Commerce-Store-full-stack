@@ -19,6 +19,7 @@ import {
   getPaymentMethods,
   getPOSConfigs,
   confirmOpeningBalance,
+  debugSessionState,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -120,5 +121,12 @@ POSRouter.get(
   authorizeRoles("admin", "cashier"),
   getPOSConfigs,
 );
+POSRouter.post(
+  "/debug-session",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  debugSessionState,
+);
+
 
 export default POSRouter;
