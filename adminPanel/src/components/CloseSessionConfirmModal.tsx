@@ -10,7 +10,8 @@ export function CloseSessionConfirmModal({
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
-  const [loading, setLoading] = useState(false);
+ const [loading, setLoading] = useState(false);
+const [error, setError] = useState("");
 
   const orderCount = session.stats?.orderCount ?? 0;
   const totalRevenue = session.stats?.totalRevenue ?? 0;
@@ -22,14 +23,18 @@ export function CloseSessionConfirmModal({
       })
     : "—";
 
-  const handleConfirm = async () => {
-    setLoading(true);
-    try {
-      await onConfirm();
-    } finally {
-      setLoading(false);
-    }
-  };
+// CloseSessionConfirmModal.tsx — already has try/finally, 
+// but the error still propagates. Add a catch to show it:
+const handleConfirm = async () => {
+  setLoading(true);
+  try {
+    await onConfirm();
+  } catch (err: any) {
+    setError(err?.message ?? "Failed to close session.");  // add error state
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">

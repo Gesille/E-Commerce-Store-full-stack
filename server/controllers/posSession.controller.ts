@@ -445,14 +445,44 @@ export const closeSession = CatchAsyncError(
       [
         [
           ["id", "=", sessionId],
-          ["state", "in", ["opened", "closing_control"]],
+          ["state", "in", ["opened", "closing_control", "closed"]],
         ],
       ],
       { fields: ["id", "name", "state"], limit: 1 },
     );
 
     if (!sessions?.length) {
-      return next(new ErrorHandler("Session not found or already closed", 404));
+      // Check if it exists at all (any state)
+      const anyState = await odooRequest("pos.session", "search_read", [
+        [[["id", "=", sessionId]]],
+        { fields: ["id", "state"], limit: 1 },
+      ]);
+
+      if (!anyState?.length) {
+        return next(new ErrorHandler("Session not found in Odoo", 404));
+      }
+
+      // Session exists but is already closed — treat as success
+      await CashierShiftLog.updateMany(
+        { odooSessionId: sessionId, state: { $ne: "closed" } },
+        {
+          $set: { endTime: new Date(), state: "closed" },
+          $push: {
+            stateHistory: {
+              toState: "closed",
+              at: new Date(),
+              reason: "Session already closed in Odoo",
+            },
+          },
+        },
+      );
+
+      return res.status(200).json({
+        status: "success",
+        message: "Session was already closed",
+        sessionId,
+        cashierReport: [],
+      });
     }
 
     const now = new Date();
@@ -1062,13 +1092,11 @@ export const createCustomer = CatchAsyncError(
     const customerId = await odooRequest("res.partner", "create", [
       { name, phone: phone ?? false, email: email ?? false, customer_rank: 1 },
     ]);
-    res
-      .status(201)
-      .json({
-        status: "success",
-        message: "Customer created successfully",
-        customerId,
-      });
+    res.status(201).json({
+      status: "success",
+      message: "Customer created successfully",
+      customerId,
+    });
   },
 );
 
