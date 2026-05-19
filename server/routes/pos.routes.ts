@@ -20,6 +20,7 @@ import {
   getPOSConfigs,
   confirmOpeningBalance,
   debugSessionState,
+  debugPOSConfig,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -125,7 +126,7 @@ POSRouter.post(
   "/debug-session",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
-  debugSessionState,
+  debugPOSConfig,
 );
 
 

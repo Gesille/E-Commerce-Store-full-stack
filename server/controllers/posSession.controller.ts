@@ -1252,74 +1252,12 @@ export const getPOSConfigs = CatchAsyncError(
   },
 );
 
-export const debugSessionState = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const { sessionId } = req.body;
-
-    // Read raw session
-    const sessionData = await odooRequest(
-      "pos.session",
-      "read",
-      [[sessionId]],
-      {
-        fields: [
-          "id",
-          "name",
-          "state",
-          "config_id",
-          "cash_register_balance_start",
-          "cash_register_id",
-          "rescue",
-          "user_id",
-        ],
-      },
-    );
-
-    // Check what methods exist on pos.session
-    let availableMethods: any = null;
-    try {
-      availableMethods = await odooRequest("pos.session", "fields_get", [], {
-        attributes: ["string", "type"],
-      });
-    } catch (e) {
-      availableMethods = "fields_get failed";
-    }
-
-    // Try each open method and capture the actual error
-    const results: Record<string, any> = {};
-
-    try {
-      await odooRequest("pos.session", "action_pos_session_open", [
-        [sessionId],
-      ]);
-      results["action_pos_session_open"] = "SUCCESS";
-    } catch (e: any) {
-      results["action_pos_session_open"] = e?.message ?? e;
-    }
-
-    try {
-      await odooRequest("pos.session", "set_cashbox_pos", [
-        [sessionId],
-        0,
-        null,
-      ]);
-      results["set_cashbox_pos"] = "SUCCESS";
-    } catch (e: any) {
-      results["set_cashbox_pos"] = e?.message ?? e;
-    }
-
-    try {
-      await odooRequest("pos.session", "action_pos_session_closing_control", [
-        [sessionId],
-      ]);
-      results["action_pos_session_closing_control"] = "SUCCESS";
-    } catch (e: any) {
-      results["action_pos_session_closing_control"] = e?.message ?? e;
-    }
-
-    return res.status(200).json({
-      session: sessionData?.[0],
-      rpcResults: results,
+export const debugPOSConfig = CatchAsyncError(
+  async (req: Request, res: Response) => {
+    const { configId } = req.body;
+    const config = await odooRequest("pos.config", "read", [[configId]], {
+      fields: ["id", "name", "cash_control", "payment_method_ids"],
     });
+    res.json(config);
   },
 );
