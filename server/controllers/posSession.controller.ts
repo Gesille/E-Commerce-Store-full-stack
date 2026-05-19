@@ -355,20 +355,16 @@ export const confirmOpeningBalance = CatchAsyncError(
 
     try {
       currentSessions = await odooRequest(
-        "pos.session",
-        "read",
-        [[sessionId]],
-        {
-          fields: [
-            "id",
-            "name",
-            "state",
-            "config_id",
-            "cash_register_id",
-            "cash_register_balance_start",
-          ],
-        },
-      );
+  "pos.session",
+  "read",
+  [[sessionId]],
+  {}
+);
+
+console.log(
+  "[POS] FULL SESSION:",
+  JSON.stringify(currentSessions, null, 2),
+);
     } catch (err) {
       console.error("[POS] Failed to read session:", err);
 
