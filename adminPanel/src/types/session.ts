@@ -112,6 +112,7 @@ export interface OpenSessionBody {
 export interface ConfirmOpeningBalanceBody {
   sessionId: number;
   cashierId: string;
+  configId: number;
   openingBalance: number;
 }
 
@@ -175,9 +176,8 @@ export interface OpenSessionResponse extends APIResponse {
 }
 
 export interface ConfirmOpeningBalanceResponse extends APIResponse {
-   sessionId: number;
-  cashierId: string;
-  configId: number;
+  session: Session;
+  activeShift: Shift;
   openingBalance: number;
 }
 

@@ -23,7 +23,7 @@ import { usePOSSession } from "@/hooks/usePOSSession";
 import { useGetAllUsersQuery } from "@/redux/user/userApi";
 import { CloseSessionConfirmModal } from "@/components/CloseSessionConfirmModal";
 
-// clock component for top-right corner
+// ── Clock ─────────────────────────────────────────────────────────────────────
 function ClockDisplay() {
   const [time, setTime] = useState(() =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -46,6 +46,7 @@ function ClockDisplay() {
   return <>{time}</>;
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function CashierPage() {
   const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
 
@@ -79,7 +80,7 @@ export default function CashierPage() {
 
   const [orderMeta, setOrderMeta] =
     useState<Record<number, OrderMeta>>(initMeta);
-  // ── Modals ─────────────────────────────────────────────────────────────────
+
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showNote, setShowNote] = useState(false);
@@ -165,17 +166,17 @@ export default function CashierPage() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // ── Cashier name resolution ────────────────────────────────────────────────
   const { data: allUsers } = useGetAllUsersQuery();
   const shiftCashier = session?.activeShift?.cashierId;
+
   const cashierName = (() => {
     if (!session?.activeShift) return "Cashier";
 
-    // لو object مع name — استخدمه مباشرة
     if (typeof shiftCashier === "object" && shiftCashier !== null) {
       return shiftCashier.name ?? "Cashier";
     }
 
-    // لو string (ID) — ابحث في الـ users list
     if (typeof shiftCashier === "string") {
       const user = (allUsers ?? []).find((u: any) => u._id === shiftCashier);
       return user?.name ?? shiftCashier;
@@ -183,6 +184,17 @@ export default function CashierPage() {
 
     return "Cashier";
   })();
+
+  // ── Close session handler ──────────────────────────────────────────────────
+  // FIX: only close the modal after closeSession succeeds.
+  // CloseSessionConfirmModal catches the error internally and shows it,
+  // so we only reach setShowCloseConfirm(false) on the happy path.
+  const handleCloseSession = async () => {
+    await closeSession(session!.session.id);
+    setShowCloseConfirm(false);
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
       <div
@@ -191,6 +203,7 @@ export default function CashierPage() {
       >
         {/* ── Top bar ───────────────────────────────────────────────────────── */}
         <div className="h-12 bg-white border-b border-gray-100 flex items-center justify-between px-5 shrink-0">
+          {/* Left section */}
           <div className="flex items-center gap-3">
             {/* Store icon */}
             <svg
@@ -226,6 +239,7 @@ export default function CashierPage() {
                     : (session.session.config_id?.[1] ?? "Session Open")}
                 </span>
 
+                {/* FIX: cashier name shown once here on the left, removed from right */}
                 <span className="text-[11px] text-gray-500">
                   👤 {cashierName}
                 </span>
@@ -254,11 +268,9 @@ export default function CashierPage() {
             )}
           </div>
 
+          {/* Right section — FIX: removed duplicate cashier name span */}
           <div className="flex items-center gap-4">
             <POSSearchBar search={search} setSearch={setSearch} />
-            <span className="text-[13px] text-gray-500 font-medium">
-              👤 {cashierName}
-            </span>
             <span className="text-[12px] text-gray-400">
               <ClockDisplay />
             </span>
@@ -298,12 +310,13 @@ export default function CashierPage() {
         </div>
       </div>
 
-      {/* Open Session */}
+      {/* ── Open Session Modal ─────────────────────────────────────────────── */}
       {showOpenSession && (
         <OpenSessionModal
           onSessionOpened={(result) => {
+            // FIX: guard against missing config_id (e.g. Odoo returns false)
             const configId = result.session.config_id?.[0];
-            if (configId) setActiveConfigId(configId);
+            if (configId) setActiveConfigId(Number(configId));
             onSessionOpened(result);
             setShowOpenSession(false);
           }}
@@ -311,6 +324,7 @@ export default function CashierPage() {
         />
       )}
 
+      {/* ── Switch Cashier Modal ───────────────────────────────────────────── */}
       {showSwitchCashier && session && (
         <SwitchCashierModal
           currentCashierId={
@@ -331,7 +345,7 @@ export default function CashierPage() {
         />
       )}
 
-      {/* Customer */}
+      {/* ── Customer Modal ─────────────────────────────────────────────────── */}
       {showCustomer && (
         <CustomerModal
           current={activeMeta.customer}
@@ -340,7 +354,7 @@ export default function CashierPage() {
         />
       )}
 
-      {/* Payment */}
+      {/* ── Payment Modal ──────────────────────────────────────────────────── */}
       {showPayment && activeOrder && (
         <PaymentModal
           total={total}
@@ -352,7 +366,7 @@ export default function CashierPage() {
         />
       )}
 
-      {/* Note */}
+      {/* ── Note Modal ─────────────────────────────────────────────────────── */}
       {showNote && (
         <NoteModal
           initial={activeMeta.note}
@@ -361,7 +375,7 @@ export default function CashierPage() {
         />
       )}
 
-      {/* Receipt */}
+      {/* ── Receipt Modal ──────────────────────────────────────────────────── */}
       {receipt && (
         <ReceiptModal
           order={receipt.order}
@@ -371,13 +385,12 @@ export default function CashierPage() {
           onNewOrder={handleNewOrderAfterReceipt}
         />
       )}
+
+      {/* ── Close Session Confirm Modal ────────────────────────────────────── */}
       {showCloseConfirm && session && (
         <CloseSessionConfirmModal
           session={session}
-        onConfirm={async () => {
-  await closeSession(session.session.id); 
-  setShowCloseConfirm(false);
-}}
+          onConfirm={handleCloseSession}
           onClose={() => setShowCloseConfirm(false)}
         />
       )}

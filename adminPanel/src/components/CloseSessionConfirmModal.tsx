@@ -1,3 +1,5 @@
+"use client";
+
 import { ActiveSession } from "@/hooks/usePOSSession";
 import { useState } from "react";
 
@@ -10,8 +12,8 @@ export function CloseSessionConfirmModal({
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
- const [loading, setLoading] = useState(false);
-const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const orderCount = session.stats?.orderCount ?? 0;
   const totalRevenue = session.stats?.totalRevenue ?? 0;
@@ -23,18 +25,19 @@ const [error, setError] = useState("");
       })
     : "—";
 
-// CloseSessionConfirmModal.tsx — already has try/finally, 
-// but the error still propagates. Add a catch to show it:
-const handleConfirm = async () => {
-  setLoading(true);
-  try {
-    await onConfirm();
-  } catch (err: any) {
-    setError(err?.message ?? "Failed to close session.");  // add error state
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleConfirm = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await onConfirm();
+      // onConfirm is responsible for closing the modal on success
+    } catch (err: any) {
+      // Show the error inside the modal instead of letting it bubble silently
+      setError(err?.data?.message ?? err?.message ?? "Failed to close session.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -86,6 +89,14 @@ const handleConfirm = async () => {
               </span>
             </div>
           </div>
+
+          {/* Error message — was missing before */}
+          {error && (
+            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-[12px] text-red-600 flex gap-2 items-start">
+              <span className="mt-0.5">⚠</span>
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex gap-2 pt-1">
