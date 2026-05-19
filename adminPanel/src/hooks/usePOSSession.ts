@@ -32,7 +32,7 @@ export interface UsePOSSessionReturn {
     openingBalance: number;
   }) => Promise<void>;
 
-  closeSession: () => Promise<void>;
+closeSession: (sessionId: number) => Promise<void>;
 
   onSessionOpened: (result: { session: Session; activeShift: Shift }) => void;
 
@@ -120,21 +120,17 @@ export function usePOSSession(configId?: number): UsePOSSessionReturn {
     },
     [confirmOpeningBalanceMutation],
   );
-  const closeSession = useCallback(async () => {
-    const sessionId = session?.session?.id;
-    if (!sessionId) return;
-
-    setError(null);
-    try {
-      await closeSessionMutation({ sessionId: Number(sessionId) }).unwrap();
-      setLocalSession(null);
-    } catch (err: any) {
-      const msg =
-        err?.data?.message ?? err?.message ?? "Failed to close session.";
-      setError(msg);
-      throw new Error(msg);
-    }
-  }, [closeSessionMutation, session]);
+const closeSession = useCallback(async (sessionId: number) => {
+  setError(null);
+  try {
+    await closeSessionMutation({ sessionId }).unwrap();
+    setLocalSession(null);
+  } catch (err: any) {
+    const msg = err?.data?.message ?? err?.message ?? "Failed to close session.";
+    setError(msg);
+    throw new Error(msg);
+  }
+}, [closeSessionMutation]);
 
   const onSessionOpened = useCallback(
     (result: { session: Session; activeShift: Shift }) => {

@@ -374,10 +374,10 @@ export default function CashierPage() {
       {showCloseConfirm && session && (
         <CloseSessionConfirmModal
           session={session}
-          onConfirm={async () => {
-            await closeSession();
-            setShowCloseConfirm(false);
-          }}
+        onConfirm={async () => {
+  await closeSession(session.session.id); 
+  setShowCloseConfirm(false);
+}}
           onClose={() => setShowCloseConfirm(false)}
         />
       )}

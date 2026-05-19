@@ -115,12 +115,12 @@ export const openSession = CatchAsyncError(
     const { configId, cashierId } = req.body;
 
     if (!configId) return next(new ErrorHandler("configId is required", 400));
-
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
 
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
-
     if (!cashier) return;
+
+    // Search for any existing session (opened OR still in opening_control)
     const existing = await odooRequest(
       "pos.session",
       "search_read",
@@ -139,6 +139,20 @@ export const openSession = CatchAsyncError(
     if (existing?.length) {
       const existingSession = existing[0];
 
+      // FIX #1: If the existing session is still awaiting an opening balance,
+      // do NOT create a shift — tell the client to confirm the balance first.
+      if (existingSession.state === "opening_control") {
+        return res.status(200).json({
+          success: true,
+          requiresOpeningBalance: true,
+          sessionId: existingSession.id,
+          state: existingSession.state,
+          message:
+            "An existing session is awaiting opening balance confirmation",
+        });
+      }
+
+      // Session is fully opened — join or resume the shift
       const existingShift = await CashierShiftLog.findOne({
         odooSessionId: existingSession.id,
         cashierId: cashier._id,
@@ -179,7 +193,7 @@ export const openSession = CatchAsyncError(
       });
     }
 
-    // 1. Create Odoo session
+    // No existing session — create a new one in Odoo
     const sessionId = await odooRequest("pos.session", "create", [
       {
         config_id: configId,
@@ -259,7 +273,6 @@ export const openSession = CatchAsyncError(
         );
       }
 
-      // Create first shift
       const shiftLog = await CashierShiftLog.create({
         odooSessionId: sessionId,
         cashierId: cashier._id,
@@ -282,7 +295,7 @@ export const openSession = CatchAsyncError(
       });
     }
 
-    // already opened
+    // Session already opened on creation
     const shiftLog = await CashierShiftLog.create({
       odooSessionId: sessionId,
       cashierId: cashier._id,
@@ -439,13 +452,19 @@ export const closeSession = CatchAsyncError(
 
     if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
 
+    // FIX #2: Include "opening_control" in the search so a session stuck
+    // in that state can still be found and force-closed / cleaned up.
     const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [
         [
           ["id", "=", sessionId],
-          ["state", "in", ["opened", "closing_control", "closed"]],
+          [
+            "state",
+            "in",
+            ["opening_control", "opened", "closing_control", "closed"],
+          ],
         ],
       ],
       { fields: ["id", "name", "state"], limit: 1 },
@@ -456,6 +475,39 @@ export const closeSession = CatchAsyncError(
     }
 
     const session = sessions[0];
+
+    // Session is stuck in opening_control — it was never really opened,
+    // so just clean up any MongoDB shift records and return.
+    if (session.state === "opening_control") {
+      await CashierShiftLog.updateMany(
+        { odooSessionId: sessionId, state: { $ne: "closed" } },
+        {
+          $set: { endTime: new Date(), state: "closed" },
+          $push: {
+            stateHistory: {
+              toState: "closed",
+              at: new Date(),
+              reason: "Session closed before opening balance was confirmed",
+            },
+          },
+        },
+      );
+
+      // Best-effort: attempt to delete or abandon the dangling Odoo session.
+      try {
+        await odooRequest("pos.session", "unlink", [[sessionId]]);
+      } catch (_) {
+        // Odoo may reject unlink on a non-new session — that's fine.
+      }
+
+      return res.status(200).json({
+        status: "success",
+        message:
+          "Session was in opening_control and has been abandoned. No orders were taken.",
+        sessionId,
+        cashierReport: [],
+      });
+    }
 
     // Already closed — just sync MongoDB and return success
     if (session.state === "closed") {
