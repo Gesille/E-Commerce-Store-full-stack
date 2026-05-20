@@ -105,6 +105,7 @@ const {
   const [receipt, setReceipt] = useState<{
     order: Order;
     paymentLines: PaymentLine[];
+    odooOrderId?: number;
   } | null>(null);
 
   const activeOrder = orders.find((o) => o.id === activeOrderId);
@@ -139,7 +140,7 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
   if (!activeOrder || !session) return;
 
   try {
-    await createOrder({
+    const result = await createOrder({  
       cart: activeOrder.cart.map((item) => ({
         productId: item.productId,      
         qty: item.qty,
@@ -160,7 +161,11 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
       note: activeMeta.note ?? "",
     }).unwrap();
 
-    setReceipt({ order: { ...activeOrder }, paymentLines: lines });
+    setReceipt({ 
+      order: { ...activeOrder },
+      paymentLines: lines,
+      odooOrderId: result.orderId, 
+    });
     setShowPayment(false);
   } catch (err: any) {
     alert(err?.data?.message ?? "Order failed. Please try again.");
@@ -417,6 +422,7 @@ const handleNewOrderAfterReceipt = () => {
           paymentLines={receipt.paymentLines}
           onClose={() => setReceipt(null)}
           onNewOrder={handleNewOrderAfterReceipt}
+          odooOrderId={receipt.odooOrderId}
         />
       )}
 

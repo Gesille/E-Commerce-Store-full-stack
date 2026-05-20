@@ -1346,24 +1346,103 @@ export const getPaymentMethods = CatchAsyncError(
   },
 );
 
-export const getPOSConfigs = CatchAsyncError(
+// export const getPOSConfigs = CatchAsyncError(
+//   async (req: Request, res: Response, next: NextFunction) => {
+//     const configs = await odooRequest(
+//       "pos.config",
+//       "search_read",
+//       [[["active", "=", true]]],
+//       { fields: ["id", "name", "currency_id"] },
+//     );
+//     res.status(200).json({ status: "success", configs });
+//   },
+// );
+
+// export const debugPOSConfig = CatchAsyncError(
+//   async (req: Request, res: Response) => {
+//     const { configId } = req.body;
+//     const config = await odooRequest("pos.config", "read", [[configId]], {
+//       fields: ["id", "name", "cash_control", "payment_method_ids"],
+//     });
+//     res.json(config);
+//   },
+// );
+
+
+export const getOrderReceiptPdf = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configs = await odooRequest(
-      "pos.config",
-      "search_read",
-      [[["active", "=", true]]],
-      { fields: ["id", "name", "currency_id"] },
+    const orderId = Number(req.params.orderId);
+    if (!orderId) return next(new ErrorHandler("orderId is required", 400));
+
+    // جيب PDF من أودو مباشرةً
+    const pdfResponse = await fetch(
+      `${process.env.ODOO_URL}/report/pdf/point_of_sale.report_receipt/${orderId}`,
+      {
+        headers: {
+          "X-Openerp-Session-Id": process.env.ODOO_SESSION_ID ?? "",
+          Cookie: `session_id=${process.env.ODOO_SESSION_ID ?? ""}`,
+        },
+      }
     );
-    res.status(200).json({ status: "success", configs });
-  },
+
+    if (!pdfResponse.ok) {
+      return next(new ErrorHandler("Failed to fetch receipt from Odoo", 502));
+    }
+
+    const pdfBuffer = await pdfResponse.arrayBuffer();
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="receipt-${orderId}.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
+  }
 );
 
-export const debugPOSConfig = CatchAsyncError(
-  async (req: Request, res: Response) => {
-    const { configId } = req.body;
-    const config = await odooRequest("pos.config", "read", [[configId]], {
-      fields: ["id", "name", "cash_control", "payment_method_ids"],
+export const createOdooInvoice = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { odooOrderId } = req.body;
+    if (!odooOrderId)
+      return next(new ErrorHandler("odooOrderId is required", 400));
+
+    // 1. Fetch order from Odoo
+    const orders = await odooRequest("pos.order", "search_read", [
+      [["id", "=", odooOrderId]],
+      { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 },
+    ]);
+    const order = orders?.[0];
+    if (!order)
+      return next(new ErrorHandler("Order not found in Odoo", 404));
+
+    // 2. Fetch order lines
+    const lines = await odooRequest("pos.order.line", "search_read", [
+      [["id", "in", order.lines]],
+      { fields: ["product_id", "qty", "price_unit", "discount"] },
+    ]);
+
+    // 3. Create invoice
+    const invoiceId = await odooRequest("account.move", "create", [
+      {
+        move_type: "out_invoice",
+        partner_id: order.partner_id ? order.partner_id[0] : false,
+        invoice_line_ids: lines.map((line: any) => [
+          0,
+          0,
+          {
+            product_id: line.product_id[0],
+            quantity: line.qty,
+            price_unit: line.price_unit,
+            discount: line.discount ?? 0,
+          },
+        ]),
+      },
+    ]);
+
+    if (!invoiceId)
+      return next(new ErrorHandler("Failed to create invoice", 500));
+
+    res.status(201).json({
+      status: "success",
+      invoiceId,
+      pdfUrl: `${process.env.ODOO_URL}/report/pdf/account.report_invoice/${invoiceId}`,
     });
-    res.json(config);
-  },
+  }
 );

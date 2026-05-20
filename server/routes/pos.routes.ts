@@ -17,10 +17,12 @@ import {
   getCustomers,
   createCustomer,
   getPaymentMethods,
-  getPOSConfigs,
-  confirmOpeningBalance,
   
-  debugPOSConfig,
+  confirmOpeningBalance,
+  getOrderReceiptPdf,
+  createOdooInvoice,
+  
+  
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -116,18 +118,6 @@ POSRouter.post(
   createCustomer,
 );
 POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
-POSRouter.get(
-  "/configs",
-  isAuthenticated,
-  authorizeRoles("admin", "cashier"),
-  getPOSConfigs,
-);
-POSRouter.post(
-  "/debug-session",
-  isAuthenticated,
-  authorizeRoles("admin", "cashier"),
-  debugPOSConfig,
-);
-
-
+POSRouter.get("/orders/:orderId/receipt-pdf", isAuthenticated, getOrderReceiptPdf);
+POSRouter.post("/order/invoice", createOdooInvoice);
 export default POSRouter;

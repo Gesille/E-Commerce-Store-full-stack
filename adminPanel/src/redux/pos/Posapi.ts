@@ -174,7 +174,22 @@ export const posApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
       }),
     }),
+    getOrderReceiptPdf: builder.query<Blob, number>({
+      query: (orderId) => ({
+        url: `order/${orderId}/receipt-pdf`,
+        credentials: "include" as const,
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
+   createOdooInvoice: builder.mutation({
+  query: (body: { odooOrderId: number }) => ({
+    url: "order/invoice",
+    method: "POST",
+    body,
+    credentials: "include" as const,
   }),
+}),
+    }),
 });
 
 export const {
@@ -184,13 +199,13 @@ export const {
   useGetActiveSessionQuery,
   useGetSessionOrdersQuery,
   useGetSessionReportQuery,
-
+  useLazyGetOrderReceiptPdfQuery,
   useStartCashierShiftMutation,
   usePauseCashierShiftMutation,
   useResumeCashierShiftMutation,
   useEndCashierShiftMutation,
   useGetActiveShiftsQuery,
-
+  useCreateOdooInvoiceMutation,
   useCreateOrderMutation,
 
   useGetProductsQuery,

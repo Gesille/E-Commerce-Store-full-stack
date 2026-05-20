@@ -1,4 +1,6 @@
+import { useLazyGetOrderReceiptPdfQuery, useCreateOdooInvoiceMutation } from "@/redux/pos/Posapi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
+import { useState } from "react";
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
@@ -10,25 +12,66 @@ function calcOrderTotals(cart: CartItem[]) {
   const total = subtotal + tax;
   return { subtotal, tax, total };
 }
+
 export function ReceiptModal({
   order,
   customer,
   paymentLines,
   onClose,
   onNewOrder,
+  odooOrderId,
 }: {
   order: Order;
   customer: Customer | null;
   paymentLines: PaymentLine[];
   onClose: () => void;
   onNewOrder: () => void;
+  odooOrderId?: number;
 }) {
   const { subtotal, tax, total } = calcOrderTotals(order.cart);
   const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
   const receiptNo = `RCP-${Date.now().toString().slice(-6)}`;
 
+  const [fetchPdf, { isLoading: isPdfLoading }] = useLazyGetOrderReceiptPdfQuery();
+  const [createOdooInvoice, { isLoading: isInvoicing }] = useCreateOdooInvoiceMutation();
+
+  const [invoiceState, setInvoiceState] = useState<{
+    status: "idle" | "success" | "error";
+    invoiceId?: number;
+    pdfUrl?: string;
+    message?: string;
+  }>({ status: "idle" });
+
   const handlePrint = () => window.print();
+
+  const handleDownloadPdf = async () => {
+    if (!odooOrderId) return;
+    const result = await fetchPdf(odooOrderId).unwrap();
+    const url = URL.createObjectURL(result);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `receipt-${odooOrderId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCreateInvoice = async () => {
+    if (!odooOrderId) return;
+    try {
+      const result = await createOdooInvoice({ odooOrderId }).unwrap();
+      setInvoiceState({
+        status: "success",
+        invoiceId: result.invoiceId,
+        pdfUrl: result.pdfUrl,
+      });
+    } catch (err: any) {
+      setInvoiceState({
+        status: "error",
+        message: err?.data?.message ?? "Failed to create invoice",
+      });
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -39,7 +82,9 @@ export function ReceiptModal({
             <div className="text-[16px] font-bold text-gray-900">POS — Shop #1</div>
             <div className="text-[11px] text-gray-400 mt-0.5">{new Date().toLocaleString()}</div>
             <div className="text-[11px] text-gray-400">Receipt #{receiptNo}</div>
-            {customer && <div className="text-[11px] text-blue-600 mt-1">Customer: {customer.name}</div>}
+            {customer && (
+              <div className="text-[11px] text-blue-600 mt-1">Customer: {customer.name}</div>
+            )}
           </div>
 
           <div className="border-t border-dashed border-gray-200 pt-3 mb-3">
@@ -65,20 +110,70 @@ export function ReceiptModal({
               </div>
             ))}
             {change > 0.005 && (
-              <div className="flex justify-between text-[12px] text-emerald-600 font-medium"><span>Change</span><span>${fmt(change)}</span></div>
+              <div className="flex justify-between text-[12px] text-emerald-600 font-medium">
+                <span>Change</span><span>${fmt(change)}</span>
+              </div>
             )}
           </div>
+
+          {/* Invoice feedback */}
+          {invoiceState.status === "success" && (
+            <div className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center justify-between">
+              <span className="text-[12px] text-emerald-700 font-medium">
+                ✅ Invoice #{invoiceState.invoiceId} created
+              </span>
+              <a
+                href={invoiceState.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-emerald-600 underline hover:text-emerald-800"
+              >
+                View PDF
+              </a>
+            </div>
+          )}
+          {invoiceState.status === "error" && (
+            <div className="mt-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+              <span className="text-[12px] text-red-600">⚠️ {invoiceState.message}</span>
+            </div>
+          )}
 
           <div className="text-center text-[11px] text-gray-400 mt-4">Thank you for your purchase!</div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 px-5 py-4">
-          <button onClick={handlePrint} className="flex-1 h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors">
+        <div className="flex flex-wrap gap-2 px-5 py-4">
+          <button
+            onClick={handlePrint}
+            className="flex-1 h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
+          >
             🖨 Print
           </button>
-          {/* TODO: "Send to Odoo" button — POST receipt data to create account.move (invoice) in Odoo */}
-          <button onClick={onNewOrder} className="flex-1 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors">
+
+          {odooOrderId && (
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isPdfLoading}
+              className="flex-1 h-9 border border-violet-200 bg-violet-50 text-violet-700 rounded-xl text-[13px] font-semibold hover:bg-violet-100 cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isPdfLoading ? "Loading..." : "⬇ PDF Receipt"}
+            </button>
+          )}
+
+          {odooOrderId && invoiceState.status !== "success" && (
+            <button
+              onClick={handleCreateInvoice}
+              disabled={isInvoicing}
+              className="flex-1 h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isInvoicing ? "Creating..." : "🧾 Invoice"}
+            </button>
+          )}
+
+          <button
+            onClick={onNewOrder}
+            className="flex-1 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors"
+          >
             New Order
           </button>
         </div>
