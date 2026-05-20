@@ -20,7 +20,7 @@ export function ProductGrid({
       categoryId !== undefined ? { categoryId } : undefined
     );
 console.log(apiProducts)
-  // 🧠 RTX SAFE NORMALIZATION LAYER
+
   const products: Product[] = apiProducts.map((p: any) => {
     const colors =
       p.colors ?? p.attributes?.colors ?? [];
@@ -65,15 +65,15 @@ console.log(apiProducts)
   const [selectedMaterial, setSelectedMaterial] = useState("");
 
   const cartQty = (id: number) =>
-    cart.find((i) => i.id === id)?.qty ?? 0;
+     cart.filter((i) => i.productId === id).reduce((s, i) => s + i.qty, 0);
 
-  // 🧠 RTX ADD TO CART ENGINE
+
   const addToCart = (p: Product) => {
     const productId = Number(p.id);
 
     const exist = cart.find(
       (i) =>
-        i.id === productId &&
+        i.productId  === productId &&
         i.size === selectedSize &&
         i.color === selectedColor &&
         i.material === selectedMaterial
@@ -82,7 +82,7 @@ console.log(apiProducts)
     if (exist) {
       setCart(
         cart.map((i) =>
-          i.id === productId &&
+          i.productId  === productId &&
           i.size === selectedSize &&
           i.color === selectedColor &&
           i.material === selectedMaterial
@@ -94,8 +94,10 @@ console.log(apiProducts)
       setCart([
         ...cart,
         {
-          id: productId,
+          productId: productId,
+          id: Date.now(), 
           name: p.name,
+          
           price: p.price,
           qty: 1,
           note: "",

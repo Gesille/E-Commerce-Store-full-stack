@@ -19,6 +19,7 @@ import {
   POSConfigsResponse,
 } from "@/types/session";
 import { apiSlice } from "../api/apiSlice";
+import { CreateCustomerResponse } from "@/types/pos";
 
 export const posApi = apiSlice.injectEndpoints({
   overrideExisting: true,
@@ -143,12 +144,18 @@ export const posApi = apiSlice.injectEndpoints({
       }),
     }),
 
-    createCustomer: builder.mutation<APIResponse, CreateCustomerBody>({
+    createCustomer: builder.mutation<
+      CreateCustomerResponse,
+      {
+        name: string;
+        phone?: string;
+        email?: string;
+      }
+    >({
       query: (body) => ({
-        url: "customers",
+        url: "/customers",
         method: "POST",
         body,
-        credentials: "include" as const,
       }),
     }),
 

@@ -22,6 +22,7 @@ import { SwitchCashierModal } from "@/components/SwitchCashierModal";
 import { usePOSSession } from "@/hooks/usePOSSession";
 import { useGetAllUsersQuery } from "@/redux/user/userApi";
 import { CloseSessionConfirmModal } from "@/components/CloseSessionConfirmModal";
+import { useCreateOrderMutation } from "@/redux/pos/Posapi";
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function ClockDisplay() {
@@ -125,12 +126,38 @@ export default function CashierPage() {
       }
     });
   };
+const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
+const handlePaymentConfirm = async (lines: PaymentLine[]) => {
+  if (!activeOrder || !session) return;
 
-  const handlePaymentConfirm = (lines: PaymentLine[]) => {
-    if (!activeOrder) return;
+  try {
+    await createOrder({
+      cart: activeOrder.cart.map((item) => ({
+        productId: item.productId,      
+        qty: item.qty,
+        price: item.price,
+        discount: item.discount ?? 0,
+        note: item.note ?? "",
+      })),
+      paymentLines: lines.map((l) => ({
+        method: l.method as "cash" | "card" | "bank", 
+        amount: l.amount,
+      })),
+      cashierId:
+        typeof session.activeShift?.cashierId === "object"
+          ? session.activeShift.cashierId._id
+          : (session.activeShift?.cashierId ?? ""),
+      configId: activeConfigId!,
+      customerId: activeMeta.customer?.id ?? undefined,
+      note: activeMeta.note ?? "",
+    }).unwrap();
+
     setReceipt({ order: { ...activeOrder }, paymentLines: lines });
     setShowPayment(false);
-  };
+  } catch (err: any) {
+    alert(err?.data?.message ?? "Order failed. Please try again.");
+  }
+};
 
   const handleNewOrderAfterReceipt = () => {
     const newId = Date.now();
@@ -303,7 +330,7 @@ export default function CashierPage() {
             orderName={activeOrder?.name || ""}
             customer={activeMeta.customer}
             onOpenCustomer={() => setShowCustomer(true)}
-            onOpenPayment={() => setShowPayment(true)}
+            onOpenPayment={(_payload) => setShowPayment(true)}
             orderNote={activeMeta.note}
             onOpenNote={() => setShowNote(true)}
           />
@@ -365,14 +392,15 @@ export default function CashierPage() {
 
       {/* ── Payment Modal ──────────────────────────────────────────────────── */}
       {showPayment && activeOrder && (
-        <PaymentModal
-          total={total}
-          orderName={activeOrder.name}
-          customer={activeMeta.customer}
-          cart={activeOrder.cart}
-          onClose={() => setShowPayment(false)}
-          onConfirm={handlePaymentConfirm}
-        />
+       <PaymentModal
+    total={total}
+    orderName={activeOrder.name}
+    customer={activeMeta.customer}
+    cart={activeOrder.cart}
+    onClose={() => setShowPayment(false)}
+    onConfirm={handlePaymentConfirm}
+    isSubmitting={isSubmitting}  
+  />
       )}
 
       {/* ── Note Modal ─────────────────────────────────────────────────────── */}

@@ -6,11 +6,12 @@ export interface ICartItem {
   price: number;
   qty: number;
   discount: number;
+  note?: string;
   barcode?: string;
 }
 
 export interface IPaymentLine {
-  method: "cash" | "card" | "wallet" | "split";
+  method: "cash" | "card" | "bank" | "split";
   amount: number;
 }
 
@@ -40,7 +41,7 @@ export interface IPOSOrder extends Document {
   amountPaid: number;
   change: number;
 
-  note?: string;
+  note: string;
   status: OrderStatus;
   receiptNumber: string;
 
@@ -56,6 +57,7 @@ const cartItemSchema = new Schema<ICartItem>(
     qty: { type: Number, required: true, min: 1 },
     discount: { type: Number, default: 0, min: 0, max: 100 },
     barcode: { type: String },
+    note: { type: String, default: "" },
   },
   { _id: false },
 );
@@ -64,7 +66,7 @@ const paymentLineSchema = new Schema<IPaymentLine>(
   {
     method: {
       type: String,
-      enum: ["cash", "card", "wallet", "split"],
+      enum: ["cash", "card", "bank", "split"],
       required: true,
     },
     amount: { type: Number, required: true, min: 0 },

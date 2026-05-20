@@ -9,7 +9,7 @@ export interface CartItem {
   size?: string;
   color?: string;
   material?: string;
-  
+  productId: number;
 }
 
 export interface Order {
@@ -61,7 +61,13 @@ export function calcLineTotal(item: CartItem) {
 
 export function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
-  return { subtotal, tax, total };
+
+  return {
+    subtotal,
+    tax: 0,
+    total: subtotal,
+  };
+}
+export interface CreateCustomerResponse {
+  customerId: number;
 }

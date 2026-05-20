@@ -172,7 +172,11 @@ export function CartPanel({
   orderName: string;
   customer: Customer | null;
   onOpenCustomer: () => void;
-  onOpenPayment: () => void;
+  onOpenPayment: (payload: {
+  cart: CartItem[];
+  total: number;
+  discountAmt: number;
+}) => void;
   orderNote: string;
   onOpenNote: () => void;
 }) {
@@ -452,7 +456,7 @@ const saveLineNote = (note: string) => {
       {/* ── PAY BUTTON ────────────────────────────────────────────────── */}
       <div className="p-3">
         <button
-          onClick={() => cart.length > 0 && onOpenPayment()}
+          onClick={() => cart.length > 0 && onOpenPayment({ cart, total, discountAmt })}
           disabled={cart.length === 0}
           className={`w-full h-12 rounded-2xl text-[14px] font-bold tracking-wide transition-all duration-200 flex items-center justify-center gap-2 ${
             cart.length === 0

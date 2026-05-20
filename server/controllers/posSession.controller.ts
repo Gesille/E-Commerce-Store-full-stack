@@ -67,40 +67,12 @@ async function populateShift(shiftId: any) {
     .lean();
 }
 
-async function pollUntilOpened(sessionId: number) {
-  let session: any = null;
 
-  for (let i = 0; i < 20; i++) {
-    // was 15
-    const result = await odooRequest("pos.session", "read", [[sessionId]], {
-      fields: [
-        "id",
-        "name",
-        "state",
-        "config_id",
-        "user_id",
-        "start_at",
-        "cash_register_balance_start",
-      ],
-    });
-
-    session = result?.[0];
-    console.log(`[POS] Poll ${i + 1}/20: state = ${session?.state}`);
-
-    if (session?.state === "opened") break;
-
-    // Don't retry open calls in the poll — they've already been attempted above.
-    // Just wait and re-read.
-    await new Promise((r) => setTimeout(r, 1200)); // was 800ms
-  }
-
-  return session;
-}
 
 const PAYMENT_METHOD_IDS: Record<string, number> = {
   cash: 1,
   card: 2,
-  wallet: 3,
+  bank: 3,
 };
 
 // open session
@@ -1053,10 +1025,11 @@ interface CartItem {
   qty: number;
   price: number;
   discount?: number;
+  note?: string;
 }
 
 interface PaymentLine {
-  method: "cash" | "card" | "wallet";
+  method: "cash" | "card" | "bank";
   amount: number;
 }
 
@@ -1130,6 +1103,7 @@ export const createOrder = CatchAsyncError(
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
         price_subtotal_incl:
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+          note: item.note ?? "",
       },
     ]);
 
@@ -1186,6 +1160,7 @@ export const createOrder = CatchAsyncError(
           price: item.price,
           qty: item.qty,
           discount: item.discount ?? 0,
+          note: item.note ?? "",
         })),
         paymentLines,
         subtotal,

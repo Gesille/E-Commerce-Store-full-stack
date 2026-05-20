@@ -1,7 +1,28 @@
-import { calcLineTotal, CartItem, Customer, fmt, PaymentLine } from "@/types/pos";
+"use client";
+
+import { CartItem, Customer, fmt, calcLineTotal } from "@/types/pos";
 import { useState } from "react";
 
+export type PaymentLine = {
+  method: "cash" | "card" | "bank";
+  amount: number;
+};
 
+/**
+ * PaymentModal
+ *
+ * Collects payment lines from the cashier.
+ * When the cashier clicks "Validate", it calls onConfirm(lines).
+ * The parent (POSPage) is responsible for calling createOrder via RTK Query.
+ *
+ * Props:
+ *  total        — order total due
+ *  orderName    — e.g. "Order 1"
+ *  customer     — selected customer or null
+ *  cart         — cart items (for the order summary)
+ *  onClose      — dismiss without paying
+ *  onConfirm    — called with final PaymentLine[] when payment is complete
+ */
 export function PaymentModal({
   total,
   orderName,
@@ -9,6 +30,7 @@ export function PaymentModal({
   cart,
   onClose,
   onConfirm,
+  isSubmitting = false,
 }: {
   total: number;
   orderName: string;
@@ -16,9 +38,11 @@ export function PaymentModal({
   cart: CartItem[];
   onClose: () => void;
   onConfirm: (lines: PaymentLine[]) => void;
+  isSubmitting?: boolean;
 }) {
-  const [lines, setLines] = useState<PaymentLine[]>([{ method: "cash", amount: total }]);
-  
+  const [lines, setLines] = useState<PaymentLine[]>([
+    { method: "cash", amount: total },
+  ]);
 
   const paid = lines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
@@ -26,8 +50,7 @@ export function PaymentModal({
   const isComplete = paid >= total;
 
   const addMethod = (method: PaymentLine["method"]) => {
-    const already = lines.find((l) => l.method === method);
-    if (already) return;
+    if (lines.find((l) => l.method === method)) return;
     const rem = Math.max(0, total - lines.reduce((s, l) => s + l.amount, 0));
     setLines([...lines, { method, amount: rem }]);
   };
@@ -47,98 +70,324 @@ export function PaymentModal({
     bank: "🏦 Bank Transfer",
   };
 
-  // TODO: connect to Odoo invoice generation here
-  // When onConfirm is called, send cart + customer + payment lines to your backend
-  // POST /api/pos/orders with { cart, customer, paymentLines, orderName }
-  // Then call Odoo's account.move.create to generate invoice if needed
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-[480px] flex flex-col overflow-hidden">
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.3)",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 20,
+          boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
+          width: 480,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          fontFamily: "'DM Sans', sans-serif",
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "18px 24px",
+            borderBottom: "1px solid #f1f5f9",
+          }}
+        >
           <div>
-            <div className="text-[15px] font-semibold text-gray-900">Payment — {orderName}</div>
-            {customer && <div className="text-xs text-gray-400 mt-0.5">Customer: {customer.name}</div>}
+            <div
+              style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}
+            >
+              Payment — {orderName}
+            </div>
+            {customer && (
+              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                Customer: {customer.name}
+              </div>
+            )}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer text-lg leading-none">✕</button>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "#94a3b8",
+              fontSize: 18,
+            }}
+          >
+            ✕
+          </button>
         </div>
 
         {/* Order summary */}
-        <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
-          <div className="text-xs text-gray-400 mb-1.5 font-medium uppercase tracking-wide">Order Summary</div>
+        <div
+          style={{
+            padding: "12px 24px",
+            background: "#f8fafc",
+            borderBottom: "1px solid #f1f5f9",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              color: "#94a3b8",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 8,
+            }}
+          >
+            Order Summary
+          </div>
           {cart.map((item) => (
-            <div key={item.id} className="flex justify-between text-[12px] text-gray-600 mb-0.5">
-              <span>{item.qty}× {item.name}{item.discount ? ` (−${item.discount}%)` : ""}</span>
-              <span>${fmt(calcLineTotal(item))}</span>
+            <div
+              key={item.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 13,
+                color: "#374151",
+                marginBottom: 4,
+              }}
+            >
+              <span>
+                {item.qty}× {item.name}
+                {item.discount ? ` (−${item.discount}%)` : ""}
+                {item.note ? (
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      fontSize: 11,
+                      color: "#92400e",
+                      background: "#fef3c7",
+                      padding: "1px 5px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    📝 {item.note}
+                  </span>
+                ) : null}
+              </span>
+              <span style={{ fontWeight: 600 }}>
+                ${fmt(calcLineTotal(item))}
+              </span>
             </div>
           ))}
         </div>
 
         {/* Amount due */}
-        <div className="px-6 py-4 border-b border-gray-100">
-          <div className="flex justify-between text-[13px] text-gray-500 mb-1">
+        <div
+          style={{
+            padding: "14px 24px",
+            borderBottom: "1px solid #f1f5f9",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 14,
+              color: "#64748b",
+              marginBottom: 4,
+            }}
+          >
             <span>Amount Due</span>
-            <span className="font-semibold text-gray-900 text-base">${fmt(total)}</span>
+            <span
+              style={{
+                fontWeight: 800,
+                color: "#0f172a",
+                fontSize: 22,
+                fontFamily: "'DM Mono', monospace",
+              }}
+            >
+              ${fmt(total)}
+            </span>
           </div>
           {isComplete && change > 0.005 && (
-            <div className="flex justify-between text-[13px] text-emerald-600 font-medium mt-1">
-              <span>Change</span><span>${fmt(change)}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 13,
+                color: "#10b981",
+                fontWeight: 600,
+              }}
+            >
+              <span>Change</span>
+              <span>${fmt(change)}</span>
             </div>
           )}
           {!isComplete && (
-            <div className="flex justify-between text-[13px] text-red-500 mt-1">
-              <span>Remaining</span><span>${fmt(remaining)}</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 13,
+                color: "#ef4444",
+              }}
+            >
+              <span>Remaining</span>
+              <span>${fmt(remaining)}</span>
             </div>
           )}
         </div>
 
-        {/* Payment methods */}
-        <div className="px-6 py-4">
-          <div className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Payment Methods</div>
+        {/* Payment lines */}
+        <div style={{ padding: "16px 24px" }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#94a3b8",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 10,
+            }}
+          >
+            Payment Methods
+          </div>
           {lines.map((line) => (
-            <div key={line.method} className="flex items-center gap-3 mb-2">
-              <span className="text-[13px] text-gray-700 w-32">{methodLabel[line.method]}</span>
+            <div
+              key={line.method}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  color: "#374151",
+                  width: 128,
+                  flexShrink: 0,
+                }}
+              >
+                {methodLabel[line.method]}
+              </span>
               <input
                 type="number"
                 value={line.amount}
                 onChange={(e) => updateAmount(line.method, e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] outline-none focus:border-blue-400 text-right"
+                style={{
+                  flex: 1,
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  textAlign: "right",
+                  outline: "none",
+                  fontFamily: "'DM Mono', monospace",
+                  color: "#0f172a",
+                }}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = "#3b82f6")
+                }
+                onBlur={(e) =>
+                  (e.currentTarget.style.borderColor = "#e2e8f0")
+                }
               />
               {lines.length > 1 && (
-                <button onClick={() => removeLine(line.method)} className="text-gray-300 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm">✕</button>
+                <button
+                  onClick={() => removeLine(line.method)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#cbd5e1",
+                    fontSize: 14,
+                    padding: 0,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "#ef4444")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "#cbd5e1")
+                  }
+                >
+                  ✕
+                </button>
               )}
             </div>
           ))}
-          <div className="flex gap-2 mt-3">
+
+          {/* Add method buttons */}
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             {(["cash", "card", "bank"] as const)
               .filter((m) => !lines.find((l) => l.method === m))
               .map((m) => (
-                <button key={m} onClick={() => addMethod(m)} className="text-[11px] text-blue-600 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-50 bg-transparent cursor-pointer transition-colors">
+                <button
+                  key={m}
+                  onClick={() => addMethod(m)}
+                  style={{
+                    fontSize: 11,
+                    color: "#3b82f6",
+                    border: "1.5px solid #bfdbfe",
+                    borderRadius: 8,
+                    padding: "4px 10px",
+                    background: "#eff6ff",
+                    cursor: "pointer",
+                    fontFamily: "'DM Sans', sans-serif",
+                    fontWeight: 600,
+                    transition: "all 0.15s",
+                  }}
+                >
                   + {methodLabel[m]}
                 </button>
               ))}
           </div>
         </div>
 
-        {/* Confirm */}
-        <div className="px-6 pb-5 pt-2">
+        {/* Confirm button */}
+        <div style={{ padding: "0 24px 24px" }}>
           <button
-            onClick={() => isComplete && onConfirm(lines)}
-            disabled={!isComplete}
-            className={`w-full h-11 rounded-xl font-semibold text-[15px] border-none cursor-pointer transition-all ${
-              isComplete
-                ? "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white"
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            }`}
+            onClick={() => isComplete && !isSubmitting && onConfirm(lines)}
+            disabled={!isComplete || isSubmitting}
+            style={{
+              width: "100%",
+              height: 48,
+              borderRadius: 14,
+              fontWeight: 700,
+              fontSize: 15,
+              border: "none",
+              cursor: isComplete && !isSubmitting ? "pointer" : "not-allowed",
+              background:
+                isComplete && !isSubmitting
+                  ? "linear-gradient(135deg,#3b82f6,#6366f1)"
+                  : "#f1f5f9",
+              color: isComplete && !isSubmitting ? "#fff" : "#94a3b8",
+              transition: "all 0.2s",
+              boxShadow:
+                isComplete && !isSubmitting
+                  ? "0 4px 16px rgba(59,130,246,0.35)"
+                  : "none",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
           >
-            {isComplete ? `Validate Payment${change > 0.005 ? ` · Change $${fmt(change)}` : ""}` : `Enter $${fmt(remaining)} more`}
+            {isSubmitting
+              ? "Processing…"
+              : isComplete
+              ? `✓ Validate Payment${change > 0.005 ? ` · Change $${fmt(change)}` : ""}`
+              : `Enter $${fmt(remaining)} more`}
           </button>
-          {/* TODO: Add "Generate Odoo Invoice" checkbox here */}
-          {/* When checked, after payment confirmation call your Odoo invoice API */}
         </div>
       </div>
     </div>
   );
 }
-export default PaymentModal
+
+export default PaymentModal;

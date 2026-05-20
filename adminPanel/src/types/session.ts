@@ -48,7 +48,7 @@ export interface CartItem {
 }
 
 export interface PaymentLine {
-  method: "cash" | "card" | "wallet";
+  method: "cash" | "card" | "bank";
   amount: number;
 }
 
