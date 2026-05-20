@@ -720,3 +720,219 @@ export const getPeakHoursHeatmap = CatchAsyncError(
     res.status(200).json({ status: "success", heatmap: normalised });
   }
 );
+
+
+// ─── Table Status ─────────────────────────────────────────────────────────────
+// GET /api/pos/analytics/tables?configId=1
+
+export const getTableStatus = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const configId = Number(req.query.configId);
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+
+    // Fetch all tables (restaurant.table) for this config
+    const tables = await odooRequest("restaurant.table", "search_read",
+      [configId ? [["pos_config_id", "=", configId]] : []],
+      { fields: ["id", "name", "seats", "state", "current_order_id"], limit: 100 }
+    );
+
+    // Get open orders on those tables to compute duration
+    const tableOrderIds = tables
+      .map((t: any) => t.current_order_id?.[0])
+      .filter(Boolean);
+
+    let orderMap: Record<number, any> = {};
+    if (tableOrderIds.length) {
+      const openOrders = await odooRequest("pos.order", "search_read",
+        [[["id", "in", tableOrderIds]]],
+        { fields: ["id", "date_order", "partner_id", "amount_total", "lines"], limit: 200 }
+      );
+      for (const o of openOrders) orderMap[o.id] = o;
+    }
+
+    const now = Date.now();
+    const result = tables.map((t: any) => {
+      const order = t.current_order_id ? orderMap[t.current_order_id[0]] : null;
+      let duration = "—";
+      if (order?.date_order) {
+        const diffMin = Math.floor((now - new Date(order.date_order).getTime()) / 60000);
+        duration = diffMin < 60 ? `${diffMin}m` : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
+      }
+
+      // Odoo table states: "available" | "occupied"
+      // Map reserved via a future_order check if you track reservations separately
+      const status: "occupied" | "available" | "reserved" =
+        t.state === "occupied" ? "occupied" : "available";
+
+      return {
+        id:       t.name,
+        status,
+        duration,
+        guests:   order ? (t.seats ?? 0) : 0,
+        seats:    t.seats ?? 0,
+        orderId:  order?.id ?? null,
+        amount:   order ? Math.round((order.amount_total ?? 0) * 100) / 100 : 0,
+      };
+    });
+
+    res.status(200).json({ status: "success", tables: result });
+  }
+);
+
+// ─── Discounts / Promotions ───────────────────────────────────────────────────
+// GET /api/pos/analytics/discounts?period=today|week|month&configId=1
+
+export const getDiscounts = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const period = (req.query.period as Period) || "today";
+    const configId = Number(req.query.configId);
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+    const { from, to } = getPeriodRange(period);
+
+    // Get order lines that have a discount applied
+    const orders = await odooRequest("pos.order", "search_read",
+      [orderDomain(from, to, sessionFilter)],
+      { fields: ["lines"], limit: 5000 }
+    );
+
+    const orderIds = orders.map((o: any) => o.id);
+    if (!orderIds.length) {
+      return res.status(200).json({ status: "success", discounts: [], total: 0 });
+    }
+
+    // Lines with discount > 0
+    const lines = await odooRequest("pos.order.line", "search_read",
+      [[
+        ["order_id", "in", orderIds],
+        ["discount", ">", 0],
+      ]],
+      { fields: ["product_id", "discount", "price_unit", "qty", "price_subtotal_incl"], limit: 20000 }
+    );
+
+    // Also fetch coupon/promotion programs if you use pos_coupon
+    // If you don't use pos_coupon, this block can be skipped
+    let couponLines: any[] = [];
+    try {
+      couponLines = await odooRequest("pos.order.line", "search_read",
+        [[
+          ["order_id", "in", orderIds],
+          ["coupon_program_id", "!=", false],
+        ]],
+        { fields: ["coupon_program_id", "price_subtotal_incl", "qty", "order_id"], limit: 20000 }
+      );
+    } catch (_) {
+      // pos_coupon module not installed — skip
+    }
+
+    // Aggregate discount lines by product name as a proxy for discount type
+    const discountMap: Record<string, { uses: number; saved: number; type: string }> = {};
+    let totalSaved = 0;
+
+    for (const l of lines) {
+      const key = l.product_id?.[1] ?? "Discount";
+      const lineDiscount =
+        (l.price_unit * l.qty * l.discount) / 100;
+      if (!discountMap[key]) discountMap[key] = { uses: 0, saved: 0, type: "Discount" };
+      discountMap[key].uses  += 1;
+      discountMap[key].saved += lineDiscount;
+      totalSaved             += lineDiscount;
+    }
+
+    // Merge coupon lines
+    for (const l of couponLines) {
+      const key  = l.coupon_program_id?.[1] ?? "Promo";
+      const saved = Math.abs(l.price_subtotal_incl ?? 0);
+      if (!discountMap[key]) discountMap[key] = { uses: 0, saved: 0, type: "Promotion" };
+      discountMap[key].uses  += 1;
+      discountMap[key].saved += saved;
+      totalSaved             += saved;
+    }
+
+    const discounts = Object.entries(discountMap)
+      .sort((a, b) => b[1].uses - a[1].uses)
+      .map(([code, d]) => ({
+        code,
+        uses:  d.uses,
+        saved: Math.round(d.saved * 100) / 100,
+        type:  d.type,
+      }));
+
+    res.status(200).json({
+      status: "success",
+      discounts,
+      total: Math.round(totalSaved * 100) / 100,
+    });
+  }
+);
+
+// ─── Customer Insights ────────────────────────────────────────────────────────
+// GET /api/pos/analytics/customers?period=today|week|month&configId=1
+
+export const getCustomerInsights = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const period = (req.query.period as Period) || "today";
+    const configId = Number(req.query.configId);
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+    const { from, to } = getPeriodRange(period);
+
+    const orders = await odooRequest("pos.order", "search_read",
+      [orderDomain(from, to, sessionFilter)],
+      { fields: ["partner_id", "amount_total"], limit: 5000 }
+    );
+
+    // Segment: orders with a linked partner = known customer
+    const withPartner    = orders.filter((o: any) => o.partner_id);
+    const withoutPartner = orders.filter((o: any) => !o.partner_id);
+
+    // Identify "new" vs "returning" by checking if partner had any order BEFORE this period
+    const partnerIds = [...new Set(withPartner.map((o: any) => o.partner_id[0]))];
+
+    let returningIds = new Set<number>();
+    if (partnerIds.length) {
+      const prevOrders = await odooRequest("pos.order", "search_read",
+        [[
+          ["partner_id", "in", partnerIds],
+          ["date_order", "<", toOdooDate(from)],
+          ["state", "in", ["paid", "done", "invoiced"]],
+          ...sessionFilter,
+        ]],
+        { fields: ["partner_id"], limit: 5000 }
+      );
+      for (const o of prevOrders) returningIds.add(o.partner_id[0]);
+    }
+
+    const newCustomers       = withPartner.filter((o: any) => !returningIds.has(o.partner_id[0])).length;
+    const returningCustomers = withPartner.filter((o: any) =>  returningIds.has(o.partner_id[0])).length;
+
+    // Top spender
+    const spendMap: Record<number, { name: string; total: number }> = {};
+    for (const o of withPartner) {
+      const id = o.partner_id[0];
+      if (!spendMap[id]) spendMap[id] = { name: o.partner_id[1], total: 0 };
+      spendMap[id].total += o.amount_total ?? 0;
+    }
+    const topSpenderEntry = Object.values(spendMap).sort((a, b) => b.total - a.total)[0] ?? null;
+
+    // Avg visits per known customer during period
+    const avgVisits = partnerIds.length > 0
+      ? Math.round((withPartner.length / partnerIds.length) * 10) / 10
+      : 0;
+
+    // Satisfaction — from pos.order rating field (if you use it), else null
+    // Odoo doesn't have a built-in rating on pos.order; return null and hide in UI
+    const satisfaction: number | null = null;
+
+    res.status(200).json({
+      status: "success",
+      customers: {
+        newToday:     newCustomers,
+        returning:    returningCustomers,
+        anonymous:    withoutPartner.length,
+        topSpender:   topSpenderEntry?.name    ?? null,
+        topAmount:    topSpenderEntry ? Math.round(topSpenderEntry.total * 100) / 100 : 0,
+        avgVisits,
+        satisfaction,
+      },
+    });
+  }
+);

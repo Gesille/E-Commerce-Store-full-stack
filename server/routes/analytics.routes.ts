@@ -1,6 +1,8 @@
 import express from "express";
 import {
   getCategoryBreakdown,
+  getCustomerInsights,
+  getDiscounts,
   getKpiSummary,
   getLowStock,
   getPaymentMethodsSplit,
@@ -10,6 +12,7 @@ import {
   getRevenueTarget,
   getSessionInfo,
   getStaffPerformance,
+  getTableStatus,
   getTopProducts,
 } from "../controllers/pos.analytics.controller.js";
 import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
@@ -92,5 +95,22 @@ AnalyticsRouter.get(
   authorizeRoles("admin", "cashier"),
   getPeakHoursHeatmap,
 );
-
+AnalyticsRouter.get(
+  "/tables",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getTableStatus,
+);
+AnalyticsRouter.get(
+  "/discounts",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getDiscounts,
+);
+AnalyticsRouter.get(
+  "/customers",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getCustomerInsights,
+);
 export default AnalyticsRouter;
