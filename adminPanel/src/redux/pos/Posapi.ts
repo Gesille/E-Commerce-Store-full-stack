@@ -142,6 +142,7 @@ export const posApi = apiSlice.injectEndpoints({
         params: search ? { search } : undefined,
         credentials: "include" as const,
       }),
+      providesTags: ["Customers"],
     }),
 
     createCustomer: builder.mutation<
@@ -157,6 +158,7 @@ export const posApi = apiSlice.injectEndpoints({
         method: "POST",
         body,
       }),
+      invalidatesTags: ["Customers"],
     }),
 
     getPaymentMethods: builder.query<PaymentMethodsResponse, void>({

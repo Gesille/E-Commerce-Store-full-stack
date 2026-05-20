@@ -23,6 +23,7 @@ import { usePOSSession } from "@/hooks/usePOSSession";
 import { useGetAllUsersQuery } from "@/redux/user/userApi";
 import { CloseSessionConfirmModal } from "@/components/CloseSessionConfirmModal";
 import { useCreateOrderMutation } from "@/redux/pos/Posapi";
+import { useHeldOrders } from "@/hooks/Useheldorders";
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function ClockDisplay() {
@@ -77,17 +78,26 @@ export default function CashierPage() {
 
   const initialOrderId = 1;
 
-  const [orders, setOrders] = useState<Order[]>([
-    { id: initialOrderId, name: "Order 1", cart: [], createdAt: new Date() },
-  ]);
-
-  const [activeOrderId, setActiveOrderId] = useState<number>(initialOrderId);
+const {
+  orders,
+  activeOrderId,
+  setOrders,
+  setActiveOrderId,
+  updateCart: persistCart,
+  removeOrder,
+} = useHeldOrders();
 
   const initMeta: Record<number, OrderMeta> = {};
   initMeta[initialOrderId] = { customer: null, note: "" };
 
-  const [orderMeta, setOrderMeta] =
-    useState<Record<number, OrderMeta>>(initMeta);
+ const [orderMeta, setOrderMeta] = useState<Record<number, OrderMeta>>(() => {
+  try {
+    const raw = localStorage.getItem("pos_order_meta");
+    return raw ? JSON.parse(raw) : { [orders[0].id]: { customer: null, note: "" } };
+  } catch {
+    return { [orders[0].id]: { customer: null, note: "" } };
+  }
+});
 
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -102,18 +112,16 @@ export default function CashierPage() {
   const { total } = calcOrderTotals(activeOrder?.cart || []);
 
   // ── Cart helpers ───────────────────────────────────────────────────────────
-  const updateCart = (newCart: CartItem[]) =>
-    setOrders((prev) =>
-      prev.map((o) => (o.id === activeOrderId ? { ...o, cart: newCart } : o)),
-    );
-
-  const setMeta = (
-    patch: Partial<{ customer: Customer | null; note: string }>,
-  ) =>
-    setOrderMeta((prev) => ({
-      ...prev,
-      [activeOrderId]: { ...activeMeta, ...patch },
-    }));
+const updateCart = (newCart: CartItem[]) => {
+  persistCart(activeOrderId, newCart);
+};
+const setMeta = (patch: Partial<{ customer: Customer | null; note: string }>) => {
+  setOrderMeta((prev) => {
+    const next = { ...prev, [activeOrderId]: { ...activeMeta, ...patch } };
+    localStorage.setItem("pos_order_meta", JSON.stringify(next));
+    return next;
+  });
+};
 
   const handleSetOrders = (newOrders: Order[]) => {
     setOrders(newOrders);
@@ -159,21 +167,10 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
   }
 };
 
-  const handleNewOrderAfterReceipt = () => {
-    const newId = Date.now();
-    const remaining = orders.filter((o) => o.id !== activeOrderId);
-    if (remaining.length === 0) {
-      setOrders([
-        { id: newId, name: "Order 1", cart: [], createdAt: new Date() },
-      ]);
-      setActiveOrderId(newId);
-      setOrderMeta({ [newId]: { customer: null, note: "" } });
-    } else {
-      setOrders(remaining);
-      setActiveOrderId(remaining[0].id);
-    }
-    setReceipt(null);
-  };
+const handleNewOrderAfterReceipt = () => {
+  removeOrder(activeOrderId);
+  setReceipt(null);
+};
 
   // ── Barcode scanner ────────────────────────────────────────────────────────
   useEffect(() => {
