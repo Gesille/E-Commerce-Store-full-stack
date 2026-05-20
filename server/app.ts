@@ -17,12 +17,11 @@ import contactRouter from "./routes/contact.route.js";
 import reportRouter from "./routes/reportRoutes.js";
 import POSRouter from "./routes/pos.routes.js";
 
+import AnalyticsRouter from "./routes/analytics.routes.js";
+
 
 export const app = express();
 
-// ======================
-// 🔥 GLOBAL MIDDLEWARES
-// ======================
 
 // body parser
 app.use(express.json({ limit: "10mb" }));
@@ -63,7 +62,7 @@ app.use("/api/v1",categoryRouter);
 app.use("/api/v1",contactRouter);
 app.use("/api/v1",reportRouter);
 app.use("/api/v1",POSRouter)
-
+app.use("/api/v1",AnalyticsRouter);
 
 // test route
 app.get("/test", (req: Request, res: Response) => {
