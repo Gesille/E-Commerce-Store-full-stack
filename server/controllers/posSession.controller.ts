@@ -67,8 +67,6 @@ async function populateShift(shiftId: any) {
     .lean();
 }
 
-
-
 const PAYMENT_METHOD_IDS: Record<string, number> = {
   cash: 1,
   card: 2,
@@ -105,8 +103,6 @@ export const openSession = CatchAsyncError(
     if (existing?.length) {
       const existingSession = existing[0];
 
-      // FIX #1: If the existing session is still awaiting an opening balance,
-      // do NOT create a shift — tell the client to confirm the balance first.
       if (existingSession.state === "opening_control") {
         return res.status(200).json({
           success: true,
@@ -290,38 +286,25 @@ export const openSession = CatchAsyncError(
 // confirm opening balance
 export const confirmOpeningBalance = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const {
-      sessionId,
-      cashierId,
-      openingBalance = 0,
-      configId,
-    } = req.body;
+    const { sessionId, cashierId, openingBalance = 0, configId } = req.body;
 
     // --------------------------------------------------
     // VALIDATION
     // --------------------------------------------------
 
     if (!sessionId) {
-      return next(
-        new ErrorHandler("sessionId is required", 400),
-      );
+      return next(new ErrorHandler("sessionId is required", 400));
     }
 
     if (!cashierId) {
-      return next(
-        new ErrorHandler("cashierId is required", 400),
-      );
+      return next(new ErrorHandler("cashierId is required", 400));
     }
 
     if (!configId) {
-      return next(
-        new ErrorHandler("configId is required", 400),
-      );
+      return next(new ErrorHandler("configId is required", 400));
     }
 
-    const cashier = await resolveCashier(cashierId).catch(
-      (e) => next(e),
-    );
+    const cashier = await resolveCashier(cashierId).catch((e) => next(e));
 
     if (!cashier) return;
 
@@ -352,16 +335,10 @@ export const confirmOpeningBalance = CatchAsyncError(
         JSON.stringify(currentSessions, null, 2),
       );
     } catch (err) {
-      console.error(
-        "[POS] Failed to read session:",
-        err,
-      );
+      console.error("[POS] Failed to read session:", err);
 
       return next(
-        new ErrorHandler(
-          "Failed to read POS session from Odoo",
-          500,
-        ),
+        new ErrorHandler("Failed to read POS session from Odoo", 500),
       );
     }
 
@@ -370,9 +347,7 @@ export const confirmOpeningBalance = CatchAsyncError(
     console.log("[POS] SESSION:", current);
 
     if (!current) {
-      return next(
-        new ErrorHandler("Session not found", 404),
-      );
+      return next(new ErrorHandler("Session not found", 404));
     }
 
     // --------------------------------------------------
@@ -380,12 +355,11 @@ export const confirmOpeningBalance = CatchAsyncError(
     // --------------------------------------------------
 
     if (current.state === "opened") {
-      const existingShift =
-        await CashierShiftLog.findOne({
-          odooSessionId: sessionId,
-          cashierId: cashier._id,
-          state: { $in: ["active", "paused"] },
-        });
+      const existingShift = await CashierShiftLog.findOne({
+        odooSessionId: sessionId,
+        cashierId: cashier._id,
+        state: { $in: ["active", "paused"] },
+      });
 
       if (!existingShift) {
         await CashierShiftLog.create({
@@ -403,19 +377,14 @@ export const confirmOpeningBalance = CatchAsyncError(
         });
       }
 
-      const session =
-        await fetchOpenOdooSession(configId);
+      const session = await fetchOpenOdooSession(configId);
 
-      const shift =
-        await CashierShiftLog.findOne({
-          odooSessionId: sessionId,
-          cashierId: cashier._id,
-        })
-          .populate(
-            "cashierId",
-            "name email role",
-          )
-          .lean();
+      const shift = await CashierShiftLog.findOne({
+        odooSessionId: sessionId,
+        cashierId: cashier._id,
+      })
+        .populate("cashierId", "name email role")
+        .lean();
 
       return res.status(200).json({
         success: true,
@@ -431,10 +400,7 @@ export const confirmOpeningBalance = CatchAsyncError(
 
     if (current.state !== "opening_control") {
       return next(
-        new ErrorHandler(
-          `Invalid session state: ${current.state}`,
-          409,
-        ),
+        new ErrorHandler(`Invalid session state: ${current.state}`, 409),
       );
     }
 
@@ -443,34 +409,18 @@ export const confirmOpeningBalance = CatchAsyncError(
     // --------------------------------------------------
 
     try {
-      await odooRequest(
-        "pos.session",
-        "write",
-        [
-          [sessionId],
-          {
-            cash_register_balance_start:
-              Number(openingBalance) || 0,
-          },
-        ],
-      );
+      await odooRequest("pos.session", "write", [
+        [sessionId],
+        {
+          cash_register_balance_start: Number(openingBalance) || 0,
+        },
+      ]);
 
-      console.log(
-        "[POS] Opening balance written:",
-        openingBalance,
-      );
+      console.log("[POS] Opening balance written:", openingBalance);
     } catch (err) {
-      console.error(
-        "[POS] Failed writing opening balance:",
-        err,
-      );
+      console.error("[POS] Failed writing opening balance:", err);
 
-      return next(
-        new ErrorHandler(
-          "Failed to write opening balance",
-          500,
-        ),
-      );
+      return next(new ErrorHandler("Failed to write opening balance", 500));
     }
 
     // --------------------------------------------------
@@ -486,17 +436,10 @@ export const confirmOpeningBalance = CatchAsyncError(
 
       console.log("[POS] OPEN RESULT:", result);
     } catch (err: any) {
-      console.error(
-        "[POS] action_pos_session_open ERROR:",
-        err,
-      );
+      console.error("[POS] action_pos_session_open ERROR:", err);
 
       return next(
-        new ErrorHandler(
-          err?.message ||
-            "Failed to open POS session",
-          500,
-        ),
+        new ErrorHandler(err?.message || "Failed to open POS session", 500),
       );
     }
 
@@ -504,27 +447,15 @@ export const confirmOpeningBalance = CatchAsyncError(
     // WAIT
     // --------------------------------------------------
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 5000),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // --------------------------------------------------
     // VERIFY
     // --------------------------------------------------
 
-    const verify = await odooRequest(
-      "pos.session",
-      "read",
-      [[sessionId]],
-      {
-        fields: [
-          "id",
-          "name",
-          "state",
-          "cash_register_balance_start",
-        ],
-      },
-    );
+    const verify = await odooRequest("pos.session", "read", [[sessionId]], {
+      fields: ["id", "name", "state", "cash_register_balance_start"],
+    });
 
     console.log("[POS] VERIFY:", verify);
 
@@ -535,20 +466,14 @@ export const confirmOpeningBalance = CatchAsyncError(
     // --------------------------------------------------
 
     if (session?.state !== "opened") {
-      console.log(
-        "[POS] Forcing session state to opened...",
-      );
+      console.log("[POS] Forcing session state to opened...");
 
-      await odooRequest(
-        "pos.session",
-        "write",
-        [
-          [sessionId],
-          {
-            state: "opened",
-          },
-        ],
-      );
+      await odooRequest("pos.session", "write", [
+        [sessionId],
+        {
+          state: "opened",
+        },
+      ]);
     }
 
     // --------------------------------------------------
@@ -560,26 +485,15 @@ export const confirmOpeningBalance = CatchAsyncError(
       "read",
       [[sessionId]],
       {
-        fields: [
-          "id",
-          "name",
-          "state",
-          "cash_register_balance_start",
-        ],
+        fields: ["id", "name", "state", "cash_register_balance_start"],
       },
     );
 
     const finalSession = finalVerify?.[0];
 
-    console.log(
-      "[POS] FINAL SESSION:",
-      finalSession,
-    );
+    console.log("[POS] FINAL SESSION:", finalSession);
 
-    if (
-      !finalSession ||
-      finalSession.state !== "opened"
-    ) {
+    if (!finalSession || finalSession.state !== "opened") {
       return next(
         new ErrorHandler(
           `Session failed to open. Current state: ${finalSession?.state}`,
@@ -592,24 +506,21 @@ export const confirmOpeningBalance = CatchAsyncError(
     // CREATE SHIFT
     // --------------------------------------------------
 
-    const shiftLog =
-      await CashierShiftLog.create({
-        odooSessionId: sessionId,
-        cashierId: cashier._id,
-        odooPartnerId: cashier.odooPartnerId,
-        state: "active" as ShiftState,
-        stateHistory: [
-          {
-            toState: "active",
-            at: new Date(),
-            reason: `Session opened with opening balance ${openingBalance}`,
-          },
-        ],
-      });
+    const shiftLog = await CashierShiftLog.create({
+      odooSessionId: sessionId,
+      cashierId: cashier._id,
+      odooPartnerId: cashier.odooPartnerId,
+      state: "active" as ShiftState,
+      stateHistory: [
+        {
+          toState: "active",
+          at: new Date(),
+          reason: `Session opened with opening balance ${openingBalance}`,
+        },
+      ],
+    });
 
-    const populated = await populateShift(
-      shiftLog._id,
-    );
+    const populated = await populateShift(shiftLog._id);
 
     // --------------------------------------------------
     // SUCCESS
@@ -617,12 +528,10 @@ export const confirmOpeningBalance = CatchAsyncError(
 
     return res.status(201).json({
       success: true,
-      message:
-        "Opening balance confirmed. POS session is now open.",
+      message: "Opening balance confirmed. POS session is now open.",
       session: finalSession,
       activeShift: populated,
-      openingBalance:
-        Number(openingBalance) || 0,
+      openingBalance: Number(openingBalance) || 0,
     });
   },
 );
@@ -1051,56 +960,83 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
-    // ── Validation ────────────────────────────────────────────────────────────
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
     if (!configId) return next(new ErrorHandler("configId is required", 400));
 
-    // ── Resolve cashier ───────────────────────────────────────────────────────
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
 
-    // ── Fetch open POS session ────────────────────────────────────────────────
     const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
-    // ── Validate active shift ─────────────────────────────────────────────────
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
       cashierId: cashier._id,
       state: "active",
     });
-
-    if (!shift) {
+    if (!shift)
       return next(
         new ErrorHandler(
           "Cashier does not have an active shift. Start or resume a shift first.",
           409,
         ),
       );
+
+    const productIds = [...new Set(cart.map((i) => i.productId))];
+    let productTaxMap: Record<number, number[]> = {};
+    try {
+      const products = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["id", "in", productIds]]],
+        { fields: ["id", "taxes_id"] },
+      );
+      for (const p of products) productTaxMap[p.id] = p.taxes_id ?? [];
+    } catch (err) {
+      console.warn("[POS] Could not fetch product taxes — 0% fallback:", err);
     }
 
-    // ── Totals ────────────────────────────────────────────────────────────────
-    const amountPaid = paymentLines.reduce(
-      (s: number, p: PaymentLine) => s + p.amount,
-      0,
-    );
+    const allTaxIds = [
+      ...new Set(Object.values(productTaxMap).flat()),
+    ] as number[];
+    let taxRateMap: Record<number, number> = {};
+    if (allTaxIds.length > 0) {
+      try {
+        const taxes = await odooRequest(
+          "account.tax",
+          "search_read",
+          [[["id", "in", allTaxIds]]],
+          { fields: ["id", "amount", "amount_type", "price_include"] },
+        );
+        for (const t of taxes) {
+          if (t.amount_type === "percent") taxRateMap[t.id] = t.amount / 100;
+        }
+      } catch (err) {
+        console.warn("[POS] Could not fetch tax rates:", err);
+      }
+    }
 
-    const subtotal = cart.reduce(
-      (s: number, item: CartItem) =>
-        s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-      0,
-    );
+    let subtotal = 0;
+    let totalTaxAmount = 0;
 
-    const amountReturn = Math.max(0, amountPaid - subtotal);
+    const orderLines = cart.map((item) => {
+      const linePreDiscount = item.price * item.qty;
+      const discountFactor = 1 - (item.discount ?? 0) / 100;
+      const lineSubtotal = linePreDiscount * discountFactor; // pre-tax
 
-    // ── Build order lines ─────────────────────────────────────────────────────
-    const orderLines = cart.map((item: CartItem) => {
-      const lineSubtotal =
-        item.price * item.qty * (1 - (item.discount ?? 0) / 100);
+      const taxIds = productTaxMap[item.productId] ?? [];
+      let lineTaxRate = 0;
+      for (const tid of taxIds) lineTaxRate += taxRateMap[tid] ?? 0;
+
+      const lineTaxAmount = lineSubtotal * lineTaxRate;
+      const lineSubtotalIncl = lineSubtotal + lineTaxAmount;
+      subtotal += lineSubtotal;
+      totalTaxAmount += lineTaxAmount;
+
       return [
         0,
         0,
@@ -1109,73 +1045,55 @@ export const createOrder = CatchAsyncError(
           qty: item.qty,
           price_unit: item.price,
           discount: item.discount ?? 0,
-          price_subtotal: lineSubtotal,
-          price_subtotal_incl: lineSubtotal,
+          tax_ids: taxIds.length > 0 ? [[6, 0, taxIds]] : [[6, 0, []]],
+          price_subtotal: Math.round(lineSubtotal * 100) / 100,
+          price_subtotal_incl: Math.round(lineSubtotalIncl * 100) / 100,
           customer_note: item.note ?? "",
         },
       ];
     });
 
-    // ── Build payment lines ───────────────────────────────────────────────────
+    const amountTotal = Math.round((subtotal + totalTaxAmount) * 100) / 100;
+    const amountPaid = paymentLines.reduce((s, p) => s + p.amount, 0);
+    const amountReturn = Math.max(
+      0,
+      Math.round((amountPaid - amountTotal) * 100) / 100,
+    );
+
     let paymentIds: any[];
     try {
-      paymentIds = paymentLines.map((p: PaymentLine) => {
+      paymentIds = paymentLines.map((p) => {
         const methodId = PAYMENT_METHOD_IDS[p.method];
-        if (!methodId)
-          throw new Error(`Unknown payment method: ${p.method}`);
+        if (!methodId) throw new Error(`Unknown payment method: ${p.method}`);
         return [0, 0, { amount: p.amount, payment_method_id: methodId }];
       });
     } catch (err: any) {
       return next(new ErrorHandler(err.message, 400));
     }
 
-    // ── Unique ref per request ────────────────────────────────────────────────
-    // Using Date.now() ensures every order gets a unique pos_reference so
-    // Odoo never tries to find-and-overwrite a previous order's lines.
     const odooRef = `POS-${shift._id}-${Date.now()}`;
 
-    // ── Neutralise stale draft orders (safe: write→cancel, never unlink) ──────
-    // Hard-deleting pos.order records triggers Odoo's product_id FK constraint
-    // on pos.order.line even after manually unlinking lines. Since odooRef is
-    // already unique per request, stale orders don't block creation — we just
-    // cancel them so they don't pollute the session UI.
     try {
-      const staleOrderIds: number[] = await odooRequest(
-        "pos.order",
-        "search",
+      const staleIds: number[] = await odooRequest("pos.order", "search", [
         [
-          [
-            ["session_id", "=", session.id],
-            ["state", "in", ["draft"]], // only draft; "cancel" is already safe
-          ],
+          ["session_id", "=", session.id],
+          ["state", "in", ["draft"]],
         ],
-      );
-
-      if (staleOrderIds.length > 0) {
-        console.log(
-          `[POS] Cancelling ${staleOrderIds.length} stale draft order(s) for session ${session.id}:`,
-          staleOrderIds,
-        );
-
+      ]);
+      if (staleIds.length > 0) {
         await odooRequest("pos.order", "write", [
-          staleOrderIds,
+          staleIds,
           { state: "cancel" },
         ]);
-
-        console.log(
-          `[POS] Cancelled ${staleOrderIds.length} stale draft order(s)`,
-        );
+        console.log(`[POS] Cancelled ${staleIds.length} stale draft order(s)`);
       }
     } catch (cleanupErr: any) {
-      // Non-fatal: log and continue. The unique ref means the new order will
-      // still be created cleanly even if cleanup fails.
       console.warn(
         "[POS] Stale order cleanup failed (non-fatal):",
         cleanupErr?.message,
       );
     }
 
-    // ── Create order in Odoo ──────────────────────────────────────────────────
     let orderId: number;
     try {
       orderId = await odooRequest("pos.order", "create", [
@@ -1188,34 +1106,35 @@ export const createOrder = CatchAsyncError(
           lines: orderLines,
           payment_ids: paymentIds,
           amount_paid: amountPaid,
-          amount_total: subtotal,
-          amount_tax: 0,
+          amount_total: amountTotal,
+          amount_tax: Math.round(totalTaxAmount * 100) / 100,
           amount_return: amountReturn,
         },
       ]);
     } catch (err: any) {
       console.error("[POS] Odoo order create failed:", err);
       return next(
-        new ErrorHandler(
-          err?.message ?? "Failed to create order in Odoo",
-          500,
-        ),
+        new ErrorHandler(err?.message ?? "Failed to create order in Odoo", 500),
       );
     }
 
-    if (!orderId) {
+    if (!orderId)
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
-    }
 
-    // ── Mark order as paid ────────────────────────────────────────────────────
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
+      console.log(`[POS] Order ${orderId} marked paid — stock moves triggered`);
     } catch (err: any) {
-      console.error("[POS] action_pos_order_paid failed:", err);
-      // Non-fatal: order exists in Odoo, payment marking can be retried
+      console.error("[POS] action_pos_order_paid failed:", err?.message);
+
+      try {
+        await odooRequest("pos.order", "write", [[orderId], { state: "paid" }]);
+        console.log(`[POS] Fallback: wrote state=paid for order ${orderId}`);
+      } catch (fb: any) {
+        console.error("[POS] Fallback write also failed:", fb?.message);
+      }
     }
 
-    // ── Mirror order in MongoDB ───────────────────────────────────────────────
     let mongoOrder: any = null;
     try {
       mongoOrder = await POSOrder.create({
@@ -1234,9 +1153,9 @@ export const createOrder = CatchAsyncError(
         })),
         paymentLines,
         subtotal,
-        taxAmount: 0,
+        taxAmount: totalTaxAmount,
         discountAmount: 0,
-        total: subtotal,
+        total: amountTotal,
         amountPaid,
         change: amountReturn,
         note: note ?? "",
@@ -1245,17 +1164,15 @@ export const createOrder = CatchAsyncError(
       });
     } catch (mongoErr) {
       console.error(
-        `[POS] MongoDB order mirror failed for Odoo orderId=${orderId}, shiftId=${shift._id}:`,
+        `[POS] MongoDB mirror failed for orderId=${orderId}:`,
         mongoErr,
       );
     }
 
-    // ── Update shift totals ───────────────────────────────────────────────────
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
-      $inc: { totalOrders: 1, totalSales: subtotal },
+      $inc: { totalOrders: 1, totalSales: amountTotal },
     });
 
-    // ── Response ──────────────────────────────────────────────────────────────
     res.status(201).json({
       status: "success",
       message: "Order created successfully",
@@ -1265,7 +1182,7 @@ export const createOrder = CatchAsyncError(
     });
   },
 );
-/** GET /api/pos/orders/:sessionId */
+
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const sessionId = Number(req.params.sessionId);
@@ -1439,7 +1356,6 @@ export const debugPOSConfig = CatchAsyncError(
   },
 );
 
-
 export const getOrderReceiptPdf = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const orderId = Number(req.params.orderId);
@@ -1453,7 +1369,7 @@ export const getOrderReceiptPdf = CatchAsyncError(
           "X-Openerp-Session-Id": process.env.ODOO_SESSION_ID ?? "",
           Cookie: `session_id=${process.env.ODOO_SESSION_ID ?? ""}`,
         },
-      }
+      },
     );
 
     if (!pdfResponse.ok) {
@@ -1463,9 +1379,12 @@ export const getOrderReceiptPdf = CatchAsyncError(
     const pdfBuffer = await pdfResponse.arrayBuffer();
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="receipt-${orderId}.pdf"`);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="receipt-${orderId}.pdf"`,
+    );
     res.send(Buffer.from(pdfBuffer));
-  }
+  },
 );
 
 export const createOdooInvoice = CatchAsyncError(
@@ -1475,23 +1394,22 @@ export const createOdooInvoice = CatchAsyncError(
       return next(new ErrorHandler("odooOrderId is required", 400));
 
     // 1. Fetch order from Odoo
-   const orders = await odooRequest(
-  "pos.order",
-  "search_read",
-  [[["id", "=", odooOrderId]]],
-  { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 }
-);
+    const orders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["id", "=", odooOrderId]]],
+      { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 },
+    );
     const order = orders?.[0];
-    if (!order)
-      return next(new ErrorHandler("Order not found in Odoo", 404));
+    if (!order) return next(new ErrorHandler("Order not found in Odoo", 404));
 
     // 2. Fetch order lines
-   const lines = await odooRequest(
-  "pos.order.line",
-  "search_read",
-  [[["id", "in", order.lines]]],
-  { fields: ["product_id", "qty", "price_unit", "discount"] },
-);
+    const lines = await odooRequest(
+      "pos.order.line",
+      "search_read",
+      [[["id", "in", order.lines]]],
+      { fields: ["product_id", "qty", "price_unit", "discount"] },
+    );
 
     // 3. Create invoice
     const invoiceId = await odooRequest("account.move", "create", [
@@ -1519,5 +1437,5 @@ export const createOdooInvoice = CatchAsyncError(
       invoiceId,
       pdfUrl: `${process.env.ODOO_URL}/report/pdf/account.report_invoice/${invoiceId}`,
     });
-  }
+  },
 );
