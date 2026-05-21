@@ -141,42 +141,41 @@ export function ReceiptModal({
           <div className="text-center text-[11px] text-gray-400 mt-4">Thank you for your purchase!</div>
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2 px-5 py-4">
-          <button
-            onClick={handlePrint}
-            className="flex-1 h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
-          >
-            🖨 Print
-          </button>
+      {/* Actions */}
+<div style={{
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 8,
+  padding: "14px 16px",
+  borderTop: "0.5px solid var(--color-border-tertiary)",
+  background: "var(--color-background-secondary)",
+}}>
+  <button onClick={handlePrint} className="receipt-btn">
+    <i className="ti ti-printer" /> Print
+  </button>
 
-          {odooOrderId && (
-            <button
-              onClick={handleDownloadPdf}
-              disabled={isPdfLoading}
-              className="flex-1 h-9 border border-violet-200 bg-violet-50 text-violet-700 rounded-xl text-[13px] font-semibold hover:bg-violet-100 cursor-pointer transition-colors disabled:opacity-50"
-            >
-              {isPdfLoading ? "Loading..." : "⬇ PDF Receipt"}
-            </button>
-          )}
+  {odooOrderId && (
+    <button onClick={handleDownloadPdf} disabled={isPdfLoading}
+      className="receipt-btn receipt-btn-pdf">
+      <i className="ti ti-download" />
+      {isPdfLoading ? "Loading..." : "PDF receipt"}
+    </button>
+  )}
 
-          {odooOrderId && invoiceState.status !== "success" && (
-            <button
-              onClick={handleCreateInvoice}
-              disabled={isInvoicing}
-              className="flex-1 h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50"
-            >
-              {isInvoicing ? "Creating..." : "🧾 Invoice"}
-            </button>
-          )}
+  {odooOrderId && invoiceState.status !== "success" && (
+    <button onClick={handleCreateInvoice} disabled={isInvoicing}
+      className="receipt-btn receipt-btn-invoice">
+      <i className="ti ti-file-invoice" />
+      {isInvoicing ? "Creating..." : "Create invoice"}
+    </button>
+  )}
 
-          <button
-            onClick={onNewOrder}
-            className="flex-1 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors"
-          >
-            New Order
-          </button>
-        </div>
+  <button onClick={onNewOrder}
+    className="receipt-btn receipt-btn-new"
+    style={{ gridColumn: "1 / -1" }}>
+    <i className="ti ti-plus" /> New order
+  </button>
+</div>
       </div>
     </div>
   );
