@@ -1048,7 +1048,8 @@ export const createOrder = CatchAsyncError(
       customerId?: number;
       note?: string;
     } = req.body;
-
+console.log("POS createOrder HIT");
+console.log(req.body);
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
