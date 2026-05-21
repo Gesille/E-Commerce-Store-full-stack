@@ -1417,27 +1417,27 @@ export const getPaymentMethods = CatchAsyncError(
   },
 );
 
-// export const getPOSConfigs = CatchAsyncError(
-//   async (req: Request, res: Response, next: NextFunction) => {
-//     const configs = await odooRequest(
-//       "pos.config",
-//       "search_read",
-//       [[["active", "=", true]]],
-//       { fields: ["id", "name", "currency_id"] },
-//     );
-//     res.status(200).json({ status: "success", configs });
-//   },
-// );
+export const getPOSConfigs = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const configs = await odooRequest(
+      "pos.config",
+      "search_read",
+      [[["active", "=", true]]],
+      { fields: ["id", "name", "currency_id"] },
+    );
+    res.status(200).json({ status: "success", configs });
+  },
+);
 
-// export const debugPOSConfig = CatchAsyncError(
-//   async (req: Request, res: Response) => {
-//     const { configId } = req.body;
-//     const config = await odooRequest("pos.config", "read", [[configId]], {
-//       fields: ["id", "name", "cash_control", "payment_method_ids"],
-//     });
-//     res.json(config);
-//   },
-// );
+export const debugPOSConfig = CatchAsyncError(
+  async (req: Request, res: Response) => {
+    const { configId } = req.body;
+    const config = await odooRequest("pos.config", "read", [[configId]], {
+      fields: ["id", "name", "cash_control", "payment_method_ids"],
+    });
+    res.json(config);
+  },
+);
 
 
 export const getOrderReceiptPdf = CatchAsyncError(

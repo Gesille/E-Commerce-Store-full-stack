@@ -21,12 +21,13 @@ import {
   confirmOpeningBalance,
   getOrderReceiptPdf,
   createOdooInvoice,
+  getPOSConfigs,
   
   
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
-
+POSRouter.get("/configs", isAuthenticated, getPOSConfigs);
 POSRouter.post(
   "/session/open",
   isAuthenticated,
