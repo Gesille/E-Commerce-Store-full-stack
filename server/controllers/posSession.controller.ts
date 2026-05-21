@@ -960,35 +960,31 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
-    // ------------------------------------------------
-    // VALIDATION
-    // ------------------------------------------------
+    if (!cart?.length) {
+      return next(new ErrorHandler("Cart is empty", 400));
+    }
 
-    if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
-
-    if (!paymentLines?.length)
+    if (!paymentLines?.length) {
       return next(new ErrorHandler("Payment method is required", 400));
+    }
 
-    if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
+    if (!cashierId) {
+      return next(new ErrorHandler("cashierId is required", 400));
+    }
 
-    if (!configId) return next(new ErrorHandler("configId is required", 400));
+    if (!configId) {
+      return next(new ErrorHandler("configId is required", 400));
+    }
 
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
 
     if (!cashier) return;
 
-    // ------------------------------------------------
-    // ACTIVE SESSION
-    // ------------------------------------------------
-
     const session = await fetchOpenOdooSession(configId);
 
-    if (!session)
+    if (!session) {
       return next(new ErrorHandler("No open POS session found", 409));
-
-    // ------------------------------------------------
-    // ACTIVE SHIFT
-    // ------------------------------------------------
+    }
 
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
@@ -1005,11 +1001,64 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ------------------------------------------------
-    // FETCH PRODUCT TAXES
-    // ------------------------------------------------
+    const resolvedCart: any[] = [];
 
-    const productIds = [...new Set(cart.map((i) => i.productId))];
+    for (const item of cart) {
+      let realProductId = item.productId;
+
+      // Try direct product.product
+      let product = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["id", "=", item.productId]]],
+        {
+          fields: ["id", "name", "taxes_id", "qty_available", "active"],
+          limit: 1,
+        },
+      );
+
+      // If not found -> maybe frontend sent template ID
+      if (!product.length) {
+        console.log(
+          `[POS] Product ${item.productId} not found in product.product. Trying template conversion...`,
+        );
+
+        const variants = await odooRequest(
+          "product.product",
+          "search_read",
+          [[["product_tmpl_id", "=", item.productId]]],
+          {
+            fields: ["id", "name", "taxes_id", "qty_available", "active"],
+            limit: 1,
+          },
+        );
+
+        if (!variants.length) {
+          return next(
+            new ErrorHandler(
+              `Product ${item.productId} does not exist in Odoo`,
+              400,
+            ),
+          );
+        }
+
+        product = variants;
+
+        realProductId = variants[0].id;
+
+        console.log(
+          `[POS] Converted template ${item.productId} -> variant ${realProductId}`,
+        );
+      }
+
+      resolvedCart.push({
+        ...item,
+        realProductId,
+        taxes_id: product[0].taxes_id ?? [],
+      });
+    }
+
+    const productIds = [...new Set(resolvedCart.map((i) => i.realProductId))];
 
     let productTaxMap: Record<number, number[]> = {};
 
@@ -1029,10 +1078,6 @@ export const createOrder = CatchAsyncError(
     } catch (err) {
       console.warn("[POS] Could not fetch product taxes:", err);
     }
-
-    // ------------------------------------------------
-    // FETCH TAX RATES
-    // ------------------------------------------------
 
     const allTaxIds = [
       ...new Set(Object.values(productTaxMap).flat()),
@@ -1060,43 +1105,18 @@ export const createOrder = CatchAsyncError(
         console.warn("[POS] Could not fetch tax rates:", err);
       }
     }
-for (const item of cart) {
-  const exists = await odooRequest(
-    "product.product",
-    "search_read",
-    [[["id", "=", item.productId]]],
-    {
-      fields: ["id", "name", "active"],
-      limit: 1,
-    },
-  );
-
-  console.log("PRODUCT CHECK:", exists);
-
-  if (!exists.length) {
-    return next(
-      new ErrorHandler(
-        `Product ${item.productId} does not exist in product.product`,
-        400,
-      ),
-    );
-  }
-}
-    // ------------------------------------------------
-    // BUILD ORDER LINES
-    // ------------------------------------------------
 
     let subtotal = 0;
     let totalTaxAmount = 0;
 
-    const orderLines = cart.map((item) => {
+    const orderLines = resolvedCart.map((item) => {
       const linePreDiscount = item.price * item.qty;
 
       const discountFactor = 1 - (item.discount ?? 0) / 100;
 
       const lineSubtotal = linePreDiscount * discountFactor;
 
-      const taxIds = productTaxMap[item.productId] ?? [];
+      const taxIds = productTaxMap[item.realProductId] ?? [];
 
       let lineTaxRate = 0;
 
@@ -1116,7 +1136,7 @@ for (const item of cart) {
         0,
         0,
         {
-          product_id: Number(item.productId),
+          product_id: Number(item.realProductId),
           qty: item.qty,
           price_unit: item.price,
           discount: item.discount ?? 0,
@@ -1213,16 +1233,15 @@ for (const item of cart) {
     }
 
     try {
+      // Mark as paid
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
 
       console.log(`[POS] Order ${orderId} marked paid`);
 
-      await odooRequest("pos.order", "_create_picking", [[orderId]]);
+      // Wait for Odoo stock creation
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      console.log(`[POS] Picking created for order ${orderId}`);
-
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
+      // Find related pickings
       const pickingIds: number[] = await odooRequest(
         "stock.picking",
         "search",
@@ -1236,8 +1255,10 @@ for (const item of cart) {
           // Confirm
           await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
 
+          // Assign stock
           await odooRequest("stock.picking", "action_assign", [[pickingId]]);
 
+          // Read move lines
           const moveLines = await odooRequest(
             "stock.move.line",
             "search_read",
@@ -1247,6 +1268,7 @@ for (const item of cart) {
             },
           );
 
+          // Set qty_done
           for (const line of moveLines) {
             await odooRequest("stock.move.line", "write", [
               [line.id],
@@ -1256,6 +1278,7 @@ for (const item of cart) {
             ]);
           }
 
+          // Validate picking
           await odooRequest("stock.picking", "button_validate", [[pickingId]]);
 
           console.log(`[POS] Picking ${pickingId} validated successfully`);
@@ -1286,9 +1309,9 @@ for (const item of cart) {
         openedBy: cashier._id,
         odooOrderId: orderId,
 
-        cart: cart.map((item) => ({
-          productId: item.productId,
-          name: `Product#${item.productId}`,
+        cart: resolvedCart.map((item) => ({
+          productId: item.realProductId,
+          name: `Product#${item.realProductId}`,
           price: item.price,
           qty: item.qty,
           discount: item.discount ?? 0,
