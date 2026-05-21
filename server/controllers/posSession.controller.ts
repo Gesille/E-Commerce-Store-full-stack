@@ -1109,20 +1109,20 @@ export const createOrder = CatchAsyncError(
 
     const odooRef = `SHIFT-${shift._id}`;
 
-    const orderId = await odooRequest("pos.order", "create", [
-      {
-        session_id: session.id,
-        partner_id: customerId ?? false,
-        user_id: cashier.odooPartnerId,
-        pos_reference: odooRef,
-        note: note ?? "",
-        lines: orderLines,
-        amount_paid: amountPaid,
-        amount_total: subtotal,
-        amount_tax: 0,
-        amount_return: amountReturn,
-      },
-    ]);
+  const orderId = await odooRequest("pos.order", "create", [
+  {
+    session_id: session.id,
+    partner_id: customerId ?? false,
+    to_invoice: false,      
+    pos_reference: odooRef,
+    note: note ?? "",
+    lines: orderLines,
+    amount_paid: amountPaid,
+    amount_total: subtotal,
+    amount_tax: 0,
+    amount_return: amountReturn,
+  },
+]);
 
     if (!orderId) {
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
@@ -1404,19 +1404,23 @@ export const createOdooInvoice = CatchAsyncError(
       return next(new ErrorHandler("odooOrderId is required", 400));
 
     // 1. Fetch order from Odoo
-    const orders = await odooRequest("pos.order", "search_read", [
-      [["id", "=", odooOrderId]],
-      { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 },
-    ]);
+   const orders = await odooRequest(
+  "pos.order",
+  "search_read",
+  [[["id", "=", odooOrderId]]],
+  { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 }
+);
     const order = orders?.[0];
     if (!order)
       return next(new ErrorHandler("Order not found in Odoo", 404));
 
     // 2. Fetch order lines
-    const lines = await odooRequest("pos.order.line", "search_read", [
-      [["id", "in", order.lines]],
-      { fields: ["product_id", "qty", "price_unit", "discount"] },
-    ]);
+   const lines = await odooRequest(
+  "pos.order.line",
+  "search_read",
+  [[["id", "in", order.lines]]],
+  { fields: ["product_id", "qty", "price_unit", "discount"] },
+);
 
     // 3. Create invoice
     const invoiceId = await odooRequest("account.move", "create", [

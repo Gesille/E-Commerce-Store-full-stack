@@ -154,7 +154,7 @@ export const posApi = apiSlice.injectEndpoints({
       }
     >({
       query: (body) => ({
-        url: "/customers",
+        url: "customers",
         method: "POST",
         body,
       }),
