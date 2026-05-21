@@ -1129,17 +1129,16 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler(err.message, 400));
     }
 
-    // ── Use a unique ref per request, not per shift ───────────────────────────
-    // A per-shift ref meant every order in the same shift reused the same
-    // pos_reference, causing Odoo to find & try to overwrite the previous
-    // order's lines → triggering the product constraint error.
+    // ── Unique ref per request ────────────────────────────────────────────────
+    // Using Date.now() ensures every order gets a unique pos_reference so
+    // Odoo never tries to find-and-overwrite a previous order's lines.
     const odooRef = `POS-${shift._id}-${Date.now()}`;
 
-    // ── Purge any stuck draft orders for this session before creating ─────────
-    // This is the primary fix: stale draft/cancel orders left by prior failed
-    // attempts hold pos.order.line records that lock the same product_ids.
-    // Odoo raises "another model is using the record" when a new create tries
-    // to write lines referencing those same products while the old lines exist.
+    // ── Neutralise stale draft orders (safe: write→cancel, never unlink) ──────
+    // Hard-deleting pos.order records triggers Odoo's product_id FK constraint
+    // on pos.order.line even after manually unlinking lines. Since odooRef is
+    // already unique per request, stale orders don't block creation — we just
+    // cancel them so they don't pollute the session UI.
     try {
       const staleOrderIds: number[] = await odooRequest(
         "pos.order",
@@ -1147,42 +1146,29 @@ export const createOrder = CatchAsyncError(
         [
           [
             ["session_id", "=", session.id],
-            ["state", "in", ["draft", "cancel"]],
+            ["state", "in", ["draft"]], // only draft; "cancel" is already safe
           ],
         ],
       );
 
       if (staleOrderIds.length > 0) {
         console.log(
-          `[POS] Purging ${staleOrderIds.length} stale draft/cancel order(s) for session ${session.id}:`,
+          `[POS] Cancelling ${staleOrderIds.length} stale draft order(s) for session ${session.id}:`,
           staleOrderIds,
         );
 
-        // First unlink their lines explicitly to release the product constraint
-        const staleLines: { id: number }[] = await odooRequest(
-          "pos.order.line",
-          "search_read",
-          [
-            [["order_id", "in", staleOrderIds]],
-            ["id"],
-          ],
+        await odooRequest("pos.order", "write", [
+          staleOrderIds,
+          { state: "cancel" },
+        ]);
+
+        console.log(
+          `[POS] Cancelled ${staleOrderIds.length} stale draft order(s)`,
         );
-
-        if (staleLines.length > 0) {
-          const staleLineIds = staleLines.map((l) => l.id);
-          await odooRequest("pos.order.line", "unlink", [staleLineIds]);
-          console.log(
-            `[POS] Unlinked ${staleLineIds.length} stale order line(s)`,
-          );
-        }
-
-        // Now safe to delete the empty order shells
-        await odooRequest("pos.order", "unlink", [staleOrderIds]);
-        console.log(`[POS] Deleted ${staleOrderIds.length} stale order(s)`);
       }
     } catch (cleanupErr: any) {
-      // Non-fatal: log and continue. The create may still succeed if the
-      // specific products in this cart aren't locked by the stale lines.
+      // Non-fatal: log and continue. The unique ref means the new order will
+      // still be created cleanly even if cleanup fails.
       console.warn(
         "[POS] Stale order cleanup failed (non-fatal):",
         cleanupErr?.message,
@@ -1226,7 +1212,7 @@ export const createOrder = CatchAsyncError(
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
     } catch (err: any) {
       console.error("[POS] action_pos_order_paid failed:", err);
-      // Non-fatal: order exists, just log it
+      // Non-fatal: order exists in Odoo, payment marking can be retried
     }
 
     // ── Mirror order in MongoDB ───────────────────────────────────────────────
