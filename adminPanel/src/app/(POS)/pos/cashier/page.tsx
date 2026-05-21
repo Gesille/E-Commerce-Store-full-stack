@@ -50,12 +50,13 @@ function ClockDisplay() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CashierPage() {
-const [activeConfigId, setActiveConfigId] = useState<number | undefined>();
+  const [activeConfigId, setActiveConfigId] = useState<number | undefined>(
+    () => {
+      const saved = localStorage.getItem("pos_active_config_id");
+      return saved ? Number(saved) : undefined;
+    },
+  );
 
-useEffect(() => {
-  const saved = localStorage.getItem("pos_active_config_id");
-  if (saved) setActiveConfigId(Number(saved));
-}, []);
   const { session, loading, onSessionOpened, closeSession } =
     usePOSSession(activeConfigId);
 
@@ -77,28 +78,26 @@ useEffect(() => {
 
   const initialOrderId = 1;
 
-  const {
-    orders,
-    activeOrderId,
-    setOrders,
-    setActiveOrderId,
-    updateCart: persistCart,
-    removeOrder,
-  } = useHeldOrders();
+const {
+  orders,
+  activeOrderId,
+  setOrders,
+  setActiveOrderId,
+  updateCart: persistCart,
+  removeOrder,
+} = useHeldOrders();
 
   const initMeta: Record<number, OrderMeta> = {};
   initMeta[initialOrderId] = { customer: null, note: "" };
 
-  const [orderMeta, setOrderMeta] = useState<Record<number, OrderMeta>>(() => {
-    try {
-      const raw = localStorage.getItem("pos_order_meta");
-      return raw
-        ? JSON.parse(raw)
-        : { [orders[0].id]: { customer: null, note: "" } };
-    } catch {
-      return { [orders[0].id]: { customer: null, note: "" } };
-    }
-  });
+ const [orderMeta, setOrderMeta] = useState<Record<number, OrderMeta>>(() => {
+  try {
+    const raw = localStorage.getItem("pos_order_meta");
+    return raw ? JSON.parse(raw) : { [orders[0].id]: { customer: null, note: "" } };
+  } catch {
+    return { [orders[0].id]: { customer: null, note: "" } };
+  }
+});
 
   const [showCustomer, setShowCustomer] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -111,21 +110,23 @@ useEffect(() => {
 
   const activeOrder = orders.find((o) => o.id === activeOrderId);
   const activeMeta = orderMeta[activeOrderId] || { customer: null, note: "" };
-  const { subtotal, tax, total } = calcOrderTotals(activeOrder?.cart || []);
+ const {
+  subtotal,
+  tax,
+  total,
+} = calcOrderTotals(activeOrder?.cart || []);
 
   // ── Cart helpers ───────────────────────────────────────────────────────────
-  const updateCart = (newCart: CartItem[]) => {
-    persistCart(activeOrderId, newCart);
-  };
-  const setMeta = (
-    patch: Partial<{ customer: Customer | null; note: string }>,
-  ) => {
-    setOrderMeta((prev) => {
-      const next = { ...prev, [activeOrderId]: { ...activeMeta, ...patch } };
-      localStorage.setItem("pos_order_meta", JSON.stringify(next));
-      return next;
-    });
-  };
+const updateCart = (newCart: CartItem[]) => {
+  persistCart(activeOrderId, newCart);
+};
+const setMeta = (patch: Partial<{ customer: Customer | null; note: string }>) => {
+  setOrderMeta((prev) => {
+    const next = { ...prev, [activeOrderId]: { ...activeMeta, ...patch } };
+    localStorage.setItem("pos_order_meta", JSON.stringify(next));
+    return next;
+  });
+};
 
   const handleSetOrders = (newOrders: Order[]) => {
     setOrders(newOrders);
@@ -138,47 +139,47 @@ useEffect(() => {
       }
     });
   };
-  const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
-  const handlePaymentConfirm = async (lines: PaymentLine[]) => {
-    if (!activeOrder || !session) return;
+const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
+const handlePaymentConfirm = async (lines: PaymentLine[]) => {
+  if (!activeOrder || !session) return;
 
-    try {
-      const result = await createOrder({
-        cart: activeOrder.cart.map((item) => ({
-          productId: item.productId,
-          qty: item.qty,
-          price: item.price,
-          discount: item.discount ?? 0,
-          note: item.note ?? "",
-        })),
-        paymentLines: lines.map((l) => ({
-          method: l.method as "cash" | "card" | "bank",
-          amount: l.amount,
-        })),
-        cashierId:
-          typeof session.activeShift?.cashierId === "object"
-            ? session.activeShift.cashierId._id
-            : (session.activeShift?.cashierId ?? ""),
-        configId: activeConfigId!,
-        customerId: activeMeta.customer?.id ?? undefined,
-        note: activeMeta.note ?? "",
-      }).unwrap();
+  try {
+    const result = await createOrder({  
+      cart: activeOrder.cart.map((item) => ({
+        productId: item.productId,      
+        qty: item.qty,
+        price: item.price,
+        discount: item.discount ?? 0,
+        note: item.note ?? "",
+      })),
+      paymentLines: lines.map((l) => ({
+        method: l.method as "cash" | "card" | "bank", 
+        amount: l.amount,
+      })),
+      cashierId:
+        typeof session.activeShift?.cashierId === "object"
+          ? session.activeShift.cashierId._id
+          : (session.activeShift?.cashierId ?? ""),
+      configId: activeConfigId!,
+      customerId: activeMeta.customer?.id ?? undefined,
+      note: activeMeta.note ?? "",
+    }).unwrap();
 
-      setReceipt({
-        order: { ...activeOrder },
-        paymentLines: lines,
-        odooOrderId: result.orderId,
-      });
-      setShowPayment(false);
-    } catch (err: any) {
-      alert(err?.data?.message ?? "Order failed. Please try again.");
-    }
-  };
+    setReceipt({ 
+      order: { ...activeOrder },
+      paymentLines: lines,
+      odooOrderId: result.orderId, 
+    });
+    setShowPayment(false);
+  } catch (err: any) {
+    alert(err?.data?.message ?? "Order failed. Please try again.");
+  }
+};
 
-  const handleNewOrderAfterReceipt = () => {
-    removeOrder(activeOrderId);
-    setReceipt(null);
-  };
+const handleNewOrderAfterReceipt = () => {
+  removeOrder(activeOrderId);
+  setReceipt(null);
+};
 
   // ── Barcode scanner ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -397,15 +398,15 @@ useEffect(() => {
 
       {/* ── Payment Modal ──────────────────────────────────────────────────── */}
       {showPayment && activeOrder && (
-        <PaymentModal
-          total={total}
-          orderName={activeOrder.name}
-          customer={activeMeta.customer}
-          cart={activeOrder.cart}
-          onClose={() => setShowPayment(false)}
-          onConfirm={handlePaymentConfirm}
-          isSubmitting={isSubmitting}
-        />
+<PaymentModal
+  total={total}
+  orderName={activeOrder.name}
+  customer={activeMeta.customer}
+  cart={activeOrder.cart}
+  onClose={() => setShowPayment(false)}
+  onConfirm={handlePaymentConfirm}
+  isSubmitting={isSubmitting}
+/>
       )}
 
       {/* ── Note Modal ─────────────────────────────────────────────────────── */}
