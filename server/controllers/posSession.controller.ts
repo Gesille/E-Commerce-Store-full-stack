@@ -1266,7 +1266,7 @@ export const createOrder = CatchAsyncError(
 
             amount_return: amountReturn,
 
-            note: note || "",
+            internal_note: note || "",
           },
         ],
       );
