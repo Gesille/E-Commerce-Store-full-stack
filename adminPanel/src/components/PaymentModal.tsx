@@ -8,21 +8,7 @@ export type PaymentLine = {
   amount: number;
 };
 
-/**
- * PaymentModal
- *
- * Collects payment lines from the cashier.
- * When the cashier clicks "Validate", it calls onConfirm(lines).
- * The parent (POSPage) is responsible for calling createOrder via RTK Query.
- *
- * Props:
- *  total        — order total due
- *  orderName    — e.g. "Order 1"
- *  customer     — selected customer or null
- *  cart         — cart items (for the order summary)
- *  onClose      — dismiss without paying
- *  onConfirm    — called with final PaymentLine[] when payment is complete
- */
+
 export function PaymentModal({
   total,
   orderName,
@@ -44,7 +30,8 @@ export function PaymentModal({
     { method: "cash", amount: total },
   ]);
 
-  const paid = lines.reduce((s, l) => s + l.amount, 0);
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
   const change = paid - total;
   const remaining = total - paid;
   const isComplete = paid >= total;

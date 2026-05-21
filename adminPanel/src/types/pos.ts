@@ -60,13 +60,11 @@ export function calcLineTotal(item: CartItem) {
 }
 
 export function calcOrderTotals(cart: CartItem[]) {
-  const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
-
-  return {
-    subtotal,
-    tax: 0,
-    total: subtotal,
-  };
+  const subtotal = cart.reduce(
+    (s, item) => s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+    0,
+  );
+  return { subtotal, tax: 0, total: subtotal };
 }
 export interface CreateCustomerResponse {
   customerId: number;

@@ -1133,7 +1133,7 @@ export const createOrder = CatchAsyncError(
           session_id: session.id,
           partner_id: customerId ?? false,
           to_invoice: false,
-          ship_later: false,
+        
           pos_reference: odooRef,
           internal_note: note ?? "",
           lines: orderLines,
