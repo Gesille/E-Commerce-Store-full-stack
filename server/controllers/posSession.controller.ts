@@ -1004,7 +1004,9 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
-    // ───────────────── VALIDATION ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // VALIDATION
+    // ─────────────────────────────────────────────────────────────
 
     if (!cart?.length) {
       return next(new ErrorHandler("Cart is empty", 400));
@@ -1022,13 +1024,17 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("configId is required", 400));
     }
 
-    // ───────────────── CASHIER ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // CASHIER
+    // ─────────────────────────────────────────────────────────────
 
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
 
     if (!cashier) return;
 
-    // ───────────────── POS SESSION ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // POS SESSION
+    // ─────────────────────────────────────────────────────────────
 
     const session = await fetchOpenOdooSession(configId);
 
@@ -1036,7 +1042,9 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("No open POS session found", 409));
     }
 
-    // ───────────────── SHIFT ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // ACTIVE SHIFT
+    // ─────────────────────────────────────────────────────────────
 
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
@@ -1047,55 +1055,64 @@ export const createOrder = CatchAsyncError(
     if (!shift) {
       return next(
         new ErrorHandler(
-          "Cashier does not have an active shift",
+          "Cashier does not have an active shift.",
           409,
         ),
       );
     }
 
-    // ───────────────── RESOLVE PRODUCTS ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // RESOLVE PRODUCTS
+    // ─────────────────────────────────────────────────────────────
 
     const resolvedCart: Array<
       CartItem & {
         realProductId: number;
+        realProductName: string;
       }
     > = [];
 
     for (const item of cart) {
-      let realProductId = item.productId;
+      let realProductId = 0;
+      let realProductName = "";
+      let availableQty = 0;
 
-      // Try direct variant
-      let product = await odooRequest(
+      // Try exact product.product ID
+      const exactProduct = await odooRequest(
         "product.product",
         "search_read",
-        [[["id", "=", item.productId]]],
+        [[["id", "=", Number(item.productId)]]],
         {
           fields: [
             "id",
             "name",
             "qty_available",
-            "uom_id",
             "active",
+            "type",
           ],
           limit: 1,
         },
       );
 
-      // Maybe frontend sent template ID
-      if (!product.length) {
+      if (exactProduct.length > 0) {
+        realProductId = exactProduct[0].id;
+        realProductName = exactProduct[0].name;
+        availableQty = exactProduct[0].qty_available || 0;
+      } else {
+        // Maybe frontend sent template ID
         const variants = await odooRequest(
           "product.product",
           "search_read",
-          [[["product_tmpl_id", "=", item.productId]]],
+          [[["product_tmpl_id", "=", Number(item.productId)]]],
           {
             fields: [
               "id",
               "name",
               "qty_available",
-              "uom_id",
               "active",
+              "type",
             ],
-            limit: 1,
+            order: "id asc",
           },
         );
 
@@ -1108,16 +1125,29 @@ export const createOrder = CatchAsyncError(
           );
         }
 
-        realProductId = variants[0].id;
-        product = variants;
+        // Choose variant with stock
+        const stockedVariant =
+          variants.find(
+            (v: any) => (v.qty_available || 0) >= item.qty,
+          ) || variants[0];
+
+        realProductId = stockedVariant.id;
+        realProductName = stockedVariant.name;
+        availableQty = stockedVariant.qty_available || 0;
       }
 
-      const availableQty = product[0]?.qty_available ?? 0;
+      console.log(`
+      [POS] PRODUCT RESOLVED
+      Frontend ID: ${item.productId}
+      Real Product ID: ${realProductId}
+      Name: ${realProductName}
+      Available: ${availableQty}
+      `);
 
       if (availableQty < item.qty) {
         return next(
           new ErrorHandler(
-            `"${product[0]?.name}" only has ${availableQty} left in stock`,
+            `"${realProductName}" only has ${availableQty} left in stock`,
             400,
           ),
         );
@@ -1126,10 +1156,13 @@ export const createOrder = CatchAsyncError(
       resolvedCart.push({
         ...item,
         realProductId,
+        realProductName,
       });
     }
 
-    // ───────────────── TOTALS ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // TOTALS
+    // ─────────────────────────────────────────────────────────────
 
     let subtotal = 0;
 
@@ -1152,11 +1185,15 @@ export const createOrder = CatchAsyncError(
           qty: item.qty,
           price_unit: item.price,
           discount: item.discount ?? 0,
+
           tax_ids: [[6, 0, []]],
+
           price_subtotal:
             Math.round(lineSubtotal * 100) / 100,
+
           price_subtotal_incl:
             Math.round(lineSubtotal * 100) / 100,
+
           customer_note: item.note ?? "",
         },
       ];
@@ -1166,8 +1203,7 @@ export const createOrder = CatchAsyncError(
       Math.round(subtotal * TAX_RATE * 100) / 100;
 
     const amountTotal =
-      Math.round((subtotal + totalTaxAmount) * 100) /
-      100;
+      Math.round((subtotal + totalTaxAmount) * 100) / 100;
 
     const amountPaid = paymentLines.reduce(
       (s, p) => s + p.amount,
@@ -1176,8 +1212,7 @@ export const createOrder = CatchAsyncError(
 
     const amountReturn = Math.max(
       0,
-      Math.round((amountPaid - amountTotal) * 100) /
-        100,
+      Math.round((amountPaid - amountTotal) * 100) / 100,
     );
 
     if (amountPaid < amountTotal) {
@@ -1189,7 +1224,9 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ───────────────── PAYMENT LINES ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // PAYMENT IDS
+    // ─────────────────────────────────────────────────────────────
 
     let paymentIds: any[] = [];
 
@@ -1216,7 +1253,9 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler(err.message, 400));
     }
 
-    // ───────────────── CLEAN DRAFTS ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // CLEAN STALE DRAFTS
+    // ─────────────────────────────────────────────────────────────
 
     try {
       const staleIds: number[] = await odooRequest(
@@ -1239,7 +1278,7 @@ export const createOrder = CatchAsyncError(
         ]);
 
         console.log(
-          `[POS] Cancelled ${staleIds.length} stale drafts`,
+          `[POS] Cancelled ${staleIds.length} stale draft orders`,
         );
       }
     } catch (err: any) {
@@ -1249,7 +1288,9 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ───────────────── CREATE ORDER ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // CREATE ORDER
+    // ─────────────────────────────────────────────────────────────
 
     const odooRef = `POS-${shift._id}-${Date.now()}`;
 
@@ -1262,10 +1303,13 @@ export const createOrder = CatchAsyncError(
         [
           {
             session_id: session.id,
+
             partner_id: customerId ?? false,
+
             to_invoice: false,
 
             name: odooRef,
+
             pos_reference: odooRef,
 
             internal_note: note ?? "",
@@ -1294,7 +1338,7 @@ export const createOrder = CatchAsyncError(
       );
     } catch (err: any) {
       console.error(
-        "[POS] Failed to create order:",
+        "[POS] Failed creating order:",
         err,
       );
 
@@ -1316,7 +1360,9 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ───────────────── MARK PAID ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // MARK ORDER PAID
+    // ─────────────────────────────────────────────────────────────
 
     try {
       await odooRequest(
@@ -1330,79 +1376,29 @@ export const createOrder = CatchAsyncError(
       );
     } catch (err: any) {
       console.error(
-        "[POS] Failed to mark order paid:",
+        "[POS] Payment validation failed:",
         err,
       );
 
       return next(
         new ErrorHandler(
-          err?.message || "Payment validation failed",
+          err?.message || "Failed validating payment",
           500,
         ),
       );
     }
 
-    // ───────────────── WAIT FOR ODOO ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // WAIT FOR PICKING CREATION
+    // ─────────────────────────────────────────────────────────────
 
     await new Promise((resolve) =>
-      setTimeout(resolve, 4000),
+      setTimeout(resolve, 5000),
     );
 
-    // ───────────────── GET POS CONFIG ─────────────────
-
-    const config = await odooRequest(
-      "pos.config",
-      "search_read",
-      [[["id", "=", configId]]],
-      {
-        fields: ["picking_type_id"],
-        limit: 1,
-      },
-    );
-
-    const pickingTypeId =
-      config[0]?.picking_type_id?.[0];
-
-    if (!pickingTypeId) {
-      return next(
-        new ErrorHandler(
-          "POS picking type not configured",
-          500,
-        ),
-      );
-    }
-
-    // ───────────────── GET PICKING TYPE ─────────────────
-
-    const pickingType = await odooRequest(
-      "stock.picking.type",
-      "search_read",
-      [[["id", "=", pickingTypeId]]],
-      {
-        fields: [
-          "default_location_src_id",
-          "default_location_dest_id",
-        ],
-        limit: 1,
-      },
-    );
-
-    const sourceLocation =
-      pickingType[0]?.default_location_src_id?.[0];
-
-    const destLocation =
-      pickingType[0]?.default_location_dest_id?.[0];
-
-    if (!sourceLocation || !destLocation) {
-      return next(
-        new ErrorHandler(
-          "Picking locations missing",
-          500,
-        ),
-      );
-    }
-
-    // ───────────────── FIND PICKINGS ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // FIND PICKINGS
+    // ─────────────────────────────────────────────────────────────
 
     let pickingIds: number[] = [];
 
@@ -1410,10 +1406,17 @@ export const createOrder = CatchAsyncError(
       pickingIds = await odooRequest(
         "stock.picking",
         "search",
-        [[["origin", "ilike", odooRef]]],
+        [
+          [
+            ["origin", "ilike", odooRef],
+          ],
+        ],
       );
 
-      console.log("[POS] Found pickings:", pickingIds);
+      console.log(
+        "[POS] Pickings found:",
+        pickingIds,
+      );
     } catch (err) {
       console.error(
         "[POS] Failed searching pickings:",
@@ -1421,18 +1424,78 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ───────────────── MANUAL PICKING ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // CREATE PICKING MANUALLY IF NONE EXISTS
+    // ─────────────────────────────────────────────────────────────
 
     if (!pickingIds.length) {
       try {
+        console.log(
+          "[POS] No pickings found. Creating manually...",
+        );
+
+        // POS CONFIG
+        const config = await odooRequest(
+          "pos.config",
+          "search_read",
+          [
+            [["id", "=", configId]],
+            {
+              fields: ["picking_type_id"],
+              limit: 1,
+            },
+          ],
+        );
+
+        const pickingTypeId =
+          config[0]?.picking_type_id?.[0];
+
+        if (!pickingTypeId) {
+          throw new Error(
+            "POS picking type missing",
+          );
+        }
+
+        // PICKING TYPE
+        const pickingType = await odooRequest(
+          "stock.picking.type",
+          "search_read",
+          [
+            [["id", "=", pickingTypeId]],
+            {
+              fields: [
+                "default_location_src_id",
+                "default_location_dest_id",
+              ],
+              limit: 1,
+            },
+          ],
+        );
+
+        const sourceLocation =
+          pickingType[0]?.default_location_src_id?.[0];
+
+        const destLocation =
+          pickingType[0]?.default_location_dest_id?.[0];
+
+        if (!sourceLocation || !destLocation) {
+          throw new Error(
+            "Stock locations missing",
+          );
+        }
+
+        // CREATE PICKING
         const pickingId = await odooRequest(
           "stock.picking",
           "create",
           [
             {
               picking_type_id: pickingTypeId,
+
               location_id: sourceLocation,
+
               location_dest_id: destLocation,
+
               origin: odooRef,
             },
           ],
@@ -1442,42 +1505,18 @@ export const createOrder = CatchAsyncError(
           `[POS] Manual picking created: ${pickingId}`,
         );
 
-        // CREATE MOVES
+        // CREATE STOCK MOVES
         for (const item of resolvedCart) {
-          const productData = await odooRequest(
-            "product.product",
-            "search_read",
-            [[["id", "=", item.realProductId]]],
-            {
-              fields: ["uom_id", "name"],
-              limit: 1,
-            },
-          );
-
-          const uomId =
-            productData[0]?.uom_id?.[0];
-
-          if (!uomId) {
-            throw new Error(
-              `No UOM found for product ${item.realProductId}`,
-            );
-          }
-
-          // CREATE MOVE
-          const moveId = await odooRequest(
+          await odooRequest(
             "stock.move",
             "create",
             [
               {
-                name: item.name,
+                name: item.realProductName,
 
                 product_id: item.realProductId,
 
                 product_uom_qty: item.qty,
-
-                quantity_done: item.qty,
-
-                product_uom: uomId,
 
                 location_id: sourceLocation,
 
@@ -1487,63 +1526,27 @@ export const createOrder = CatchAsyncError(
               },
             ],
           );
-
-          console.log(
-            `[POS] MOVE CREATED: ${moveId}`,
-          );
-
-          // CONFIRM MOVE
-          await odooRequest(
-            "stock.move",
-            "_action_confirm",
-            [[moveId]],
-          );
-
-          // ASSIGN MOVE
-          await odooRequest(
-            "stock.move",
-            "_action_assign",
-            [[moveId]],
-          );
-
-          // GET MOVE LINES
-          const moveLines = await odooRequest(
-            "stock.move.line",
-            "search_read",
-            [[["move_id", "=", moveId]]],
-            {
-              fields: ["id"],
-            },
-          );
-
-          // SET DONE QTY
-          for (const line of moveLines) {
-            await odooRequest(
-              "stock.move.line",
-              "write",
-              [
-                [line.id],
-                {
-                  qty_done: item.qty,
-                },
-              ],
-            );
-          }
         }
 
         pickingIds = [pickingId];
       } catch (err: any) {
         console.error(
-          "[POS] Manual picking creation failed:",
+          "[POS] Manual picking failed:",
           err,
         );
       }
     }
 
-    // ───────────────── VALIDATE PICKINGS ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // VALIDATE PICKINGS
+    // ─────────────────────────────────────────────────────────────
 
     for (const pickingId of pickingIds) {
       try {
+        console.log(
+          `[POS] Validating picking ${pickingId}`,
+        );
+
         await odooRequest(
           "stock.picking",
           "action_confirm",
@@ -1556,18 +1559,27 @@ export const createOrder = CatchAsyncError(
           [[pickingId]],
         );
 
+        // READ MOVE LINES
         const moveLines = await odooRequest(
           "stock.move.line",
           "search_read",
-          [[["picking_id", "=", pickingId]]],
-          {
-            fields: [
-              "id",
-              "product_uom_qty",
-            ],
-          },
+          [
+            [["picking_id", "=", pickingId]],
+            {
+              fields: [
+                "id",
+                "product_uom_qty",
+              ],
+            },
+          ],
         );
 
+        console.log(
+          "[POS] Move lines:",
+          moveLines,
+        );
+
+        // SET QTY DONE
         for (const line of moveLines) {
           await odooRequest(
             "stock.move.line",
@@ -1582,15 +1594,11 @@ export const createOrder = CatchAsyncError(
           );
         }
 
-        const validateResult = await odooRequest(
+        // VALIDATE PICKING
+        await odooRequest(
           "stock.picking",
           "button_validate",
           [[pickingId]],
-        );
-
-        console.log(
-          "[POS] PICKING VALIDATION RESULT:",
-          validateResult,
         );
 
         console.log(
@@ -1604,7 +1612,9 @@ export const createOrder = CatchAsyncError(
       }
     }
 
-    // ───────────────── MONGO MIRROR ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // MONGO ORDER
+    // ─────────────────────────────────────────────────────────────
 
     let mongoOrder: any = null;
 
@@ -1622,10 +1632,15 @@ export const createOrder = CatchAsyncError(
 
         cart: resolvedCart.map((item) => ({
           productId: item.realProductId,
-          name: item.name,
+
+          name: item.realProductName,
+
           price: item.price,
+
           qty: item.qty,
+
           discount: item.discount ?? 0,
+
           note: item.note ?? "",
         })),
 
@@ -1656,7 +1671,9 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ───────────────── UPDATE SHIFT ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // UPDATE SHIFT
+    // ─────────────────────────────────────────────────────────────
 
     await CashierShiftLog.findByIdAndUpdate(
       shift._id,
@@ -1668,10 +1685,13 @@ export const createOrder = CatchAsyncError(
       },
     );
 
-    // ───────────────── RESPONSE ─────────────────
+    // ─────────────────────────────────────────────────────────────
+    // RESPONSE
+    // ─────────────────────────────────────────────────────────────
 
     res.status(201).json({
       success: true,
+
       message:
         "Order created successfully and stock updated",
 
