@@ -1041,23 +1041,24 @@ export const createOrder = CatchAsyncError(
       cashierId,
       customerId,
       note,
+      configId,
     }: {
       cart: CartItem[];
       paymentLines: PaymentLine[];
       cashierId: string;
       customerId?: number;
       note?: string;
+      configId: number;
     } = req.body;
 
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
+    if (!configId) return next(new ErrorHandler("configId is required", 400));
 
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
-
-    const { configId } = req.body;
 
     const session = await fetchOpenOdooSession(configId);
     if (!session)
@@ -1078,6 +1079,7 @@ export const createOrder = CatchAsyncError(
       );
     }
 
+    // ── Totals ────────────────────────────────────────────────────────────────
     const amountPaid = paymentLines.reduce(
       (s: number, p: PaymentLine) => s + p.amount,
       0,
@@ -1091,6 +1093,7 @@ export const createOrder = CatchAsyncError(
 
     const amountReturn = Math.max(0, amountPaid - subtotal);
 
+    // ── Order lines ───────────────────────────────────────────────────────────
     const orderLines = cart.map((item: CartItem) => [
       0,
       0,
@@ -1103,49 +1106,67 @@ export const createOrder = CatchAsyncError(
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
         price_subtotal_incl:
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-         customer_note: item.note ?? "",
+        customer_note: item.note ?? "",
       },
     ]);
 
+    // ── Payment lines ─────────────────────────────────────────────────────────
+    let paymentIds: any[];
+    try {
+      paymentIds = paymentLines.map((p: PaymentLine) => {
+        const methodId = PAYMENT_METHOD_IDS[p.method];
+        if (!methodId)
+          throw new Error(`Unknown payment method: ${p.method}`);
+        return [0, 0, { amount: p.amount, payment_method_id: methodId }];
+      });
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 400));
+    }
+
     const odooRef = `SHIFT-${shift._id}`;
 
-  const orderId = await odooRequest("pos.order", "create", [
-  {
-    session_id: session.id,
-    partner_id: customerId ?? false,
-    to_invoice: false,      
-    pos_reference: odooRef,
-   internal_note: note ?? "", 
-    lines: orderLines,
-    amount_paid: amountPaid,
-    amount_total: subtotal,
-    amount_tax: 0,
-    amount_return: amountReturn,
-  },
-]);
+    // ── Create order in Odoo ──────────────────────────────────────────────────
+    let orderId: number;
+    try {
+      orderId = await odooRequest("pos.order", "create", [
+        {
+          session_id: session.id,
+          partner_id: customerId ?? false,
+          to_invoice: false,
+          ship_later: false,
+          pos_reference: odooRef,
+          internal_note: note ?? "",
+          lines: orderLines,
+          payment_ids: paymentIds,
+          amount_paid: amountPaid,
+          amount_total: subtotal,
+          amount_tax: 0,
+          amount_return: amountReturn,
+        },
+      ]);
+    } catch (err: any) {
+      console.error("[POS] Odoo order create failed:", err);
+      return next(
+        new ErrorHandler(
+          err?.message ?? "Failed to create order in Odoo",
+          500,
+        ),
+      );
+    }
 
     if (!orderId) {
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
     }
 
-    for (const p of paymentLines) {
-      const methodId = PAYMENT_METHOD_IDS[p.method];
-      if (!methodId) {
-        return next(
-          new ErrorHandler(`Unknown payment method: ${p.method}`, 400),
-        );
-      }
-      await odooRequest("pos.payment", "create", [
-        {
-          pos_order_id: orderId,
-          amount: p.amount,
-          payment_method_id: methodId,
-        },
-      ]);
+    // ── Mark order as paid in Odoo ────────────────────────────────────────────
+    try {
+      await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
+    } catch (err: any) {
+      console.error("[POS] action_pos_order_paid failed:", err);
+      // Order was created — don't block the response, just log it
     }
 
-    await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
-
+    // ── Mirror order in MongoDB ───────────────────────────────────────────────
     let mongoOrder: any = null;
     try {
       mongoOrder = await POSOrder.create({
@@ -1180,6 +1201,7 @@ export const createOrder = CatchAsyncError(
       );
     }
 
+    // ── Update shift totals ───────────────────────────────────────────────────
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
       $inc: { totalOrders: 1, totalSales: subtotal },
     });
