@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { isAuthenticated, authorizeRoles } from "../middleware/auth.js";
-import { createOrder } from "../controllers/order.controller.js";
+
 import {
   openSession,
   closeSession,
@@ -17,7 +17,7 @@ import {
   getCustomers,
   createCustomer,
   getPaymentMethods,
-  
+  createOrder,
   confirmOpeningBalance,
   getOrderReceiptPdf,
   createOdooInvoice,
