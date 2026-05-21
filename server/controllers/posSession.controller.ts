@@ -1097,7 +1097,6 @@ export const createOrder = CatchAsyncError(
 
       const realProduct = product[0];
 
-      // ✅ Check stock at the specific POS source location via stock.quant
       const quant = await odooRequest(
         "stock.quant",
         "search_read",
@@ -1107,29 +1106,26 @@ export const createOrder = CatchAsyncError(
             ["location_id", "=", sourceLocationId],
           ],
         ],
-        {
-          fields: ["quantity", "reserved_quantity"],
-          limit: 1,
-        },
+        { fields: ["quantity", "reserved_quantity", "location_id"], limit: 1 },
       );
-
+      console.log("[QUANT RESULT]", JSON.stringify(quant, null, 2));
+      console.log("[SOURCE LOCATION]", sourceLocationId);
+      const allQuants = await odooRequest(
+        "stock.quant",
+        "search_read",
+        [[["product_id", "=", realProduct.id]]],
+        { fields: ["quantity", "reserved_quantity", "location_id"] },
+      );
+      console.log(
+        "[ALL QUANTS FOR PRODUCT]",
+        JSON.stringify(allQuants, null, 2),
+      );
       const availableQty = quant.length
         ? Math.max(
             0,
             (quant[0].quantity || 0) - (quant[0].reserved_quantity || 0),
           )
         : 0;
-
-      console.log(
-        "[STOCK CHECK]",
-        realProduct.name,
-        "| LOCATION:",
-        sourceLocationId,
-        "| AVAILABLE:",
-        availableQty,
-        "| REQUESTED:",
-        item.qty,
-      );
 
       // Out of stock
       if (availableQty <= 0) {
