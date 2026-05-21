@@ -200,62 +200,62 @@ export const openSession = CatchAsyncError(
       });
     }
 
-    if (session.state !== "opened") {
-      try {
-        await odooRequest("pos.session", "action_pos_session_open", [
-          [sessionId],
-        ]);
-      } catch (_) {}
+    // if (session.state !== "opened") {
+    //   try {
+    //     await odooRequest("pos.session", "action_pos_session_open", [
+    //       [sessionId],
+    //     ]);
+    //   } catch (_) {}
 
-      const openedSessionData = await odooRequest(
-        "pos.session",
-        "read",
-        [[sessionId]],
-        {
-          fields: [
-            "id",
-            "name",
-            "state",
-            "config_id",
-            "user_id",
-            "start_at",
-            "cash_register_balance_start",
-          ],
-        },
-      );
+    //   const openedSessionData = await odooRequest(
+    //     "pos.session",
+    //     "read",
+    //     [[sessionId]],
+    //     {
+    //       fields: [
+    //         "id",
+    //         "name",
+    //         "state",
+    //         "config_id",
+    //         "user_id",
+    //         "start_at",
+    //         "cash_register_balance_start",
+    //       ],
+    //     },
+    //   );
 
-      const openedSession = openedSessionData?.[0];
+    //   const openedSession = openedSessionData?.[0];
 
-      if (openedSession?.state !== "opened") {
-        return next(
-          new ErrorHandler(
-            `Session could not be opened. Current state: ${openedSession?.state}`,
-            500,
-          ),
-        );
-      }
+    //   if (openedSession?.state !== "opened") {
+    //     return next(
+    //       new ErrorHandler(
+    //         `Session could not be opened. Current state: ${openedSession?.state}`,
+    //         500,
+    //       ),
+    //     );
+    //   }
 
-      const shiftLog = await CashierShiftLog.create({
-        odooSessionId: sessionId,
-        cashierId: cashier._id,
-        odooPartnerId: cashier.odooPartnerId,
-        state: "active" as ShiftState,
-        stateHistory: [
-          {
-            toState: "active",
-            at: new Date(),
-            reason: "Session opened",
-          },
-        ],
-      });
-      const populated = await populateShift(shiftLog._id);
-      return res.status(201).json({
-        success: true,
-        requiresOpeningBalance: false,
-        session: openedSession,
-        activeShift: populated,
-      });
-    }
+    //   const shiftLog = await CashierShiftLog.create({
+    //     odooSessionId: sessionId,
+    //     cashierId: cashier._id,
+    //     odooPartnerId: cashier.odooPartnerId,
+    //     state: "active" as ShiftState,
+    //     stateHistory: [
+    //       {
+    //         toState: "active",
+    //         at: new Date(),
+    //         reason: "Session opened",
+    //       },
+    //     ],
+    //   });
+    //   const populated = await populateShift(shiftLog._id);
+    //   return res.status(201).json({
+    //     success: true,
+    //     requiresOpeningBalance: false,
+    //     session: openedSession,
+    //     activeShift: populated,
+    //   });
+    // }
 
     // Session already opened on creation
     const shiftLog = await CashierShiftLog.create({
