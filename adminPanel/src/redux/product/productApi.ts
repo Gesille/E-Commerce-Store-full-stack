@@ -12,7 +12,7 @@ export const productApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
-      providesTags: ["Products"], // ✅ tag the cache
+      providesTags: ["Products"], 
       transformResponse: (response: { success: boolean; products: any[] }) =>
         response.products.map((p) => ({
           id: p.id,
@@ -27,6 +27,7 @@ export const productApi = apiSlice.injectEndpoints({
           colors: p.colors ?? [],
           materials: p.materials ?? [],
         })),
+        
     }),
 
     updateProduct: builder.mutation({

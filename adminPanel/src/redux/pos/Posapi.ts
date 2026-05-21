@@ -134,6 +134,7 @@ export const posApi = apiSlice.injectEndpoints({
         url: "products",
         credentials: "include" as const,
       }),
+       providesTags: ["Products"],
     }),
 
     getCustomers: builder.query<CustomersResponse, string | void>({
