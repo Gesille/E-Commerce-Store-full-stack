@@ -1231,7 +1231,7 @@ export const createOrder = CatchAsyncError(
             description_picking: item.realProductName,
             product_id: item.realProductId,
             product_uom_qty: item.qty,
-           product_uom: item.uomId,
+        
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
             picking_id: pickingId,
@@ -1244,7 +1244,7 @@ export const createOrder = CatchAsyncError(
           {
             move_id: moveId,
             product_id: item.realProductId,
-            product_uom_id: item.uomId,
+            
             qty_done: item.qty,
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
