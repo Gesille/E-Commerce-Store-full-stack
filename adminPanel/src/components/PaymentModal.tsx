@@ -8,9 +8,14 @@ export type PaymentLine = {
   amount: number;
 };
 
+const TAX_RATE = 0.1; // 10% — keep in sync with backend
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 
 export function PaymentModal({
-  total,
+  total, // this is the TAX-INCLUSIVE total from calcOrderTotals
   orderName,
   customer,
   cart,
@@ -26,24 +31,28 @@ export function PaymentModal({
   onConfirm: (lines: PaymentLine[]) => void;
   isSubmitting?: boolean;
 }) {
+  // Derive subtotal and tax from the tax-inclusive total for display
+  // total = subtotal * (1 + TAX_RATE)  →  subtotal = total / (1 + TAX_RATE)
+  const subtotalDisplay = round2(total / (1 + TAX_RATE));
+  const taxDisplay = round2(total - subtotalDisplay);
+
   const [lines, setLines] = useState<PaymentLine[]>([
     { method: "cash", amount: total },
   ]);
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
-  const change = paid - total;
-  const remaining = total - paid;
+  const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
+  const change = round2(paid - total);
+  const remaining = round2(total - paid);
   const isComplete = paid >= total;
 
   const addMethod = (method: PaymentLine["method"]) => {
     if (lines.find((l) => l.method === method)) return;
-    const rem = Math.max(0, total - lines.reduce((s, l) => s + l.amount, 0));
+    const rem = round2(Math.max(0, total - lines.reduce((s, l) => s + l.amount, 0)));
     setLines([...lines, { method, amount: rem }]);
   };
 
   const updateAmount = (method: PaymentLine["method"], val: string) => {
-    const num = parseFloat(val) || 0;
+    const num = round2(parseFloat(val) || 0);
     setLines(lines.map((l) => (l.method === method ? { ...l, amount: num } : l)));
   };
 
@@ -82,7 +91,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           fontFamily: "'DM Sans', sans-serif",
         }}
       >
-        {/* Header */}
+        {/* ── Header ─────────────────────────────────────────────────────── */}
         <div
           style={{
             display: "flex",
@@ -93,9 +102,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           }}
         >
           <div>
-            <div
-              style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}
-            >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
               Payment — {orderName}
             </div>
             {customer && (
@@ -118,7 +125,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           </button>
         </div>
 
-        {/* Order summary */}
+        {/* ── Order summary ───────────────────────────────────────────────── */}
         <div
           style={{
             padding: "12px 24px",
@@ -167,14 +174,47 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
                   </span>
                 ) : null}
               </span>
-              <span style={{ fontWeight: 600 }}>
-                ${fmt(calcLineTotal(item))}
-              </span>
+              <span style={{ fontWeight: 600 }}>${fmt(calcLineTotal(item))}</span>
             </div>
           ))}
+
+          {/* Subtotal / Tax breakdown */}
+          <div
+            style={{
+              borderTop: "1px dashed #e2e8f0",
+              marginTop: 8,
+              paddingTop: 8,
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 12,
+                color: "#64748b",
+              }}
+            >
+              <span>Subtotal</span>
+              <span>${fmt(subtotalDisplay)}</span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 12,
+                color: "#64748b",
+              }}
+            >
+              <span>Tax ({(TAX_RATE * 100).toFixed(0)}%)</span>
+              <span>${fmt(taxDisplay)}</span>
+            </div>
+          </div>
         </div>
 
-        {/* Amount due */}
+        {/* ── Amount due ──────────────────────────────────────────────────── */}
         <div
           style={{
             padding: "14px 24px",
@@ -185,6 +225,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
             style={{
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
               fontSize: 14,
               color: "#64748b",
               marginBottom: 4,
@@ -202,6 +243,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
               ${fmt(total)}
             </span>
           </div>
+
           {isComplete && change > 0.005 && (
             <div
               style={{
@@ -231,7 +273,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           )}
         </div>
 
-        {/* Payment lines */}
+        {/* ── Payment lines ───────────────────────────────────────────────── */}
         <div style={{ padding: "16px 24px" }}>
           <div
             style={{
@@ -245,6 +287,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           >
             Payment Methods
           </div>
+
           {lines.map((line) => (
             <div
               key={line.method}
@@ -281,12 +324,8 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
                   fontFamily: "'DM Mono', monospace",
                   color: "#0f172a",
                 }}
-                onFocus={(e) =>
-                  (e.currentTarget.style.borderColor = "#3b82f6")
-                }
-                onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = "#e2e8f0")
-                }
+                onFocus={(e) => (e.currentTarget.style.borderColor = "#3b82f6")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
               />
               {lines.length > 1 && (
                 <button
@@ -299,12 +338,8 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
                     fontSize: 14,
                     padding: 0,
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.color = "#ef4444")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.color = "#cbd5e1")
-                  }
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#cbd5e1")}
                 >
                   ✕
                 </button>
@@ -339,7 +374,7 @@ const paid = round2(lines.reduce((s, l) => s + l.amount, 0));
           </div>
         </div>
 
-        {/* Confirm button */}
+        {/* ── Confirm button ──────────────────────────────────────────────── */}
         <div style={{ padding: "0 24px 24px" }}>
           <button
             onClick={() => isComplete && !isSubmitting && onConfirm(lines)}
