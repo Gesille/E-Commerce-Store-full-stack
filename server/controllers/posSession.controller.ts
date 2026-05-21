@@ -1243,7 +1243,7 @@ export const createOrder = CatchAsyncError(
       for (const item of resolvedCart) {
         const moveId = await odooRequest("stock.move", "create", [
           {
-            name: item.realProductName,
+          description_picking: item.realProductName,
             product_id: item.realProductId,
             product_uom_qty: item.qty,
             product_uom: item.uomId,
