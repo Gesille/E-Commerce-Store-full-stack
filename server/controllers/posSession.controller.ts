@@ -191,11 +191,9 @@ async function validatePicking(pickingId: number): Promise<void> {
   }
 
   // 6. Validate — may return a backorder wizard instead of True
-  const validateResult = await odooRequest(
-    "stock.picking",
-    "button_validate",
-    [[pickingId]],
-  );
+  const validateResult = await odooRequest("stock.picking", "button_validate", [
+    [pickingId],
+  ]);
 
   if (
     validateResult &&
@@ -214,11 +212,9 @@ async function validatePicking(pickingId: number): Promise<void> {
       );
 
       // process_cancel_backorder = validate immediately, no backorder created
-      await odooRequest(
-        validateResult.res_model,
-        "process_cancel_backorder",
-        [[wizardId]],
-      );
+      await odooRequest(validateResult.res_model, "process_cancel_backorder", [
+        [wizardId],
+      ]);
     } catch (wizardErr: any) {
       console.warn(
         `[POS] Backorder wizard dismiss failed (non-fatal):`,
@@ -385,10 +381,7 @@ export const openSession = CatchAsyncError(
 
     if (!session) {
       return next(
-        new ErrorHandler(
-          "Session was created but could not be retrieved",
-          500,
-        ),
+        new ErrorHandler("Session was created but could not be retrieved", 500),
       );
     }
 
@@ -698,7 +691,11 @@ export const closeSession = CatchAsyncError(
       {
         $set: { endTime: now, state: "closed" },
         $push: {
-          stateHistory: { toState: "closed", at: now, reason: "Session closed" },
+          stateHistory: {
+            toState: "closed",
+            at: now,
+            reason: "Session closed",
+          },
         },
       },
     );
@@ -982,7 +979,6 @@ export const getActiveShifts = CatchAsyncError(
   },
 );
 
-
 export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
@@ -1042,7 +1038,7 @@ export const createOrder = CatchAsyncError(
 
     if (!shift) {
       return next(
-        new ErrorHandler("Cashier does not have an active shift.", 409)
+        new ErrorHandler("Cashier does not have an active shift.", 409),
       );
     }
 
@@ -1052,7 +1048,7 @@ export const createOrder = CatchAsyncError(
       "pos.config",
       "search_read",
       [[["id", "=", configId]]],
-      { fields: ["picking_type_id"], limit: 1 }
+      { fields: ["picking_type_id"], limit: 1 },
     );
 
     const pickingTypeId = posConfig?.[0]?.picking_type_id?.[0];
@@ -1070,13 +1066,11 @@ export const createOrder = CatchAsyncError(
       {
         fields: ["default_location_src_id", "default_location_dest_id"],
         limit: 1,
-      }
+      },
     );
 
-    const sourceLocationId =
-      pickingType?.[0]?.default_location_src_id?.[0];
-    const destLocationId =
-      pickingType?.[0]?.default_location_dest_id?.[0];
+    const sourceLocationId = pickingType?.[0]?.default_location_src_id?.[0];
+    const destLocationId = pickingType?.[0]?.default_location_dest_id?.[0];
 
     if (!sourceLocationId || !destLocationId) {
       return next(new ErrorHandler("Stock locations missing", 500));
@@ -1091,16 +1085,13 @@ export const createOrder = CatchAsyncError(
       const product = await odooRequest(
         "product.product",
         "search_read",
-        [[["id", "=", Number(item.productId)]]],
-        {
-          fields: ["id", "name", "uom_id"],
-          limit: 1,
-        }
+        [[["product_tmpl_id", "=", Number(item.productId)]]],
+        { fields: ["id", "name", "uom_id"], limit: 1 },
       );
-console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo returned:", product[0]?.name);
+
       if (!product.length) {
         return next(
-          new ErrorHandler(`Product ${item.productId} not found`, 400)
+          new ErrorHandler(`Product ${item.productId} not found`, 400),
         );
       }
 
@@ -1110,20 +1101,22 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
       const quant = await odooRequest(
         "stock.quant",
         "search_read",
-        [[
-          ["product_id", "=", realProduct.id],
-          ["location_id", "=", sourceLocationId],
-        ]],
+        [
+          [
+            ["product_id", "=", realProduct.id],
+            ["location_id", "=", sourceLocationId],
+          ],
+        ],
         {
           fields: ["quantity", "reserved_quantity"],
           limit: 1,
-        }
+        },
       );
 
       const availableQty = quant.length
         ? Math.max(
             0,
-            (quant[0].quantity || 0) - (quant[0].reserved_quantity || 0)
+            (quant[0].quantity || 0) - (quant[0].reserved_quantity || 0),
           )
         : 0;
 
@@ -1135,13 +1128,13 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
         "| AVAILABLE:",
         availableQty,
         "| REQUESTED:",
-        item.qty
+        item.qty,
       );
 
       // Out of stock
       if (availableQty <= 0) {
         return next(
-          new ErrorHandler(`"${realProduct.name}" is out of stock`, 400)
+          new ErrorHandler(`"${realProduct.name}" is out of stock`, 400),
         );
       }
 
@@ -1150,8 +1143,8 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
         return next(
           new ErrorHandler(
             `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`,
-            400
-          )
+            400,
+          ),
         );
       }
 
@@ -1172,8 +1165,7 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
       const lineSubtotal =
         item.price * item.qty * (1 - (item.discount || 0) / 100);
 
-      const lineTax =
-        Math.round(lineSubtotal * TAX_RATE * 100) / 100;
+      const lineTax = Math.round(lineSubtotal * TAX_RATE * 100) / 100;
 
       subtotal += lineSubtotal;
       totalTaxAmount += lineTax;
@@ -1191,13 +1183,14 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
       ];
     });
 
-    const amountTotal =
-      Math.round((subtotal + totalTaxAmount) * 100) / 100;
+    const amountTotal = Math.round((subtotal + totalTaxAmount) * 100) / 100;
 
     const amountPaid = paymentLines.reduce((sum, p) => sum + p.amount, 0);
 
-    const amountReturn =
-      Math.max(0, Math.round((amountPaid - amountTotal) * 100) / 100);
+    const amountReturn = Math.max(
+      0,
+      Math.round((amountPaid - amountTotal) * 100) / 100,
+    );
 
     if (amountPaid < amountTotal) {
       return next(new ErrorHandler("Order not fully paid", 400));
@@ -1223,33 +1216,26 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
     let orderId: number;
 
     try {
-      orderId = await odooRequest(
-        "pos.order",
-        "create",
-        [
-          {
-            session_id: session.id,
-            partner_id: customerId || false,
-            pos_reference: odooRef,
-            name: odooRef,
-            lines: orderLines,
-            payment_ids: payment_ids,
-            amount_paid: amountPaid,
-            amount_total: amountTotal,
-            amount_tax: totalTaxAmount,
-            amount_return: amountReturn,
-          },
-        ]
-      );
+      orderId = await odooRequest("pos.order", "create", [
+        {
+          session_id: session.id,
+          partner_id: customerId || false,
+          pos_reference: odooRef,
+          name: odooRef,
+          lines: orderLines,
+          payment_ids: payment_ids,
+          amount_paid: amountPaid,
+          amount_total: amountTotal,
+          amount_tax: totalTaxAmount,
+          amount_return: amountReturn,
+        },
+      ]);
 
       console.log("[POS] ORDER CREATED:", orderId);
     } catch (err: any) {
       console.error(err);
       return next(
-        new ErrorHandler(
-          err?.message || "Failed to create POS order",
-          500
-        )
+        new ErrorHandler(err?.message || "Failed to create POS order", 500),
       );
     }
 
@@ -1266,37 +1252,29 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
     // ─── FORCE STOCK DECREASE ─────────────────────────────────────
 
     try {
-      const pickingId = await odooRequest(
-        "stock.picking",
-        "create",
-        [
-          {
-            picking_type_id: pickingTypeId,
-            location_id: sourceLocationId,
-            location_dest_id: destLocationId,
-            origin: odooRef,
-          },
-        ]
-      );
+      const pickingId = await odooRequest("stock.picking", "create", [
+        {
+          picking_type_id: pickingTypeId,
+          location_id: sourceLocationId,
+          location_dest_id: destLocationId,
+          origin: odooRef,
+        },
+      ]);
 
       console.log("[PICKING CREATED]", pickingId);
 
       for (const item of resolvedCart) {
-        const moveId = await odooRequest(
-          "stock.move",
-          "create",
-          [
-            {
-              name: item.realProductName,
-              product_id: item.realProductId,
-              product_uom_qty: item.qty,
-              product_uom: item.uomId,
-              location_id: sourceLocationId,
-              location_dest_id: destLocationId,
-              picking_id: pickingId,
-            },
-          ]
-        );
+        const moveId = await odooRequest("stock.move", "create", [
+          {
+            name: item.realProductName,
+            product_id: item.realProductId,
+            product_uom_qty: item.qty,
+            product_uom: item.uomId,
+            location_id: sourceLocationId,
+            location_dest_id: destLocationId,
+            picking_id: pickingId,
+          },
+        ]);
 
         console.log("[MOVE CREATED]", moveId);
       }
@@ -1308,15 +1286,14 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
         "stock.move.line",
         "search_read",
         [[["picking_id", "=", pickingId]]],
-        { fields: ["id", "product_uom_qty"] }
+        { fields: ["id", "product_uom_qty"] },
       );
 
       for (const line of moveLines) {
-        await odooRequest(
-          "stock.move.line",
-          "write",
-          [[line.id], { qty_done: line.product_uom_qty }]
-        );
+        await odooRequest("stock.move.line", "write", [
+          [line.id],
+          { qty_done: line.product_uom_qty },
+        ]);
       }
 
       await odooRequest("stock.picking", "button_validate", [[pickingId]]);
@@ -1343,7 +1320,7 @@ console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo re
       message: "Order created successfully and stock updated",
       orderId,
     });
-  }
+  },
 );
 
 export const getSessionOrders = CatchAsyncError(
@@ -1406,10 +1383,7 @@ export const getSessionReport = CatchAsyncError(
       }),
     );
 
-    const totalOrders = cashierSummaries.reduce(
-      (s, l) => s + l.totalOrders,
-      0,
-    );
+    const totalOrders = cashierSummaries.reduce((s, l) => s + l.totalOrders, 0);
     const totalSales = cashierSummaries.reduce((s, l) => s + l.totalSales, 0);
 
     res.status(200).json({
