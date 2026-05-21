@@ -144,41 +144,60 @@ export default function CashierPage() {
 
   const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
 
-  const handlePaymentConfirm = async (lines: PaymentLine[]) => {
-    if (!activeOrder || !session) return;
 
-    try {
-      const result = await createOrder({
-        cart: activeOrder.cart.map((item) => ({
-          productId: item.productId,
-          qty: item.qty,
-          price: item.price,
-          discount: item.discount ?? 0,
-          note: item.note ?? "",
-        })),
-        paymentLines: lines.map((l) => ({
-          method: l.method as "cash" | "card" | "bank",
-          amount: l.amount,
-        })),
-        cashierId:
-          typeof session.activeShift?.cashierId === "object"
-            ? session.activeShift.cashierId._id
-            : (session.activeShift?.cashierId ?? ""),
-        configId: activeConfigId!,
-        customerId: activeMeta.customer?.id ?? undefined,
-        note: activeMeta.note ?? "",
-      }).unwrap();
+const handlePaymentConfirm = async (lines: PaymentLine[]) => {
+  if (!activeOrder || !session) return;
 
-      setReceipt({
-        order: { ...activeOrder },
-        paymentLines: lines,
-        odooOrderId: result.orderId,
-      });
-      setShowPayment(false);
-    } catch (err: any) {
-      alert(err?.data?.message ?? "Order failed. Please try again.");
-    }
-  };
+  // ── Resolve cashierId safely ────────────────────────────────────────────
+  const rawCashierId = session.activeShift?.cashierId;
+
+  const cashierId: string =
+    rawCashierId == null
+      ? ""
+      : typeof rawCashierId === "object"
+      ? (rawCashierId as any)._id ?? ""
+      : String(rawCashierId);
+
+  if (!cashierId) {
+    alert("No active cashier shift found. Please switch cashier or reopen the session.");
+    return; // stop before sending a bad request
+  }
+
+  if (!activeConfigId) {
+    alert("No POS config selected. Please reopen the session.");
+    return;
+  }
+
+  // ── Submit order ────────────────────────────────────────────────────────
+  try {
+    const result = await createOrder({
+      cart: activeOrder.cart.map((item) => ({
+        productId: item.productId,
+        qty: item.qty,
+        price: item.price,
+        discount: item.discount ?? 0,
+        note: item.note ?? "",
+      })),
+      paymentLines: lines.map((l) => ({
+        method: l.method as "cash" | "card" | "bank",
+        amount: l.amount,
+      })),
+      cashierId,
+      configId: activeConfigId,
+      customerId: activeMeta.customer?.id ?? undefined,
+      note: activeMeta.note ?? "",
+    }).unwrap();
+
+    setReceipt({
+      order: { ...activeOrder },
+      paymentLines: lines,
+      odooOrderId: result.orderId,
+    });
+    setShowPayment(false);
+  } catch (err: any) {
+    alert(err?.data?.message ?? "Order failed. Please try again.");
+  }
+};
 
   const handleNewOrderAfterReceipt = () => {
     removeOrder(activeOrderId);

@@ -1097,7 +1097,7 @@ export const createOrder = CatchAsyncError(
 
     const amountReturn = Math.max(0, amountPaid - subtotal);
 
-    // ── Build order lines (no product_id nesting — flat values only) ──────────
+    // ── Build order lines ─────────────────────────────────────────────────────
     const orderLines = cart.map((item: CartItem) => {
       const lineSubtotal =
         item.price * item.qty * (1 - (item.discount ?? 0) / 100);
@@ -1129,13 +1129,67 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler(err.message, 400));
     }
 
-    const odooRef = `SHIFT-${shift._id}`;
+    // ── Use a unique ref per request, not per shift ───────────────────────────
+    // A per-shift ref meant every order in the same shift reused the same
+    // pos_reference, causing Odoo to find & try to overwrite the previous
+    // order's lines → triggering the product constraint error.
+    const odooRef = `POS-${shift._id}-${Date.now()}`;
 
-    // ── Step 1: Create the order shell (no lines, no payments yet) ────────────
-    // Sending lines & payment_ids in the same `create` call can trigger the
-    // "another model is using the record" constraint when a prior failed order
-    // left orphaned pos.order.line rows for the same products.
-    // Creating the shell first guarantees a fresh order ID before attaching lines.
+    // ── Purge any stuck draft orders for this session before creating ─────────
+    // This is the primary fix: stale draft/cancel orders left by prior failed
+    // attempts hold pos.order.line records that lock the same product_ids.
+    // Odoo raises "another model is using the record" when a new create tries
+    // to write lines referencing those same products while the old lines exist.
+    try {
+      const staleOrderIds: number[] = await odooRequest(
+        "pos.order",
+        "search",
+        [
+          [
+            ["session_id", "=", session.id],
+            ["state", "in", ["draft", "cancel"]],
+          ],
+        ],
+      );
+
+      if (staleOrderIds.length > 0) {
+        console.log(
+          `[POS] Purging ${staleOrderIds.length} stale draft/cancel order(s) for session ${session.id}:`,
+          staleOrderIds,
+        );
+
+        // First unlink their lines explicitly to release the product constraint
+        const staleLines: { id: number }[] = await odooRequest(
+          "pos.order.line",
+          "search_read",
+          [
+            [["order_id", "in", staleOrderIds]],
+            ["id"],
+          ],
+        );
+
+        if (staleLines.length > 0) {
+          const staleLineIds = staleLines.map((l) => l.id);
+          await odooRequest("pos.order.line", "unlink", [staleLineIds]);
+          console.log(
+            `[POS] Unlinked ${staleLineIds.length} stale order line(s)`,
+          );
+        }
+
+        // Now safe to delete the empty order shells
+        await odooRequest("pos.order", "unlink", [staleOrderIds]);
+        console.log(`[POS] Deleted ${staleOrderIds.length} stale order(s)`);
+      }
+    } catch (cleanupErr: any) {
+      // Non-fatal: log and continue. The create may still succeed if the
+      // specific products in this cart aren't locked by the stale lines.
+      console.warn(
+        "[POS] Stale order cleanup failed (non-fatal):",
+        cleanupErr?.message,
+      );
+    }
+
+    // ── Create order in Odoo ──────────────────────────────────────────────────
     let orderId: number;
     try {
       orderId = await odooRequest("pos.order", "create", [
@@ -1145,6 +1199,8 @@ export const createOrder = CatchAsyncError(
           to_invoice: false,
           pos_reference: odooRef,
           internal_note: note ?? "",
+          lines: orderLines,
+          payment_ids: paymentIds,
           amount_paid: amountPaid,
           amount_total: subtotal,
           amount_tax: 0,
@@ -1152,7 +1208,7 @@ export const createOrder = CatchAsyncError(
         },
       ]);
     } catch (err: any) {
-      console.error("[POS] Odoo order shell create failed:", err);
+      console.error("[POS] Odoo order create failed:", err);
       return next(
         new ErrorHandler(
           err?.message ?? "Failed to create order in Odoo",
@@ -1165,34 +1221,12 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
     }
 
-    // ── Step 2: Attach order lines + payment lines via write ──────────────────
-    // Writing lines separately avoids the One2many constraint race that happens
-    // when `create` tries to insert lines referencing products already locked
-    // by another model (e.g. a dangling pos.order.line from a prior failure).
-    try {
-      await odooRequest("pos.order", "write", [
-        [orderId],
-        {
-          lines: orderLines,
-          payment_ids: paymentIds,
-        },
-      ]);
-    } catch (err: any) {
-      console.error("[POS] Odoo order write (lines/payments) failed:", err);
-      return next(
-        new ErrorHandler(
-          err?.message ?? "Failed to attach lines to order in Odoo",
-          500,
-        ),
-      );
-    }
-
-    // ── Step 3: Mark order as paid ────────────────────────────────────────────
+    // ── Mark order as paid ────────────────────────────────────────────────────
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
     } catch (err: any) {
       console.error("[POS] action_pos_order_paid failed:", err);
-      // Order was created — don't block the response, just log it.
+      // Non-fatal: order exists, just log it
     }
 
     // ── Mirror order in MongoDB ───────────────────────────────────────────────
