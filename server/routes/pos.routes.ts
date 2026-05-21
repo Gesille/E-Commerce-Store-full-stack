@@ -119,7 +119,7 @@ POSRouter.post(
   createCustomer,
 );
 POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
-POSRouter.get("/orders/:orderId/receipt-pdf", isAuthenticated, getOrderReceiptPdf);
+POSRouter.get("/order/:orderId/receipt-pdf", isAuthenticated, getOrderReceiptPdf);
 POSRouter.post("/order/invoice",isAuthenticated,createOdooInvoice);
 
 export default POSRouter;
