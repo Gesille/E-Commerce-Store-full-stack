@@ -1048,8 +1048,7 @@ export const createOrder = CatchAsyncError(
       customerId?: number;
       note?: string;
     } = req.body;
-console.log("POS createOrder HIT");
-console.log(req.body);
+
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
@@ -1104,7 +1103,7 @@ console.log(req.body);
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
         price_subtotal_incl:
           item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-          note: item.note ?? "",
+         customer_note: item.note ?? "",
       },
     ]);
 
@@ -1116,7 +1115,7 @@ console.log(req.body);
     partner_id: customerId ?? false,
     to_invoice: false,      
     pos_reference: odooRef,
-    note: note ?? "",
+   internal_note: note ?? "", 
     lines: orderLines,
     amount_paid: amountPaid,
     amount_total: subtotal,
