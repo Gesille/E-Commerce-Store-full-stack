@@ -110,9 +110,11 @@ export default function CashierPage() {
     odooOrderId?: number;
   } | null>(null);
 
+  // ── FIX: store the total coming from CartPanel (tax-inclusive, discount-aware)
+  const [paymentTotal, setPaymentTotal] = useState<number>(0);
+
   const activeOrder = orders.find((o) => o.id === activeOrderId);
   const activeMeta = orderMeta[activeOrderId] || { customer: null, note: "" };
-  const { subtotal, tax, total } = calcOrderTotals(activeOrder?.cart || []);
 
   // ── Cart helpers ───────────────────────────────────────────────────────────
   const updateCart = (newCart: CartItem[]) => {
@@ -139,7 +141,9 @@ export default function CashierPage() {
       }
     });
   };
+
   const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
+
   const handlePaymentConfirm = async (lines: PaymentLine[]) => {
     if (!activeOrder || !session) return;
 
@@ -226,9 +230,6 @@ export default function CashierPage() {
   })();
 
   // ── Close session handler ──────────────────────────────────────────────────
-  // FIX: only close the modal after closeSession succeeds.
-  // CloseSessionConfirmModal catches the error internally and shows it,
-  // so we only reach setShowCloseConfirm(false) on the happy path.
   const handleCloseSession = async () => {
     await closeSession(session!.session.id);
     setShowCloseConfirm(false);
@@ -245,7 +246,6 @@ export default function CashierPage() {
         <div className="h-12 bg-white border-b border-gray-100 flex items-center justify-between px-5 shrink-0">
           {/* Left section */}
           <div className="flex items-center gap-3">
-            {/* Store icon */}
             <svg
               width="18"
               height="18"
@@ -265,7 +265,6 @@ export default function CashierPage() {
               POS — Shop #1
             </span>
 
-            {/* Session badge */}
             {loading ? (
               <span className="text-[11px] text-gray-400 animate-pulse">
                 Loading session…
@@ -279,7 +278,6 @@ export default function CashierPage() {
                     : (session.session.config_id?.[1] ?? "Session Open")}
                 </span>
 
-                {/* FIX: cashier name shown once here on the left, removed from right */}
                 <span className="text-[11px] text-gray-500">
                   👤 {cashierName}
                 </span>
@@ -308,7 +306,7 @@ export default function CashierPage() {
             )}
           </div>
 
-          {/* Right section — FIX: removed duplicate cashier name span */}
+          {/* Right section */}
           <div className="flex items-center gap-4">
             <POSSearchBar search={search} setSearch={setSearch} />
             <span className="text-[12px] text-gray-400">
@@ -336,7 +334,11 @@ export default function CashierPage() {
             orderName={activeOrder?.name || ""}
             customer={activeMeta.customer}
             onOpenCustomer={() => setShowCustomer(true)}
-            onOpenPayment={(_payload) => setShowPayment(true)}
+            // ── FIX: capture the tax-inclusive total from CartPanel's own calcTotal
+            onOpenPayment={(payload) => {
+              setPaymentTotal(payload.total);
+              setShowPayment(true);
+            }}
             orderNote={activeMeta.note}
             onOpenNote={() => setShowNote(true)}
           />
@@ -399,7 +401,8 @@ export default function CashierPage() {
       {/* ── Payment Modal ──────────────────────────────────────────────────── */}
       {showPayment && activeOrder && (
         <PaymentModal
-          total={total}
+          // ── FIX: use paymentTotal captured from CartPanel, not calcOrderTotals
+          total={paymentTotal}
           orderName={activeOrder.name}
           customer={activeMeta.customer}
           cart={activeOrder.cart}

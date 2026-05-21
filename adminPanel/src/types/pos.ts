@@ -55,17 +55,21 @@ export function fmt(n: number) {
 export function calcLineTotal(item: CartItem) {
   const base = item.price * item.qty;
   const discount = item.discount || 0;
-
   return base - (base * discount) / 100;
 }
+
+export const TAX_RATE = 0.1; 
 
 export function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce(
     (s, item) => s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
     0,
   );
-  return { subtotal, tax: 0, total: subtotal };
+  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+  const total = Math.round((subtotal + tax) * 100) / 100;
+  return { subtotal, tax, total };
 }
+
 export interface CreateCustomerResponse {
   customerId: number;
 }

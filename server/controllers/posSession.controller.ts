@@ -1051,7 +1051,6 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
-    // ── Validation ────────────────────────────────────────────────────────────
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
@@ -1080,66 +1079,39 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-    const TAX_RATE = 0.1; // 10% — keep in sync with frontend
-
     // ── Totals ────────────────────────────────────────────────────────────────
-    // subtotal = sum of line totals before tax
-    const subtotal = round2(
-      cart.reduce(
-        (s: number, item: CartItem) =>
-          s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-        0,
-      ),
+    const amountPaid = paymentLines.reduce(
+      (s: number, p: PaymentLine) => s + p.amount,
+      0,
     );
 
-    const taxAmount = round2(subtotal * TAX_RATE);
-    const totalWithTax = round2(subtotal + taxAmount);
-
-    // amountPaid is what the customer actually handed over (tax-inclusive)
-    const amountPaid = round2(
-      paymentLines.reduce((s: number, p: PaymentLine) => s + p.amount, 0),
+    const subtotal = cart.reduce(
+      (s: number, item: CartItem) =>
+        s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+      0,
     );
 
-    // Validate that the customer paid at least the tax-inclusive total
-    if (amountPaid < totalWithTax - 0.01) {
-      return next(
-        new ErrorHandler(
-          `Underpayment: amount paid ($${amountPaid}) is less than order total ($${totalWithTax})`,
-          400,
-        ),
-      );
-    }
-
-    const amountReturn = round2(Math.max(0, amountPaid - totalWithTax));
+    const amountReturn = Math.max(0, amountPaid - subtotal);
 
     // ── Order lines ───────────────────────────────────────────────────────────
-    const orderLines = cart.map((item: CartItem) => {
-      const lineSubtotal = round2(
-        item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-      );
-      const lineSubtotalInclTax = round2(lineSubtotal * (1 + TAX_RATE));
-
-      return [
-        0,
-        0,
-        {
-          // Ensure product_id is always a plain integer for Odoo
-          product_id: parseInt(String(item.productId), 10),
-          qty: item.qty,
-          price_unit: item.price,
-          discount: item.discount ?? 0,
-          // price_subtotal = pre-tax line total
-          price_subtotal: lineSubtotal,
-          // price_subtotal_incl = tax-inclusive line total
-          price_subtotal_incl: lineSubtotalInclTax,
-          customer_note: item.note ?? "",
-        },
-      ];
-    });
+    const orderLines = cart.map((item: CartItem) => [
+      0,
+      0,
+      {
+        product_id: Number(item.productId),
+        qty: item.qty,
+        price_unit: item.price,
+        discount: item.discount ?? 0,
+        price_subtotal:
+          item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+        price_subtotal_incl:
+          item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+        customer_note: item.note ?? "",
+      },
+    ]);
 
     // ── Payment lines ─────────────────────────────────────────────────────────
+   const TAX_RATE = 0.10;
     let paymentIds: any[];
     try {
       paymentIds = paymentLines.map((p: PaymentLine) => {
@@ -1162,14 +1134,14 @@ export const createOrder = CatchAsyncError(
           session_id: session.id,
           partner_id: customerId ?? false,
           to_invoice: false,
+        
           pos_reference: odooRef,
           internal_note: note ?? "",
           lines: orderLines,
           payment_ids: paymentIds,
-          // These must all use the tax-inclusive total so Odoo validation passes
           amount_paid: amountPaid,
-          amount_total: totalWithTax,
-          amount_tax: taxAmount,
+          amount_total: subtotal,
+          amount_tax: 0,
           amount_return: amountReturn,
         },
       ]);
@@ -1214,9 +1186,9 @@ export const createOrder = CatchAsyncError(
         })),
         paymentLines,
         subtotal,
-        taxAmount,      // ← now correctly stored
+        taxAmount: 0,
         discountAmount: 0,
-        total: totalWithTax,  // ← tax-inclusive total
+        total: subtotal,
         amountPaid,
         change: amountReturn,
         note: note ?? "",
@@ -1231,9 +1203,8 @@ export const createOrder = CatchAsyncError(
     }
 
     // ── Update shift totals ───────────────────────────────────────────────────
-    // Use totalWithTax so shift reports match what customers actually paid
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
-      $inc: { totalOrders: 1, totalSales: totalWithTax },
+      $inc: { totalOrders: 1, totalSales: subtotal },
     });
 
     res.status(201).json({
@@ -1245,6 +1216,7 @@ export const createOrder = CatchAsyncError(
     });
   },
 );
+
 /** GET /api/pos/orders/:sessionId */
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
