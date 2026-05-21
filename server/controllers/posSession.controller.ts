@@ -1154,6 +1154,8 @@ export const createOrder = CatchAsyncError(
           price_unit: item.price,
           discount: item.discount || 0,
           tax_ids: [[6, 0, []]],
+           price_subtotal: lineSubtotal,
+      price_subtotal_incl: lineSubtotal + lineTax
         },
       ];
     });
