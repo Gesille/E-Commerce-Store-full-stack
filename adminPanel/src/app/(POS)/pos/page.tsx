@@ -59,7 +59,7 @@ import {
   useGetCustomerInsightsQuery,
 } from "@/redux/analytics/analyticsApi";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+
 
 type Period = "today" | "week" | "month";
 type OrderStatus = "paid" | "refund" | "pending";
