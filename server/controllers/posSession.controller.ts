@@ -1097,28 +1097,29 @@ export const createOrder = CatchAsyncError(
 
     const amountReturn = Math.max(0, amountPaid - subtotal);
 
-    // ── Order lines (Odoo One2many tuples) ────────────────────────────────────
-    const orderLines = cart.map((item: CartItem) => [
-      0,
-      0,
-      {
-        product_id: Number(item.productId),
-        qty: item.qty,
-        price_unit: item.price,
-        discount: item.discount ?? 0,
-        price_subtotal:
-          item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-        price_subtotal_incl:
-          item.price * item.qty * (1 - (item.discount ?? 0) / 100),
-        customer_note: item.note ?? "",
-      },
-    ]);
+    // ── Build order lines (no product_id nesting — flat values only) ──────────
+    const orderLines = cart.map((item: CartItem) => {
+      const lineSubtotal =
+        item.price * item.qty * (1 - (item.discount ?? 0) / 100);
+      return [
+        0,
+        0,
+        {
+          product_id: Number(item.productId),
+          qty: item.qty,
+          price_unit: item.price,
+          discount: item.discount ?? 0,
+          price_subtotal: lineSubtotal,
+          price_subtotal_incl: lineSubtotal,
+          customer_note: item.note ?? "",
+        },
+      ];
+    });
 
-    // ── Payment statement lines ───────────────────────────────────────────────
-    // create_from_ui uses `statement_ids`, not `payment_ids`
-    let statementIds: any[];
+    // ── Build payment lines ───────────────────────────────────────────────────
+    let paymentIds: any[];
     try {
-      statementIds = paymentLines.map((p: PaymentLine) => {
+      paymentIds = paymentLines.map((p: PaymentLine) => {
         const methodId = PAYMENT_METHOD_IDS[p.method];
         if (!methodId)
           throw new Error(`Unknown payment method: ${p.method}`);
@@ -1130,40 +1131,28 @@ export const createOrder = CatchAsyncError(
 
     const odooRef = `SHIFT-${shift._id}`;
 
-    // ── Create order via create_from_ui ───────────────────────────────────────
-    // This is the official Odoo POS endpoint. It:
-    //   • Creates the order + lines atomically (no orphaned pos.order.line rows)
-    //   • Automatically marks the order as paid
-    //   • Avoids the "another model is using the record" constraint error
+    // ── Step 1: Create the order shell (no lines, no payments yet) ────────────
+    // Sending lines & payment_ids in the same `create` call can trigger the
+    // "another model is using the record" constraint when a prior failed order
+    // left orphaned pos.order.line rows for the same products.
+    // Creating the shell first guarantees a fresh order ID before attaching lines.
     let orderId: number;
     try {
-      const result = await odooRequest("pos.order", "create_from_ui", [
-        [
-          {
-            id: odooRef,
-            data: {
-              name: odooRef,
-              session_id: session.id,
-              partner_id: customerId ?? false,
-              to_invoice: false,
-              pos_reference: odooRef,
-              internal_note: note ?? "",
-              lines: orderLines,
-              statement_ids: statementIds,
-              amount_paid: amountPaid,
-              amount_total: subtotal,
-              amount_tax: 0,
-              amount_return: amountReturn,
-            },
-            to_invoice: false,
-          },
-        ],
+      orderId = await odooRequest("pos.order", "create", [
+        {
+          session_id: session.id,
+          partner_id: customerId ?? false,
+          to_invoice: false,
+          pos_reference: odooRef,
+          internal_note: note ?? "",
+          amount_paid: amountPaid,
+          amount_total: subtotal,
+          amount_tax: 0,
+          amount_return: amountReturn,
+        },
       ]);
-
-      // create_from_ui returns an array of order IDs
-      orderId = Array.isArray(result) ? result[0] : result;
     } catch (err: any) {
-      console.error("[POS] Odoo create_from_ui failed:", err);
+      console.error("[POS] Odoo order shell create failed:", err);
       return next(
         new ErrorHandler(
           err?.message ?? "Failed to create order in Odoo",
@@ -1176,8 +1165,35 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
     }
 
-    // NOTE: No need to call action_pos_order_paid separately.
-    // create_from_ui handles payment marking internally.
+    // ── Step 2: Attach order lines + payment lines via write ──────────────────
+    // Writing lines separately avoids the One2many constraint race that happens
+    // when `create` tries to insert lines referencing products already locked
+    // by another model (e.g. a dangling pos.order.line from a prior failure).
+    try {
+      await odooRequest("pos.order", "write", [
+        [orderId],
+        {
+          lines: orderLines,
+          payment_ids: paymentIds,
+        },
+      ]);
+    } catch (err: any) {
+      console.error("[POS] Odoo order write (lines/payments) failed:", err);
+      return next(
+        new ErrorHandler(
+          err?.message ?? "Failed to attach lines to order in Odoo",
+          500,
+        ),
+      );
+    }
+
+    // ── Step 3: Mark order as paid ────────────────────────────────────────────
+    try {
+      await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
+    } catch (err: any) {
+      console.error("[POS] action_pos_order_paid failed:", err);
+      // Order was created — don't block the response, just log it.
+    }
 
     // ── Mirror order in MongoDB ───────────────────────────────────────────────
     let mongoOrder: any = null;
@@ -1229,7 +1245,6 @@ export const createOrder = CatchAsyncError(
     });
   },
 );
-
 /** GET /api/pos/orders/:sessionId */
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
