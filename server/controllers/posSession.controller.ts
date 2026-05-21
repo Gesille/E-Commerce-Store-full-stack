@@ -1226,13 +1226,12 @@ export const createOrder = CatchAsyncError(
       console.log("[PICKING CREATED]", pickingId);
 
       for (const item of resolvedCart) {
-        // ✅ Create stock move
         const moveId = await odooRequest("stock.move", "create", [
           {
             description_picking: item.realProductName,
             product_id: item.realProductId,
             product_uom_qty: item.qty,
-            product_uom_id: item.uomId,       // ✅ correct field name
+            product_uom_id: item.uomId,
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
             picking_id: pickingId,
@@ -1241,8 +1240,6 @@ export const createOrder = CatchAsyncError(
 
         console.log("[MOVE CREATED]", moveId);
 
-        // ✅ Create move line manually with qty_done set directly
-        // Bypasses action_assign — works even when stock is reserved elsewhere
         await odooRequest("stock.move.line", "create", [
           {
             move_id: moveId,
@@ -1258,13 +1255,16 @@ export const createOrder = CatchAsyncError(
         console.log("[MOVE LINE CREATED]", item.qty);
       }
 
-      // ✅ Confirm then validate — NO action_assign
       await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
       await odooRequest("stock.picking", "button_validate", [[pickingId]]);
 
       console.log("[STOCK UPDATED SUCCESSFULLY]");
     } catch (err: any) {
-      console.error("[STOCK UPDATE ERROR]", JSON.stringify(err, null, 2));
+      // ✅ Full error logging — catches Odoo XML-RPC faults
+      console.error("[STOCK UPDATE ERROR] message:", err?.message);
+      console.error("[STOCK UPDATE ERROR] faultCode:", err?.faultCode);
+      console.error("[STOCK UPDATE ERROR] faultString:", err?.faultString);
+      console.error("[STOCK UPDATE ERROR] full:", err);
       // Non-fatal — order is already created
     }
 
