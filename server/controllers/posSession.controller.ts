@@ -1076,17 +1076,17 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("Stock locations missing", 500));
     }
 
-    // ─── RESOLVE PRODUCTS + STOCK CHECK (per POS location) ────────
+    // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
 
     const resolvedCart: any[] = [];
 
     for (const item of cart) {
-      // Fetch product info
+      // Lookup by product_tmpl_id so frontend sends template ID (same as getProductById)
       const product = await odooRequest(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", Number(item.productId)]]],
-        { fields: ["id", "name", "uom_id"], limit: 1 },
+        { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
       );
 
       if (!product.length) {
@@ -1097,44 +1097,23 @@ export const createOrder = CatchAsyncError(
 
       const realProduct = product[0];
 
-      const quant = await odooRequest(
-        "stock.quant",
-        "search_read",
-        [
-          [
-            ["product_id", "=", realProduct.id],
-            ["location_id", "=", sourceLocationId],
-          ],
-        ],
-        { fields: ["quantity", "reserved_quantity", "location_id"], limit: 1 },
-      );
-      console.log("[QUANT RESULT]", JSON.stringify(quant, null, 2));
-      console.log("[SOURCE LOCATION]", sourceLocationId);
-      const allQuants = await odooRequest(
-        "stock.quant",
-        "search_read",
-        [[["product_id", "=", realProduct.id]]],
-        { fields: ["quantity", "reserved_quantity", "location_id"] },
-      );
-      console.log(
-        "[ALL QUANTS FOR PRODUCT]",
-        JSON.stringify(allQuants, null, 2),
-      );
-      const availableQty = quant.length
-        ? Math.max(
-            0,
-            (quant[0].quantity || 0) - (quant[0].reserved_quantity || 0),
-          )
-        : 0;
+      // ✅ Use qty_available from product.product (on-hand, ignores reservations)
+      // This matches what getProductByIdService shows as "stock"
+      const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
 
-      // Out of stock
+      console.log(
+        "[STOCK CHECK]",
+        realProduct.name,
+        "| AVAILABLE:", availableQty,
+        "| REQUESTED:", item.qty,
+      );
+
       if (availableQty <= 0) {
         return next(
           new ErrorHandler(`"${realProduct.name}" is out of stock`, 400),
         );
       }
 
-      // Not enough stock
       if (availableQty < item.qty) {
         return next(
           new ErrorHandler(
