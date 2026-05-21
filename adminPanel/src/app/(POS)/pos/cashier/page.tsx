@@ -251,6 +251,7 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
   // ── Close session handler ──────────────────────────────────────────────────
   const handleCloseSession = async () => {
     await closeSession(session!.session.id);
+    
     setShowCloseConfirm(false);
   };
 

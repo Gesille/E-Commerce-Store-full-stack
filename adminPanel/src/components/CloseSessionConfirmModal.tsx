@@ -25,19 +25,18 @@ export function CloseSessionConfirmModal({
       })
     : "—";
 
-  const handleConfirm = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      await onConfirm();
-      // onConfirm is responsible for closing the modal on success
-    } catch (err: any) {
-      // Show the error inside the modal instead of letting it bubble silently
-      setError(err?.data?.message ?? err?.message ?? "Failed to close session.");
-    } finally {
-      setLoading(false);
-    }
-  };
+const handleConfirm = async () => {
+  setLoading(true);
+  setError("");
+  try {
+    await onConfirm();
+    window.location.reload(); 
+  } catch (err: any) {
+    setError(err?.data?.message ?? err?.message ?? "Failed to close session.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
