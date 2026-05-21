@@ -15,22 +15,7 @@ function calcOrderTotals(cart: CartItem[]) {
   const total = subtotal + tax;
   return { subtotal, tax, total };
 }
-const pill = (bg: string, color: string): React.CSSProperties => ({
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  height: 44,
-  borderRadius: 999,
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: "pointer",
-  border: "none",
-  background: bg,
-  color,
-  transition: "transform 0.12s, opacity 0.12s",
-  flex: 1,
-});
+
 export function ReceiptModal({
   order,
   customer,
@@ -192,80 +177,40 @@ export function ReceiptModal({
           </div>
         </div>
 
-        {/* ── Action buttons ── */}
-        <div
-          style={{
-            padding: "12px 16px 18px",
-            background: "#F9FAFB",
-            borderTop: "1px solid #F3F4F6",
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
-          {/* Row 1 — Print + PDF */}
-          <div style={{ display: "flex", gap: 8 }}>
+        {/* Actions */}
+        <div className="grid grid-cols-2 gap-2 px-5 py-4">
+          <button
+            onClick={handlePrint}
+            className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors whitespace-nowrap px-2"
+          >
+            🖨 Print
+          </button>
+
+          {odooOrderId && (
             <button
-              onClick={handlePrint}
-              style={pill("#6366F1", "#fff")} // ✅ indigo
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.transform = "translateY(-1px)")
-              }
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+              onClick={handleDownloadPdf}
+              disabled={isPdfLoading}
+              className="h-9 border border-violet-200 bg-violet-50 text-violet-700 rounded-xl text-[13px] font-semibold hover:bg-violet-100 cursor-pointer transition-colors disabled:opacity-50 whitespace-nowrap px-2"
             >
-              🖨 Print
+              {isPdfLoading ? "Loading..." : "⬇ PDF Receipt"}
             </button>
+          )}
 
-            {odooOrderId && (
-              <button
-                onClick={handleDownloadPdf}
-                disabled={isPdfLoading}
-                style={pill("#8B5CF6", "#fff")} // ✅ violet
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.transform = "translateY(-1px)")
-                }
-                onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
-              >
-                ⬇ {isPdfLoading ? "Loading..." : "PDF"}
-              </button>
-            )}
-          </div>
-
-          {/* Invoice */}
           {odooOrderId && invoiceState.status !== "success" && (
             <button
               onClick={handleCreateInvoice}
               disabled={isInvoicing}
-              style={{
-                ...pill("#F59E0B", "#fff"),
-                flex: "none",
-                width: "100%",
-              }} // ✅ amber
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.transform = "translateY(-1px)")
-              }
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+              className="h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50 whitespace-nowrap px-2"
             >
-              🧾 {isInvoicing ? "Creating..." : "Create invoice"}
+              {isInvoicing ? "Creating..." : "🧾 Invoice"}
             </button>
           )}
 
-          {/* New order */}
           <button
             onClick={onNewOrder}
-            style={{
-              ...pill("#10B981", "#fff"), // ✅ emerald green
-              flex: "none",
-              width: "100%",
-              height: 48,
-              fontSize: 14,
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.transform = "translateY(-1px)")
-            }
-            onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
+            className="h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap px-2"
           >
-            ＋ New order
+            New Order
           </button>
         </div>
       </div>
