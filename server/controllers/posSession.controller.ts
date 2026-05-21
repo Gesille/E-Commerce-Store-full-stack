@@ -1004,10 +1004,7 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
-    // =========================================================
-    // VALIDATION
-    // =========================================================
-
+ 
     if (!cart?.length) {
       return next(new ErrorHandler("Cart is empty", 400));
     }
@@ -1024,20 +1021,14 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("configId is required", 400));
     }
 
-    // =========================================================
-    // CASHIER
-    // =========================================================
-
+ 
     const cashier = await resolveCashier(cashierId).catch((e) =>
       next(e),
     );
 
     if (!cashier) return;
 
-    // =========================================================
-    // SESSION
-    // =========================================================
-
+   
     const session = await fetchOpenOdooSession(configId);
 
     if (!session) {
@@ -1045,10 +1036,6 @@ export const createOrder = CatchAsyncError(
         new ErrorHandler("No open POS session found", 409),
       );
     }
-
-    // =========================================================
-    // SHIFT
-    // =========================================================
 
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
@@ -1065,17 +1052,10 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // =========================================================
-    // RESOLVE PRODUCTS
-    // =========================================================
-
     const resolvedCart: any[] = [];
 
     for (const item of cart) {
       let realProductId: number | null = null;
-
-      // FIRST:
-      // Try exact product.product ID
 
       const directProduct = await odooRequest(
         "product.product",
@@ -1104,9 +1084,6 @@ export const createOrder = CatchAsyncError(
 
         continue;
       }
-
-      // SECOND:
-      // maybe frontend sent template id
 
       const variants = await odooRequest(
         "product.product",
@@ -1141,10 +1118,6 @@ export const createOrder = CatchAsyncError(
           variants[0].qty_available || 0,
       });
     }
-
-    // =========================================================
-    // TOTALS
-    // =========================================================
 
     let subtotal = 0;
     let totalTaxAmount = 0;
@@ -1208,10 +1181,7 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // =========================================================
-    // PAYMENTS
-    // =========================================================
-
+    
     const payment_ids = paymentLines.map((p) => {
       const methodId =
         PAYMENT_METHOD_IDS[p.method];
@@ -1231,10 +1201,6 @@ export const createOrder = CatchAsyncError(
         },
       ];
     });
-
-    // =========================================================
-    // CREATE ORDER
-    // =========================================================
 
     const odooRef = `POS-${Date.now()}`;
 
@@ -1282,10 +1248,7 @@ export const createOrder = CatchAsyncError(
       );
     }
 
-    // =========================================================
-    // MARK PAID
-    // =========================================================
-
+   
     try {
       await odooRequest(
         "pos.order",
@@ -1389,42 +1352,7 @@ export const createOrder = CatchAsyncError(
     }
 
   
-    const mongoOrder = await POSOrder.create({
-      sessionId: session.id,
-
-      shiftId: shift._id,
-
-      cashierId: cashier._id,
-
-      openedBy: cashier._id,
-
-      odooOrderId: orderId,
-
-      cart: resolvedCart.map((item) => ({
-        productId: item.realProductId,
-        name: item.productName,
-        price: item.price,
-        qty: item.qty,
-      })),
-
-      paymentLines,
-
-      subtotal,
-
-      taxAmount: totalTaxAmount,
-
-      total: amountTotal,
-
-      amountPaid,
-
-      change: amountReturn,
-
-      note: note || "",
-
-      status: "paid",
-
-      receiptNumber: `RCP-${Date.now()}`,
-    });
+ 
 
  
     await CashierShiftLog.findByIdAndUpdate(
@@ -1444,15 +1372,10 @@ export const createOrder = CatchAsyncError(
         "Order created successfully and stock updated",
 
       orderId,
-
-      mongoOrderId: mongoOrder._id,
     });
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Reporting & Lookup Controllers
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
