@@ -960,81 +960,135 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
+    // ------------------------------------------------
+    // VALIDATION
+    // ------------------------------------------------
+
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
+
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
+
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
+
     if (!configId) return next(new ErrorHandler("configId is required", 400));
 
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
+
     if (!cashier) return;
 
+    // ------------------------------------------------
+    // ACTIVE SESSION
+    // ------------------------------------------------
+
     const session = await fetchOpenOdooSession(configId);
+
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
+
+    // ------------------------------------------------
+    // ACTIVE SHIFT
+    // ------------------------------------------------
 
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
       cashierId: cashier._id,
       state: "active",
     });
-    if (!shift)
+
+    if (!shift) {
       return next(
         new ErrorHandler(
           "Cashier does not have an active shift. Start or resume a shift first.",
           409,
         ),
       );
+    }
+
+    // ------------------------------------------------
+    // FETCH PRODUCT TAXES
+    // ------------------------------------------------
 
     const productIds = [...new Set(cart.map((i) => i.productId))];
+
     let productTaxMap: Record<number, number[]> = {};
+
     try {
       const products = await odooRequest(
         "product.product",
         "search_read",
         [[["id", "in", productIds]]],
-        { fields: ["id", "taxes_id"] },
+        {
+          fields: ["id", "taxes_id"],
+        },
       );
-      for (const p of products) productTaxMap[p.id] = p.taxes_id ?? [];
+
+      for (const p of products) {
+        productTaxMap[p.id] = p.taxes_id ?? [];
+      }
     } catch (err) {
-      console.warn("[POS] Could not fetch product taxes — 0% fallback:", err);
+      console.warn("[POS] Could not fetch product taxes:", err);
     }
+
+    // ------------------------------------------------
+    // FETCH TAX RATES
+    // ------------------------------------------------
 
     const allTaxIds = [
       ...new Set(Object.values(productTaxMap).flat()),
     ] as number[];
+
     let taxRateMap: Record<number, number> = {};
+
     if (allTaxIds.length > 0) {
       try {
         const taxes = await odooRequest(
           "account.tax",
           "search_read",
           [[["id", "in", allTaxIds]]],
-          { fields: ["id", "amount", "amount_type", "price_include"] },
+          {
+            fields: ["id", "amount", "amount_type"],
+          },
         );
+
         for (const t of taxes) {
-          if (t.amount_type === "percent") taxRateMap[t.id] = t.amount / 100;
+          if (t.amount_type === "percent") {
+            taxRateMap[t.id] = t.amount / 100;
+          }
         }
       } catch (err) {
         console.warn("[POS] Could not fetch tax rates:", err);
       }
     }
 
+    // ------------------------------------------------
+    // BUILD ORDER LINES
+    // ------------------------------------------------
+
     let subtotal = 0;
     let totalTaxAmount = 0;
 
     const orderLines = cart.map((item) => {
       const linePreDiscount = item.price * item.qty;
+
       const discountFactor = 1 - (item.discount ?? 0) / 100;
-      const lineSubtotal = linePreDiscount * discountFactor; // pre-tax
+
+      const lineSubtotal = linePreDiscount * discountFactor;
 
       const taxIds = productTaxMap[item.productId] ?? [];
+
       let lineTaxRate = 0;
-      for (const tid of taxIds) lineTaxRate += taxRateMap[tid] ?? 0;
+
+      for (const tid of taxIds) {
+        lineTaxRate += taxRateMap[tid] ?? 0;
+      }
 
       const lineTaxAmount = lineSubtotal * lineTaxRate;
+
       const lineSubtotalIncl = lineSubtotal + lineTaxAmount;
+
       subtotal += lineSubtotal;
+
       totalTaxAmount += lineTaxAmount;
 
       return [
@@ -1045,7 +1099,7 @@ export const createOrder = CatchAsyncError(
           qty: item.qty,
           price_unit: item.price,
           discount: item.discount ?? 0,
-          tax_ids: taxIds.length > 0 ? [[6, 0, taxIds]] : [[6, 0, []]],
+          tax_ids: taxIds.length ? [[6, 0, taxIds]] : [[6, 0, []]],
           price_subtotal: Math.round(lineSubtotal * 100) / 100,
           price_subtotal_incl: Math.round(lineSubtotalIncl * 100) / 100,
           customer_note: item.note ?? "",
@@ -1054,18 +1108,32 @@ export const createOrder = CatchAsyncError(
     });
 
     const amountTotal = Math.round((subtotal + totalTaxAmount) * 100) / 100;
+
     const amountPaid = paymentLines.reduce((s, p) => s + p.amount, 0);
+
     const amountReturn = Math.max(
       0,
       Math.round((amountPaid - amountTotal) * 100) / 100,
     );
 
     let paymentIds: any[];
+
     try {
       paymentIds = paymentLines.map((p) => {
         const methodId = PAYMENT_METHOD_IDS[p.method];
-        if (!methodId) throw new Error(`Unknown payment method: ${p.method}`);
-        return [0, 0, { amount: p.amount, payment_method_id: methodId }];
+
+        if (!methodId) {
+          throw new Error(`Unknown payment method: ${p.method}`);
+        }
+
+        return [
+          0,
+          0,
+          {
+            amount: p.amount,
+            payment_method_id: methodId,
+          },
+        ];
       });
     } catch (err: any) {
       return next(new ErrorHandler(err.message, 400));
@@ -1077,24 +1145,24 @@ export const createOrder = CatchAsyncError(
       const staleIds: number[] = await odooRequest("pos.order", "search", [
         [
           ["session_id", "=", session.id],
-          ["state", "in", ["draft"]],
+          ["state", "=", "draft"],
         ],
       ]);
+
       if (staleIds.length > 0) {
         await odooRequest("pos.order", "write", [
           staleIds,
           { state: "cancel" },
         ]);
+
         console.log(`[POS] Cancelled ${staleIds.length} stale draft order(s)`);
       }
     } catch (cleanupErr: any) {
-      console.warn(
-        "[POS] Stale order cleanup failed (non-fatal):",
-        cleanupErr?.message,
-      );
+      console.warn("[POS] Stale order cleanup failed:", cleanupErr?.message);
     }
 
     let orderId: number;
+
     try {
       orderId = await odooRequest("pos.order", "create", [
         {
@@ -1113,29 +1181,82 @@ export const createOrder = CatchAsyncError(
       ]);
     } catch (err: any) {
       console.error("[POS] Odoo order create failed:", err);
+
       return next(
         new ErrorHandler(err?.message ?? "Failed to create order in Odoo", 500),
       );
     }
 
-    if (!orderId)
+    if (!orderId) {
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
+    }
 
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
-      console.log(`[POS] Order ${orderId} marked paid — stock moves triggered`);
-    } catch (err: any) {
-      console.error("[POS] action_pos_order_paid failed:", err?.message);
 
-      try {
-        await odooRequest("pos.order", "write", [[orderId], { state: "paid" }]);
-        console.log(`[POS] Fallback: wrote state=paid for order ${orderId}`);
-      } catch (fb: any) {
-        console.error("[POS] Fallback write also failed:", fb?.message);
+      console.log(`[POS] Order ${orderId} marked paid`);
+
+      await odooRequest("pos.order", "_create_picking", [[orderId]]);
+
+      console.log(`[POS] Picking created for order ${orderId}`);
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const pickingIds: number[] = await odooRequest(
+        "stock.picking",
+        "search",
+        [[["origin", "ilike", odooRef]]],
+      );
+
+      console.log("[POS] PICKINGS:", pickingIds);
+
+      for (const pickingId of pickingIds) {
+        try {
+          // Confirm
+          await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
+
+          await odooRequest("stock.picking", "action_assign", [[pickingId]]);
+
+          const moveLines = await odooRequest(
+            "stock.move.line",
+            "search_read",
+            [[["picking_id", "=", pickingId]]],
+            {
+              fields: ["id", "product_uom_qty", "qty_done"],
+            },
+          );
+
+          for (const line of moveLines) {
+            await odooRequest("stock.move.line", "write", [
+              [line.id],
+              {
+                qty_done: line.product_uom_qty || 0,
+              },
+            ]);
+          }
+
+          await odooRequest("stock.picking", "button_validate", [[pickingId]]);
+
+          console.log(`[POS] Picking ${pickingId} validated successfully`);
+        } catch (pickErr) {
+          console.error(
+            `[POS] Failed validating picking ${pickingId}:`,
+            pickErr,
+          );
+        }
       }
+
+      console.log(`[POS] Order ${orderId} finalized and stock updated`);
+    } catch (err: any) {
+      console.error("[POS] POS workflow failed:", err);
+
+      return next(
+        new ErrorHandler(err?.message || "Failed to finalize POS order", 500),
+      );
     }
 
     let mongoOrder: any = null;
+
     try {
       mongoOrder = await POSOrder.create({
         sessionId: session.id,
@@ -1143,6 +1264,7 @@ export const createOrder = CatchAsyncError(
         cashierId: cashier._id,
         openedBy: cashier._id,
         odooOrderId: orderId,
+
         cart: cart.map((item) => ({
           productId: item.productId,
           name: `Product#${item.productId}`,
@@ -1151,7 +1273,9 @@ export const createOrder = CatchAsyncError(
           discount: item.discount ?? 0,
           note: item.note ?? "",
         })),
+
         paymentLines,
+
         subtotal,
         taxAmount: totalTaxAmount,
         discountAmount: 0,
@@ -1170,12 +1294,15 @@ export const createOrder = CatchAsyncError(
     }
 
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
-      $inc: { totalOrders: 1, totalSales: amountTotal },
+      $inc: {
+        totalOrders: 1,
+        totalSales: amountTotal,
+      },
     });
 
     res.status(201).json({
       status: "success",
-      message: "Order created successfully",
+      message: "Order created successfully and stock updated",
       orderId,
       mongoOrderId: mongoOrder?._id ?? null,
       cashierShiftId: shift._id,
