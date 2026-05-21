@@ -1051,19 +1051,23 @@ export const createOrder = CatchAsyncError(
       configId: number;
     } = req.body;
 
+    // ── Validation ────────────────────────────────────────────────────────────
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length)
       return next(new ErrorHandler("Payment method is required", 400));
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
     if (!configId) return next(new ErrorHandler("configId is required", 400));
 
+    // ── Resolve cashier ───────────────────────────────────────────────────────
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
 
+    // ── Fetch open POS session ────────────────────────────────────────────────
     const session = await fetchOpenOdooSession(configId);
     if (!session)
       return next(new ErrorHandler("No open POS session found", 409));
 
+    // ── Validate active shift ─────────────────────────────────────────────────
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
       cashierId: cashier._id,
@@ -1093,7 +1097,7 @@ export const createOrder = CatchAsyncError(
 
     const amountReturn = Math.max(0, amountPaid - subtotal);
 
-    // ── Order lines ───────────────────────────────────────────────────────────
+    // ── Order lines (Odoo One2many tuples) ────────────────────────────────────
     const orderLines = cart.map((item: CartItem) => [
       0,
       0,
@@ -1110,11 +1114,11 @@ export const createOrder = CatchAsyncError(
       },
     ]);
 
-    // ── Payment lines ─────────────────────────────────────────────────────────
-   const TAX_RATE = 0.10;
-    let paymentIds: any[];
+    // ── Payment statement lines ───────────────────────────────────────────────
+    // create_from_ui uses `statement_ids`, not `payment_ids`
+    let statementIds: any[];
     try {
-      paymentIds = paymentLines.map((p: PaymentLine) => {
+      statementIds = paymentLines.map((p: PaymentLine) => {
         const methodId = PAYMENT_METHOD_IDS[p.method];
         if (!methodId)
           throw new Error(`Unknown payment method: ${p.method}`);
@@ -1126,27 +1130,40 @@ export const createOrder = CatchAsyncError(
 
     const odooRef = `SHIFT-${shift._id}`;
 
-    // ── Create order in Odoo ──────────────────────────────────────────────────
+    // ── Create order via create_from_ui ───────────────────────────────────────
+    // This is the official Odoo POS endpoint. It:
+    //   • Creates the order + lines atomically (no orphaned pos.order.line rows)
+    //   • Automatically marks the order as paid
+    //   • Avoids the "another model is using the record" constraint error
     let orderId: number;
     try {
-      orderId = await odooRequest("pos.order", "create", [
-        {
-          session_id: session.id,
-          partner_id: customerId ?? false,
-          to_invoice: false,
-        
-          pos_reference: odooRef,
-          internal_note: note ?? "",
-          lines: orderLines,
-          payment_ids: paymentIds,
-          amount_paid: amountPaid,
-          amount_total: subtotal,
-          amount_tax: 0,
-          amount_return: amountReturn,
-        },
+      const result = await odooRequest("pos.order", "create_from_ui", [
+        [
+          {
+            id: odooRef,
+            data: {
+              name: odooRef,
+              session_id: session.id,
+              partner_id: customerId ?? false,
+              to_invoice: false,
+              pos_reference: odooRef,
+              internal_note: note ?? "",
+              lines: orderLines,
+              statement_ids: statementIds,
+              amount_paid: amountPaid,
+              amount_total: subtotal,
+              amount_tax: 0,
+              amount_return: amountReturn,
+            },
+            to_invoice: false,
+          },
+        ],
       ]);
+
+      // create_from_ui returns an array of order IDs
+      orderId = Array.isArray(result) ? result[0] : result;
     } catch (err: any) {
-      console.error("[POS] Odoo order create failed:", err);
+      console.error("[POS] Odoo create_from_ui failed:", err);
       return next(
         new ErrorHandler(
           err?.message ?? "Failed to create order in Odoo",
@@ -1159,13 +1176,8 @@ export const createOrder = CatchAsyncError(
       return next(new ErrorHandler("Failed to create order in Odoo", 500));
     }
 
-    // ── Mark order as paid in Odoo ────────────────────────────────────────────
-    try {
-      await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
-    } catch (err: any) {
-      console.error("[POS] action_pos_order_paid failed:", err);
-      // Order was created — don't block the response, just log it
-    }
+    // NOTE: No need to call action_pos_order_paid separately.
+    // create_from_ui handles payment marking internally.
 
     // ── Mirror order in MongoDB ───────────────────────────────────────────────
     let mongoOrder: any = null;
@@ -1207,6 +1219,7 @@ export const createOrder = CatchAsyncError(
       $inc: { totalOrders: 1, totalSales: subtotal },
     });
 
+    // ── Response ──────────────────────────────────────────────────────────────
     res.status(201).json({
       status: "success",
       message: "Order created successfully",
