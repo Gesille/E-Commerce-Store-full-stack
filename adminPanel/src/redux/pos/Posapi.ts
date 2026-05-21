@@ -127,6 +127,7 @@ export const posApi = apiSlice.injectEndpoints({
         body,
         credentials: "include" as const,
       }),
+       invalidatesTags: ["Products"],
     }),
 
     getProducts: builder.query<ProductsResponse, void>({
