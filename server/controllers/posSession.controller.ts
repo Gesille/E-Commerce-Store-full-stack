@@ -1097,7 +1097,7 @@ export const createOrder = CatchAsyncError(
           limit: 1,
         }
       );
-
+console.log("[DEBUG PRODUCT LOOKUP] productId sent:", item.productId, "| Odoo returned:", product[0]?.name);
       if (!product.length) {
         return next(
           new ErrorHandler(`Product ${item.productId} not found`, 400)
