@@ -1081,7 +1081,6 @@ export const createOrder = CatchAsyncError(
     const resolvedCart: any[] = [];
 
     for (const item of cart) {
-      // Lookup by product_tmpl_id so frontend sends template ID (same as getProductById)
       const product = await odooRequest(
         "product.product",
         "search_read",
@@ -1096,14 +1095,10 @@ export const createOrder = CatchAsyncError(
       }
 
       const realProduct = product[0];
-
-      // ✅ Use qty_available from product.product (on-hand, ignores reservations)
-      // This matches what getProductByIdService shows as "stock"
       const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
 
       console.log(
-        "[STOCK CHECK]",
-        realProduct.name,
+        "[STOCK CHECK]", realProduct.name,
         "| AVAILABLE:", availableQty,
         "| REQUESTED:", item.qty,
       );
@@ -1154,16 +1149,14 @@ export const createOrder = CatchAsyncError(
           price_unit: item.price,
           discount: item.discount || 0,
           tax_ids: [[6, 0, []]],
-           price_subtotal: lineSubtotal,
-      price_subtotal_incl: lineSubtotal + lineTax
+          price_subtotal: lineSubtotal,
+          price_subtotal_incl: lineSubtotal + lineTax,
         },
       ];
     });
 
     const amountTotal = Math.round((subtotal + totalTaxAmount) * 100) / 100;
-
     const amountPaid = paymentLines.reduce((sum, p) => sum + p.amount, 0);
-
     const amountReturn = Math.max(
       0,
       Math.round((amountPaid - amountTotal) * 100) / 100,
@@ -1177,14 +1170,7 @@ export const createOrder = CatchAsyncError(
 
     const payment_ids = paymentLines.map((p) => {
       const methodId = PAYMENT_METHOD_IDS[p.method];
-      return [
-        0,
-        0,
-        {
-          amount: p.amount,
-          payment_method_id: methodId,
-        },
-      ];
+      return [0, 0, { amount: p.amount, payment_method_id: methodId }];
     });
 
     // ─── CREATE ORDER ─────────────────────────────────────────────
@@ -1223,7 +1209,6 @@ export const createOrder = CatchAsyncError(
       console.log("[POS] ORDER MARKED PAID");
     } catch (err: any) {
       console.error("[POS PAYMENT ERROR]", err?.message);
-      // Continue even if this fails
     }
 
     // ─── FORCE STOCK DECREASE ─────────────────────────────────────
@@ -1241,12 +1226,13 @@ export const createOrder = CatchAsyncError(
       console.log("[PICKING CREATED]", pickingId);
 
       for (const item of resolvedCart) {
+        // ✅ Create stock move
         const moveId = await odooRequest("stock.move", "create", [
           {
-          description_picking: item.realProductName,
+            description_picking: item.realProductName,
             product_id: item.realProductId,
             product_uom_qty: item.qty,
-            product_uom: item.uomId,
+            product_uom_id: item.uomId,       // ✅ correct field name
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
             picking_id: pickingId,
@@ -1254,30 +1240,31 @@ export const createOrder = CatchAsyncError(
         ]);
 
         console.log("[MOVE CREATED]", moveId);
-      }
 
-      await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
-      await odooRequest("stock.picking", "action_assign", [[pickingId]]);
-
-      const moveLines = await odooRequest(
-        "stock.move.line",
-        "search_read",
-        [[["picking_id", "=", pickingId]]],
-        { fields: ["id", "product_uom_qty"] },
-      );
-
-      for (const line of moveLines) {
-        await odooRequest("stock.move.line", "write", [
-          [line.id],
-          { qty_done: line.product_uom_qty },
+        // ✅ Create move line manually with qty_done set directly
+        // Bypasses action_assign — works even when stock is reserved elsewhere
+        await odooRequest("stock.move.line", "create", [
+          {
+            move_id: moveId,
+            product_id: item.realProductId,
+            product_uom_id: item.uomId,
+            qty_done: item.qty,
+            location_id: sourceLocationId,
+            location_dest_id: destLocationId,
+            picking_id: pickingId,
+          },
         ]);
+
+        console.log("[MOVE LINE CREATED]", item.qty);
       }
 
+      // ✅ Confirm then validate — NO action_assign
+      await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
       await odooRequest("stock.picking", "button_validate", [[pickingId]]);
 
       console.log("[STOCK UPDATED SUCCESSFULLY]");
     } catch (err: any) {
-      console.error("[STOCK UPDATE ERROR]", err);
+      console.error("[STOCK UPDATE ERROR]", JSON.stringify(err, null, 2));
       // Non-fatal — order is already created
     }
 
