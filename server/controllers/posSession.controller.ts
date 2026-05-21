@@ -1060,7 +1060,28 @@ export const createOrder = CatchAsyncError(
         console.warn("[POS] Could not fetch tax rates:", err);
       }
     }
+for (const item of cart) {
+  const exists = await odooRequest(
+    "product.product",
+    "search_read",
+    [[["id", "=", item.productId]]],
+    {
+      fields: ["id", "name", "active"],
+      limit: 1,
+    },
+  );
 
+  console.log("PRODUCT CHECK:", exists);
+
+  if (!exists.length) {
+    return next(
+      new ErrorHandler(
+        `Product ${item.productId} does not exist in product.product`,
+        400,
+      ),
+    );
+  }
+}
     // ------------------------------------------------
     // BUILD ORDER LINES
     // ------------------------------------------------
