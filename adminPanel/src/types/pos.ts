@@ -51,6 +51,10 @@ export interface Customer {
 export function fmt(n: number) {
   return n.toFixed(2);
 }
+function safeFmt(val: number | undefined | null): string {
+  if (val == null || isNaN(val)) return "$0.00";
+  return fmt(val);
+}
 
 export function calcLineTotal(item: CartItem) {
   const base = item.price * item.qty;

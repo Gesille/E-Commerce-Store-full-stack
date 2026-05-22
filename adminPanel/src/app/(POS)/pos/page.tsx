@@ -59,8 +59,6 @@ import {
   useGetCustomerInsightsQuery,
 } from "@/redux/analytics/analyticsApi";
 
-
-
 type Period = "today" | "week" | "month";
 type OrderStatus = "paid" | "refund" | "pending";
 type TableStatus = "occupied" | "available" | "reserved";
@@ -71,11 +69,30 @@ const PAYMENT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6"];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOURS = [
-  "8am", "9am", "10am", "11am", "12pm",
-  "1pm", "2pm", "3pm", "4pm", "5pm", "6pm", "7pm",
+  "8am",
+  "9am",
+  "10am",
+  "11am",
+  "12pm",
+  "1pm",
+  "2pm",
+  "3pm",
+  "4pm",
+  "5pm",
+  "6pm",
+  "7pm",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * FIX: Safe wrapper around fmt() — prevents the `.toFixed` crash when any
+ * API endpoint returns undefined/null (e.g. the tables 500, session errors).
+ */
+function safeFmt(val: number | undefined | null): string {
+  if (val == null || isNaN(val as number)) return "$0.00";
+  return fmt(val);
+}
 
 const orderStatusConfig: Record<
   OrderStatus,
@@ -147,7 +164,11 @@ function fmtNotifTime(dateStr?: string): string {
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-function Skeleton({ height = 20, width = "100%", style = {} }: {
+function Skeleton({
+  height = 20,
+  width = "100%",
+  style = {},
+}: {
   height?: number;
   width?: string | number;
   style?: React.CSSProperties;
@@ -170,10 +191,32 @@ function HeatmapSkeleton() {
   return (
     <div style={{ padding: "8px 0" }}>
       {DAYS.map((day) => (
-        <div key={day} style={{ display: "flex", gap: 3, marginBottom: 3, alignItems: "center" }}>
-          <div style={{ width: 36, fontSize: 11.5, color: "var(--text-muted)", fontWeight: 500 }}>{day}</div>
+        <div
+          key={day}
+          style={{
+            display: "flex",
+            gap: 3,
+            marginBottom: 3,
+            alignItems: "center",
+          }}
+        >
+          <div
+            style={{
+              width: 36,
+              fontSize: 11.5,
+              color: "var(--text-muted)",
+              fontWeight: 500,
+            }}
+          >
+            {day}
+          </div>
           {HOURS.map((_, i) => (
-            <Skeleton key={i} height={28} width={36} style={{ flexShrink: 0, borderRadius: 6 }} />
+            <Skeleton
+              key={i}
+              height={28}
+              width={36}
+              style={{ flexShrink: 0, borderRadius: 6 }}
+            />
           ))}
         </div>
       ))}
@@ -257,8 +300,12 @@ export default function POSDashboardPage() {
     refetch: refetchHeatmap,
   } = useGetHeatmapQuery(configId);
 
-  const { data: tableData = [], refetch: refetchTables } =
-    useGetTablesQuery({ configId });
+  // FIX: capture isError so we can show a graceful error state instead of crashing
+  const {
+    data: tableData = [],
+    isError: tablesError,
+    refetch: refetchTables,
+  } = useGetTablesQuery({ configId });
 
   const { data: discountsResult, refetch: refetchDiscounts } =
     useGetDiscountsQuery({ period, configId });
@@ -273,7 +320,6 @@ export default function POSDashboardPage() {
   // ---------------------------------------------------------------------------
   const isLoading = kpisFetching || revenueFetching;
 
-  // Branch name derived from live session (avoids hardcoding)
   const branch = session?.name ?? session?.branchName ?? "—";
 
   const targetPct = target?.pct ?? 0;
@@ -291,22 +337,36 @@ export default function POSDashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Close notification panel on outside click
+  // ---------------------------------------------------------------------------
+  // FIX: Notification panel outside-click
+  // Deferred listener prevents the same click that opens the panel from
+  // immediately triggering handleClickOutside and closing it again.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
+    if (!notifOpen) return;
+
+    let cleanup: (() => void) | undefined;
+
+    const timeout = setTimeout(() => {
+      function handleClickOutside(e: MouseEvent) {
+        if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+          setNotifOpen(false);
+        }
       }
-    }
-    if (notifOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
+      cleanup = () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeout);
+      cleanup?.();
+    };
   }, [notifOpen]);
 
   // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
-  // Period change: RTK Query re-fetches automatically when `period` arg changes.
-  // No fake setTimeout needed — isFetching from RTK handles the loading state.
   const handlePeriodChange = (p: Period) => setPeriod(p);
 
   const handleRefreshAll = () => {
@@ -421,12 +481,16 @@ export default function POSDashboardPage() {
         select:focus { border-color: var(--accent); }
       `}</style>
 
-      <div className="pos-root" style={{ minHeight: "100vh", background: "var(--bg)" }}>
-
+      <div
+        className="pos-root"
+        style={{ minHeight: "100vh", background: "var(--bg)" }}
+      >
         {/* ── Sticky Top Header ────────────────────────────────────── */}
         <div
           style={{
-            position: "sticky", top: 0, zIndex: 50,
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
             background: "var(--bg-card)",
             borderBottom: "1px solid var(--border)",
             backdropFilter: "blur(12px)",
@@ -434,9 +498,14 @@ export default function POSDashboardPage() {
         >
           <div
             style={{
-              maxWidth: 1440, margin: "0 auto", padding: "0 24px",
-              height: 60, display: "flex", alignItems: "center",
-              justifyContent: "space-between", gap: 16,
+              maxWidth: 1440,
+              margin: "0 auto",
+              padding: "0 24px",
+              height: 60,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
             }}
           >
             {/* Left: Brand + branch */}
@@ -444,33 +513,72 @@ export default function POSDashboardPage() {
               <div className="row" style={{ gap: 8 }}>
                 <div
                   style={{
-                    width: 32, height: 32, borderRadius: 9,
+                    width: 32,
+                    height: 32,
+                    borderRadius: 9,
                     background: "linear-gradient(135deg,#3b82f6,#2563eb)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     boxShadow: "0 2px 6px rgba(59,130,246,0.35)",
                   }}
                 >
                   <Store size={16} color="#fff" />
                 </div>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em", lineHeight: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "var(--text-primary)",
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1,
+                    }}
+                  >
                     POS Analytics
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1, lineHeight: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-muted)",
+                      marginTop: 1,
+                      lineHeight: 1,
+                    }}
+                  >
                     Enterprise Dashboard
                   </div>
                 </div>
               </div>
 
-              <div style={{ width: 1, height: 24, background: "var(--border)" }} />
+              <div
+                style={{ width: 1, height: 24, background: "var(--border)" }}
+              />
 
-              {/* Branch name from session — not hardcoded */}
               <div
                 className="row hide-mobile"
-                style={{ gap: 6, cursor: "pointer", padding: "4px 8px", borderRadius: 8, border: "1px solid var(--border)" }}
+                style={{
+                  gap: 6,
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                }}
               >
-                <div style={{ width: 7, height: 7, borderRadius: "50%", background: session ? "#10b981" : "#94a3b8" }} />
-                <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-secondary)" }}>
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: session ? "#10b981" : "#94a3b8",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    color: "var(--text-secondary)",
+                  }}
+                >
                   {branch}
                 </span>
                 <ChevronDown size={13} color="var(--text-muted)" />
@@ -480,7 +588,13 @@ export default function POSDashboardPage() {
             {/* Center: Period tabs */}
             <div
               className="row"
-              style={{ gap: 3, padding: "4px", background: "var(--bg-muted)", borderRadius: 10, border: "1px solid var(--border)" }}
+              style={{
+                gap: 3,
+                padding: "4px",
+                background: "var(--bg-muted)",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+              }}
             >
               {(["today", "week", "month"] as Period[]).map((p) => (
                 <button
@@ -488,7 +602,11 @@ export default function POSDashboardPage() {
                   onClick={() => handlePeriodChange(p)}
                   className={`pill-tab ${period === p ? "active" : "inactive"}`}
                 >
-                  {p === "today" ? "Today" : p === "week" ? "This Week" : "This Month"}
+                  {p === "today"
+                    ? "Today"
+                    : p === "week"
+                      ? "This Week"
+                      : "This Month"}
                 </button>
               ))}
             </div>
@@ -497,13 +615,28 @@ export default function POSDashboardPage() {
             <div className="row" style={{ gap: 8 }}>
               <div
                 className="row hide-mobile"
-                style={{ gap: 6, padding: "5px 10px", borderRadius: 8, background: "var(--bg-muted)", border: "1px solid var(--border)" }}
+                style={{
+                  gap: 6,
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  background: "var(--bg-muted)",
+                  border: "1px solid var(--border)",
+                }}
               >
                 <LiveDot />
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", fontFamily: "'DM Mono', monospace" }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    fontFamily: "'DM Mono', monospace",
+                  }}
+                >
                   {timeLabel}
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{dateLabel}</span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  {dateLabel}
+                </span>
               </div>
 
               <GhostBtn onClick={handleRefreshAll}>
@@ -521,92 +654,224 @@ export default function POSDashboardPage() {
                 <button
                   onClick={() => setNotifOpen((o) => !o)}
                   style={{
-                    position: "relative", padding: "7px", borderRadius: 8,
-                    border: "1px solid var(--border)", background: "transparent",
-                    cursor: "pointer", display: "flex", alignItems: "center",
-                    color: "var(--text-secondary)", transition: "all 0.15s",
+                    position: "relative",
+                    padding: "7px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    color: "var(--text-secondary)",
+                    transition: "all 0.15s",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-muted)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "var(--bg-muted)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
                 >
                   <Bell size={15} />
                   {lowStockItems.some((i: any) => i.critical) && (
                     <span
                       style={{
-                        position: "absolute", top: 4, right: 4,
-                        width: 7, height: 7, background: "#e11d48",
-                        borderRadius: "50%", border: "1.5px solid var(--bg-card)",
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        width: 7,
+                        height: 7,
+                        background: "#e11d48",
+                        borderRadius: "50%",
+                        border: "1.5px solid var(--bg-card)",
                       }}
                     />
                   )}
                 </button>
                 {notifOpen && (
                   <div className="notif-panel fade-in">
-                    <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                      <div className="row" style={{ justifyContent: "space-between" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Notifications</span>
-                        <span style={{ fontSize: 11, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}>Mark all read</span>
+                    <div
+                      style={{
+                        padding: "14px 16px",
+                        borderBottom: "1px solid var(--border)",
+                      }}
+                    >
+                      <div
+                        className="row"
+                        style={{ justifyContent: "space-between" }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "var(--text-primary)",
+                          }}
+                        >
+                          Notifications
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "var(--accent)",
+                            cursor: "pointer",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Mark all read
+                        </span>
                       </div>
                     </div>
 
                     {/* Critical stock alerts */}
-                    {lowStockItems.filter((i: any) => i.critical).map((item: any, idx: number) => (
-                      <div
-                        key={`crit-${idx}`}
-                        className="hover-row"
-                        style={{ padding: "12px 16px", display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(225,29,72,0.04)" }}
-                      >
-                        <div style={{ marginTop: 1, flexShrink: 0 }}><AlertTriangle size={14} color="#e11d48" /></div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 500 }}>
-                            {item.name} critically low ({item.stock} {item.unit})
+                    {lowStockItems
+                      .filter((i: any) => i.critical)
+                      .map((item: any, idx: number) => (
+                        <div
+                          key={`crit-${idx}`}
+                          className="hover-row"
+                          style={{
+                            padding: "12px 16px",
+                            display: "flex",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            background: "rgba(225,29,72,0.04)",
+                          }}
+                        >
+                          <div style={{ marginTop: 1, flexShrink: 0 }}>
+                            <AlertTriangle size={14} color="#e11d48" />
                           </div>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                            {fmtNotifTime(item.updatedAt)}
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                color: "var(--text-primary)",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {item.name} critically low ({item.stock}{" "}
+                              {item.unit})
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {fmtNotifTime(item.updatedAt)}
+                            </div>
                           </div>
+                          <div
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: "#3b82f6",
+                              marginTop: 4,
+                              flexShrink: 0,
+                            }}
+                          />
                         </div>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", marginTop: 4, flexShrink: 0 }} />
-                      </div>
-                    ))}
+                      ))}
 
                     {/* Low (non-critical) stock alerts */}
-                    {lowStockItems.filter((i: any) => !i.critical).slice(0, 2).map((item: any, idx: number) => (
-                      <div
-                        key={`low-${idx}`}
-                        className="hover-row"
-                        style={{ padding: "12px 16px", display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(59,130,246,0.04)" }}
-                      >
-                        <div style={{ marginTop: 1, flexShrink: 0 }}><AlertTriangle size={14} color="#f59e0b" /></div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 500 }}>
-                            {item.name} running low ({item.stock} {item.unit})
+                    {lowStockItems
+                      .filter((i: any) => !i.critical)
+                      .slice(0, 2)
+                      .map((item: any, idx: number) => (
+                        <div
+                          key={`low-${idx}`}
+                          className="hover-row"
+                          style={{
+                            padding: "12px 16px",
+                            display: "flex",
+                            gap: 10,
+                            alignItems: "flex-start",
+                            background: "rgba(59,130,246,0.04)",
+                          }}
+                        >
+                          <div style={{ marginTop: 1, flexShrink: 0 }}>
+                            <AlertTriangle size={14} color="#f59e0b" />
                           </div>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                            {fmtNotifTime(item.updatedAt)}
+                          <div style={{ flex: 1 }}>
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                color: "var(--text-primary)",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {item.name} running low ({item.stock} {item.unit})
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {fmtNotifTime(item.updatedAt)}
+                            </div>
                           </div>
+                          <div
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              background: "#3b82f6",
+                              marginTop: 4,
+                              flexShrink: 0,
+                            }}
+                          />
                         </div>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", marginTop: 4, flexShrink: 0 }} />
-                      </div>
-                    ))}
+                      ))}
 
                     {/* Target milestone */}
                     {target && target.pct >= 75 && (
                       <div
                         className="hover-row"
-                        style={{ padding: "12px 16px", display: "flex", gap: 10, alignItems: "flex-start" }}
+                        style={{
+                          padding: "12px 16px",
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "flex-start",
+                        }}
                       >
-                        <div style={{ marginTop: 1, flexShrink: 0 }}><CheckCircle2 size={14} color="#10b981" /></div>
+                        <div style={{ marginTop: 1, flexShrink: 0 }}>
+                          <CheckCircle2 size={14} color="#10b981" />
+                        </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 400 }}>
+                          <div
+                            style={{
+                              fontSize: 12.5,
+                              color: "var(--text-primary)",
+                              fontWeight: 400,
+                            }}
+                          >
                             {target.label} — {target.pct}% reached
                           </div>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Revenue target</div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              marginTop: 2,
+                            }}
+                          >
+                            Revenue target
+                          </div>
                         </div>
                       </div>
                     )}
 
                     {lowStockItems.length === 0 && !target && (
-                      <div style={{ padding: "20px 16px", textAlign: "center", fontSize: 12.5, color: "var(--text-muted)" }}>
+                      <div
+                        style={{
+                          padding: "20px 16px",
+                          textAlign: "center",
+                          fontSize: 12.5,
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         No new notifications
                       </div>
                     )}
@@ -620,22 +885,34 @@ export default function POSDashboardPage() {
         {/* ── Main Content ─────────────────────────────────────────── */}
         <div
           style={{
-            maxWidth: 1440, margin: "0 auto",
+            maxWidth: 1440,
+            margin: "0 auto",
             padding: "20px 24px 40px",
-            display: "flex", flexDirection: "column", gap: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
           }}
         >
-
           {/* ── Row 1: Session + Stock alerts ── */}
           <div className="grid2">
-
             {/* Session widget */}
             <Card>
               <CardPad style={{ paddingBottom: 14 }}>
-                <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+                <div
+                  className="row"
+                  style={{ justifyContent: "space-between", marginBottom: 14 }}
+                >
                   <div className="row" style={{ gap: 8 }}>
                     <Clock size={14} color="var(--text-muted)" />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Current Session</span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      Current Session
+                    </span>
                   </div>
                   <div className="row" style={{ gap: 6 }}>
                     <LiveDot />
@@ -646,34 +923,76 @@ export default function POSDashboardPage() {
                 </div>
 
                 {session ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3,1fr)",
+                      gap: 8,
+                    }}
+                  >
                     {[
-                      { label: "Started",       value: fmtTime(session.startedAt) },
-                      { label: "Cashier",        value: session.cashier },
-                      { label: "Duration",       value: session.duration },
-                      { label: "Cash in Drawer", value: fmt(session.cashInDrawer) },
-                      { label: "Expected Float", value: fmt(session.expectedFloat) },
+                      { label: "Started", value: fmtTime(session.startedAt) },
+                      { label: "Cashier", value: session.cashier ?? "—" },
+                      { label: "Duration", value: session.duration ?? "—" },
+                      // FIX: guard all monetary session fields with safeFmt
+                      {
+                        label: "Cash in Drawer",
+                        value: safeFmt(session.cashInDrawer),
+                      },
+                      {
+                        label: "Expected Float",
+                        value: safeFmt(session.expectedFloat),
+                      },
                       {
                         label: "Variance",
-                        value: `${session.variance >= 0 ? "+" : ""}${fmt(session.variance)}`,
-                        accent: session.variance >= 0 ? "#10b981" : "#e11d48",
+                        // FIX: guard variance — was crashing when undefined
+                        value: `${(session.variance ?? 0) >= 0 ? "+" : ""}${safeFmt(session.variance)}`,
+                        accent:
+                          (session.variance ?? 0) >= 0 ? "#10b981" : "#e11d48",
                       },
                     ].map((s) => (
                       <div
                         key={s.label}
-                        style={{ background: "var(--bg-muted)", borderRadius: 9, padding: "10px 12px", border: "1px solid var(--border)" }}
+                        style={{
+                          background: "var(--bg-muted)",
+                          borderRadius: 9,
+                          padding: "10px 12px",
+                          border: "1px solid var(--border)",
+                        }}
                       >
-                        <div style={{ fontSize: 10.5, color: "var(--text-muted)", fontWeight: 500, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            color: "var(--text-muted)",
+                            fontWeight: 500,
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
                           {s.label}
                         </div>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: (s as any).accent || "var(--text-primary)" }}>
+                        <div
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 700,
+                            color: (s as any).accent || "var(--text-primary)",
+                          }}
+                        >
                           {s.value}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                    }}
+                  >
                     No active session for this terminal
                   </div>
                 )}
@@ -683,33 +1002,87 @@ export default function POSDashboardPage() {
             {/* Low stock */}
             <Card>
               <CardPad>
-                <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
+                <div
+                  className="row"
+                  style={{ justifyContent: "space-between", marginBottom: 14 }}
+                >
                   <div className="row" style={{ gap: 8 }}>
                     <AlertTriangle size={14} color="#f59e0b" />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Stock Alerts</span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      Stock Alerts
+                    </span>
                   </div>
                   <Chip color="#f59e0b">{lowStockItems.length} items</Chip>
                 </div>
 
                 {lowStockItems.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                    }}
+                  >
                     All stock levels healthy
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 11,
+                    }}
+                  >
                     {lowStockItems.map((item: any) => {
-                      const pct = Math.min(100, (item.stock / item.threshold) * 100);
+                      const pct = Math.min(
+                        100,
+                        (item.stock / item.threshold) * 100,
+                      );
                       const color = item.critical ? "#e11d48" : "#f59e0b";
                       return (
-                        <div key={item.name} className="row" style={{ gap: 10 }}>
-                          <Package size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-                          <span style={{ flex: 1, fontSize: 13, color: "var(--text-primary)", fontWeight: 500 }}>
+                        <div
+                          key={item.name}
+                          className="row"
+                          style={{ gap: 10 }}
+                        >
+                          <Package
+                            size={13}
+                            color="var(--text-muted)"
+                            style={{ flexShrink: 0 }}
+                          />
+                          <span
+                            style={{
+                              flex: 1,
+                              fontSize: 13,
+                              color: "var(--text-primary)",
+                              fontWeight: 500,
+                            }}
+                          >
                             {item.name}
                           </span>
                           <div className="progress-bar" style={{ width: 80 }}>
-                            <div className="progress-fill" style={{ width: `${pct}%`, background: color }} />
+                            <div
+                              className="progress-fill"
+                              style={{ width: `${pct}%`, background: color }}
+                            />
                           </div>
-                          <span style={{ fontSize: 12, fontWeight: 600, color, minWidth: 76, textAlign: "right", fontFamily: "'DM Mono', monospace" }}>
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color,
+                              minWidth: 76,
+                              textAlign: "right",
+                              fontFamily: "'DM Mono', monospace",
+                            }}
+                          >
                             {item.stock} {item.unit}
                           </span>
                         </div>
@@ -735,46 +1108,96 @@ export default function POSDashboardPage() {
               ];
               const colors = ["#3b82f6", "#10b981", "#f59e0b", "#e11d48"];
               const col = colors[i] ?? "#3b82f6";
+              // FIX: guard kpi.value — use safeFmt for monetary values
               const displayValue =
                 kpi.label === "Orders"
-                  ? kpi.value.toLocaleString()
-                  : fmt(kpi.value);
+                  ? (kpi.value ?? 0).toLocaleString()
+                  : safeFmt(kpi.value);
 
               return (
-                <Card key={kpi.label} style={{ position: "relative", overflow: "hidden" }}>
+                <Card
+                  key={kpi.label}
+                  style={{ position: "relative", overflow: "hidden" }}
+                >
                   <div
                     style={{
-                      position: "absolute", right: -15, top: -15,
-                      width: 80, height: 80, borderRadius: "50%",
+                      position: "absolute",
+                      right: -15,
+                      top: -15,
+                      width: 80,
+                      height: 80,
+                      borderRadius: "50%",
                       background: `${col}08`,
                     }}
                   />
                   <CardPad>
-                    <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    <div
+                      className="row"
+                      style={{
+                        justifyContent: "space-between",
+                        marginBottom: 14,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
                         {kpi.label}
                       </span>
-                      <div style={{ padding: "6px", borderRadius: 8, background: `${col}12`, color: col }}>
+                      <div
+                        style={{
+                          padding: "6px",
+                          borderRadius: 8,
+                          background: `${col}12`,
+                          color: col,
+                        }}
+                      >
                         {icons[i]}
                       </div>
                     </div>
-                    <div style={{ fontSize: 26, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 26,
+                        fontWeight: 800,
+                        color: "var(--text-primary)",
+                        letterSpacing: "-0.03em",
+                        lineHeight: 1,
+                      }}
+                    >
                       {displayValue}
                     </div>
                     <div className="row" style={{ gap: 5, marginTop: 10 }}>
                       <div
                         className="row"
                         style={{
-                          gap: 3, fontSize: 12, fontWeight: 600,
+                          gap: 3,
+                          fontSize: 12,
+                          fontWeight: 600,
                           color: kpi.up ? "#10b981" : "#e11d48",
-                          background: kpi.up ? "rgba(16,185,129,0.08)" : "rgba(225,29,72,0.08)",
-                          padding: "3px 7px", borderRadius: 20,
+                          background: kpi.up
+                            ? "rgba(16,185,129,0.08)"
+                            : "rgba(225,29,72,0.08)",
+                          padding: "3px 7px",
+                          borderRadius: 20,
                         }}
                       >
-                        {kpi.up ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                        {fmtDelta(kpi.delta)}
+                        {kpi.up ? (
+                          <TrendingUp size={12} />
+                        ) : (
+                          <TrendingDown size={12} />
+                        )}
+                        {fmtDelta(kpi.delta ?? 0)}
                       </div>
-                      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{kpi.sub}</span>
+                      <span
+                        style={{ fontSize: 11.5, color: "var(--text-muted)" }}
+                      >
+                        {kpi.sub}
+                      </span>
                     </div>
                   </CardPad>
                 </Card>
@@ -788,19 +1211,44 @@ export default function POSDashboardPage() {
               <CardPad style={{ padding: "16px 20px" }}>
                 <div
                   className="row"
-                  style={{ gap: 12, flexWrap: "wrap", justifyContent: "space-between", marginBottom: 10 }}
+                  style={{
+                    gap: 12,
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                  }}
                 >
                   <div className="row" style={{ gap: 8 }}>
                     <Target size={14} color="var(--accent)" />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                      }}
+                    >
                       {target.label}
                     </span>
                   </div>
                   <div className="row" style={{ gap: 10 }}>
-                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                      <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmt(target.current)}</span>
-                      <span style={{ color: "var(--text-muted)", margin: "0 4px" }}>of</span>
-                      {fmt(target.target)}
+                    <span
+                      style={{ fontSize: 13, color: "var(--text-secondary)" }}
+                    >
+                      {/* FIX: safeFmt guards against undefined target.current / target.target */}
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {safeFmt(target.current)}
+                      </span>
+                      <span
+                        style={{ color: "var(--text-muted)", margin: "0 4px" }}
+                      >
+                        of
+                      </span>
+                      {safeFmt(target.target)}
                     </span>
                     <Chip color={targetPct >= 85 ? "#10b981" : "#f59e0b"}>
                       {targetPct}% reached
@@ -816,8 +1264,15 @@ export default function POSDashboardPage() {
                     }}
                   />
                 </div>
-                <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                  {fmt(target.target - target.current)} remaining
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  {safeFmt((target.target ?? 0) - (target.current ?? 0))}{" "}
+                  remaining
                 </div>
               </CardPad>
             </Card>
@@ -825,7 +1280,11 @@ export default function POSDashboardPage() {
 
           {/* ── Row 4: Revenue chart + Payment methods ── */}
           <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 12 }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 320px",
+              gap: 12,
+            }}
             className="lg-grid-chart"
           >
             <style>{`@media(max-width:1100px){.lg-grid-chart{grid-template-columns:1fr!important}}`}</style>
@@ -836,16 +1295,40 @@ export default function POSDashboardPage() {
                 <SectionHeader
                   title="Revenue Over Time"
                   subtitle={
-                    period === "today" ? "Hourly breakdown"
-                    : period === "week" ? "Daily totals"
-                    : "Weekly totals"
+                    period === "today"
+                      ? "Hourly breakdown"
+                      : period === "week"
+                        ? "Daily totals"
+                        : "Weekly totals"
                   }
                   action={
                     <div className="row" style={{ gap: 10 }}>
-                      <div className="row" style={{ gap: 5, fontSize: 11.5, color: "var(--text-muted)" }}>
-                        <div style={{ width: 10, height: 2, borderRadius: 2, background: "#3b82f6" }} />
+                      <div
+                        className="row"
+                        style={{
+                          gap: 5,
+                          fontSize: 11.5,
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 10,
+                            height: 2,
+                            borderRadius: 2,
+                            background: "#3b82f6",
+                          }}
+                        />
                         <span>Current</span>
-                        <div style={{ width: 10, height: 2, borderRadius: 2, background: "#e2e8f0", marginLeft: 6 }} />
+                        <div
+                          style={{
+                            width: 10,
+                            height: 2,
+                            borderRadius: 2,
+                            background: "#e2e8f0",
+                            marginLeft: 6,
+                          }}
+                        />
                         <span>Prior</span>
                       </div>
                     </div>
@@ -854,26 +1337,74 @@ export default function POSDashboardPage() {
               </CardPad>
               <div style={{ padding: "0 8px 16px" }}>
                 <ResponsiveContainer width="100%" height={230}>
-                  <AreaChart data={revenueData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                  <AreaChart
+                    data={revenueData}
+                    margin={{ top: 4, right: 4, left: -16, bottom: 0 }}
+                  >
                     <defs>
                       <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        <stop
+                          offset="5%"
+                          stopColor="#3b82f6"
+                          stopOpacity={0.15}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#3b82f6"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                       <linearGradient id="prevGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.08} />
-                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0} />
+                        <stop
+                          offset="5%"
+                          stopColor="#94a3b8"
+                          stopOpacity={0.08}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#94a3b8"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--border)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: "#94a3b8" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <YAxis
-                      tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false}
-                      tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
+                      tick={{ fontSize: 11, fill: "#94a3b8" }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v) =>
+                        v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
+                      }
                     />
                     <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="prev" stroke="#cbd5e1" strokeWidth={1.5} fill="url(#prevGrad)" dot={false} strokeDasharray="4 3" />
-                    <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2.5} fill="url(#revGrad)" dot={false} activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }} />
+                    <Area
+                      type="monotone"
+                      dataKey="prev"
+                      stroke="#cbd5e1"
+                      strokeWidth={1.5}
+                      fill="url(#prevGrad)"
+                      dot={false}
+                      strokeDasharray="4 3"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#3b82f6"
+                      strokeWidth={2.5}
+                      fill="url(#revGrad)"
+                      dot={false}
+                      activeDot={{ r: 5, fill: "#3b82f6", strokeWidth: 0 }}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -882,33 +1413,86 @@ export default function POSDashboardPage() {
             {/* Payment methods donut */}
             <Card>
               <CardPad>
-                <SectionHeader title="Payment Methods" subtitle="Transaction split" />
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+                <SectionHeader
+                  title="Payment Methods"
+                  subtitle="Transaction split"
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    marginBottom: 4,
+                  }}
+                >
                   <PieChart width={150} height={150}>
                     <Pie
                       data={paymentData}
-                      cx={71} cy={71}
-                      innerRadius={48} outerRadius={68}
-                      paddingAngle={3} dataKey="value" strokeWidth={0}
+                      cx={71}
+                      cy={71}
+                      innerRadius={48}
+                      outerRadius={68}
+                      paddingAngle={3}
+                      dataKey="value"
+                      strokeWidth={0}
                     >
                       {paymentData.map((_: any, i: number) => (
-                        <Cell key={i} fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]} />
+                        <Cell
+                          key={i}
+                          fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]}
+                        />
                       ))}
                     </Pie>
                   </PieChart>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
                   {paymentData.map((p: any, i: number) => (
-                    <div key={p.name} className="row" style={{ justifyContent: "space-between" }}>
+                    <div
+                      key={p.name}
+                      className="row"
+                      style={{ justifyContent: "space-between" }}
+                    >
                       <div className="row" style={{ gap: 8 }}>
-                        <div style={{ width: 9, height: 9, borderRadius: 3, background: PAYMENT_COLORS[i % PAYMENT_COLORS.length], flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{p.name}</span>
+                        <div
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: 3,
+                            background:
+                              PAYMENT_COLORS[i % PAYMENT_COLORS.length],
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 13,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {p.name}
+                        </span>
                       </div>
                       <div className="row" style={{ gap: 10 }}>
-                        <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'DM Mono', monospace" }}>
-                          {fmt(p.amount)}
+                        {/* FIX: safeFmt guards p.amount */}
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
+                        >
+                          {safeFmt(p.amount)}
                         </span>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", minWidth: 30, textAlign: "right" }}>
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "var(--text-primary)",
+                            minWidth: 30,
+                            textAlign: "right",
+                          }}
+                        >
                           {p.value}%
                         </span>
                       </div>
@@ -922,38 +1506,100 @@ export default function POSDashboardPage() {
           {/* ── Row 5: Category breakdown ── */}
           <Card>
             <CardPad>
-              <SectionHeader title="Revenue by Category" subtitle="All sales channels" />
+              <SectionHeader
+                title="Revenue by Category"
+                subtitle="All sales channels"
+              />
               <div
-                style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5,1fr)",
+                  gap: 12,
+                }}
                 className="cat-grid"
               >
                 <style>{`@media(max-width:900px){.cat-grid{grid-template-columns:1fr 1fr!important}}`}</style>
                 {categoryData.map((c: any) => {
-                  const pct = totalCategory > 0 ? Math.round((c.value / totalCategory) * 100) : 0;
+                  const pct =
+                    totalCategory > 0
+                      ? Math.round((c.value / totalCategory) * 100)
+                      : 0;
                   return (
                     <div
                       key={c.name}
                       style={{
-                        background: "var(--bg-muted)", borderRadius: 11,
-                        padding: "14px 16px", border: "1px solid var(--border)",
-                        position: "relative", overflow: "hidden",
+                        background: "var(--bg-muted)",
+                        borderRadius: 11,
+                        padding: "14px 16px",
+                        border: "1px solid var(--border)",
+                        position: "relative",
+                        overflow: "hidden",
                       }}
                     >
-                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: `${pct * 0.7}%`, background: `${c.color}0a` }} />
-                      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: `${pct * 0.7}%`,
+                          background: `${c.color}0a`,
+                        }}
+                      />
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "var(--text-muted)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          marginBottom: 8,
+                        }}
+                      >
                         {c.name}
                       </div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em", marginBottom: 4 }}>
-                        ${c.value.toLocaleString()}
+                      <div
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 800,
+                          color: "var(--text-primary)",
+                          letterSpacing: "-0.02em",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {/* FIX: guard c.value */}$
+                        {(c.value ?? 0).toLocaleString()}
                       </div>
-                      <div className="row" style={{ gap: 6, justifyContent: "space-between" }}>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{c.orders} orders</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: c.color, background: `${c.color}12`, padding: "2px 7px", borderRadius: 20 }}>
+                      <div
+                        className="row"
+                        style={{ gap: 6, justifyContent: "space-between" }}
+                      >
+                        <div
+                          style={{ fontSize: 12, color: "var(--text-muted)" }}
+                        >
+                          {c.orders ?? 0} orders
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: c.color,
+                            background: `${c.color}12`,
+                            padding: "2px 7px",
+                            borderRadius: 20,
+                          }}
+                        >
                           {pct}%
                         </div>
                       </div>
-                      <div className="progress-bar" style={{ marginTop: 10, height: 3 }}>
-                        <div className="progress-fill" style={{ width: `${pct}%`, background: c.color }} />
+                      <div
+                        className="progress-bar"
+                        style={{ marginTop: 10, height: 3 }}
+                      >
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${pct}%`, background: c.color }}
+                        />
                       </div>
                     </div>
                   );
@@ -972,37 +1618,75 @@ export default function POSDashboardPage() {
                   <div className="row" style={{ gap: 5, fontSize: 11 }}>
                     <span style={{ color: "var(--text-muted)" }}>Low</span>
                     {[
-                      "rgba(59,130,246,0.07)", "rgba(59,130,246,0.15)",
-                      "rgba(59,130,246,0.30)", "rgba(59,130,246,0.55)",
+                      "rgba(59,130,246,0.07)",
+                      "rgba(59,130,246,0.15)",
+                      "rgba(59,130,246,0.30)",
+                      "rgba(59,130,246,0.55)",
                       "rgba(59,130,246,0.85)",
                     ].map((c, i) => (
-                      <div key={i} style={{ width: 20, height: 12, borderRadius: 4, background: c, border: "1px solid var(--border)" }} />
+                      <div
+                        key={i}
+                        style={{
+                          width: 20,
+                          height: 12,
+                          borderRadius: 4,
+                          background: c,
+                          border: "1px solid var(--border)",
+                        }}
+                      />
                     ))}
                     <span style={{ color: "var(--text-muted)" }}>High</span>
                   </div>
                 }
               />
 
-              {/* Loading state */}
               {heatmapLoading && <HeatmapSkeleton />}
 
-              {/* Error state */}
               {!heatmapLoading && heatmapError && (
                 <EmptyHeatmap message="Failed to load heatmap data. Try refreshing." />
               )}
 
-              {/* Empty state — data loaded but no orders */}
-              {!heatmapLoading && !heatmapError && heatmapRaw && (
-                heatmapRaw.every((row: number[]) => row.every((v: number) => v === 0)) ? (
+              {!heatmapLoading &&
+                !heatmapError &&
+                heatmapRaw &&
+                (heatmapRaw.every((row: number[]) =>
+                  row.every((v: number) => v === 0),
+                ) ? (
                   <EmptyHeatmap message="No order activity in the last 4 weeks." />
                 ) : (
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 3, minWidth: 560 }}>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "separate",
+                        borderSpacing: 3,
+                        minWidth: 560,
+                      }}
+                    >
                       <thead>
                         <tr>
-                          <th style={{ width: 36, textAlign: "left", paddingBottom: 6, fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }} />
+                          <th
+                            style={{
+                              width: 36,
+                              textAlign: "left",
+                              paddingBottom: 6,
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              fontWeight: 400,
+                            }}
+                          />
                           {HOURS.map((h) => (
-                            <th key={h} style={{ textAlign: "center", paddingBottom: 6, fontSize: 11, color: "var(--text-muted)", fontWeight: 500, minWidth: 36 }}>
+                            <th
+                              key={h}
+                              style={{
+                                textAlign: "center",
+                                paddingBottom: 6,
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                                fontWeight: 500,
+                                minWidth: 36,
+                              }}
+                            >
                               {h}
                             </th>
                           ))}
@@ -1011,7 +1695,15 @@ export default function POSDashboardPage() {
                       <tbody>
                         {DAYS.map((day, di) => (
                           <tr key={day}>
-                            <td style={{ fontSize: 11.5, color: "var(--text-muted)", paddingRight: 6, fontWeight: 500, whiteSpace: "nowrap" }}>
+                            <td
+                              style={{
+                                fontSize: 11.5,
+                                color: "var(--text-muted)",
+                                paddingRight: 6,
+                                fontWeight: 500,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {day}
                             </td>
                             {HOURS.map((_, hi) => {
@@ -1033,10 +1725,8 @@ export default function POSDashboardPage() {
                       </tbody>
                     </table>
                   </div>
-                )
-              )}
+                ))}
 
-              {/* No data returned at all */}
               {!heatmapLoading && !heatmapError && !heatmapRaw && (
                 <EmptyHeatmap message="No heatmap data available." />
               )}
@@ -1045,33 +1735,67 @@ export default function POSDashboardPage() {
 
           {/* ── Row 7: Top products + Recent orders + Staff ── */}
           <div className="grid3">
-
             {/* Top products */}
             <Card>
               <CardPad>
                 <SectionHeader title="Top Products" subtitle="By revenue" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
+                >
                   {topProducts.map((p: any, i: number) => (
                     <div key={p.name} className="row" style={{ gap: 10 }}>
                       <span
                         style={{
-                          width: 22, height: 22, borderRadius: 7,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 11, fontWeight: 700, flexShrink: 0,
-                          background: i < 3 ? "rgba(59,130,246,0.1)" : "var(--bg-muted)",
+                          width: 22,
+                          height: 22,
+                          borderRadius: 7,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                          background:
+                            i < 3 ? "rgba(59,130,246,0.1)" : "var(--bg-muted)",
                           color: i < 3 ? "#3b82f6" : "var(--text-muted)",
                         }}
                       >
                         {p.rank ?? i + 1}
                       </span>
-                      <span style={{ flex: 1, fontSize: 13, color: "var(--text-primary)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 13,
+                          color: "var(--text-primary)",
+                          fontWeight: 500,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {p.name}
                       </span>
                       <div className="progress-bar" style={{ width: 50 }}>
-                        <div className="progress-fill" style={{ width: `${p.pct}%`, background: "#3b82f6" }} />
+                        <div
+                          className="progress-fill"
+                          style={{
+                            width: `${p.pct ?? 0}%`,
+                            background: "#3b82f6",
+                          }}
+                        />
                       </div>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", minWidth: 46, textAlign: "right", fontFamily: "'DM Mono', monospace" }}>
-                        ${p.revenue.toLocaleString()}
+                      {/* FIX: guard p.revenue */}
+                      <span
+                        style={{
+                          fontSize: 12.5,
+                          fontWeight: 700,
+                          color: "var(--text-primary)",
+                          minWidth: 46,
+                          textAlign: "right",
+                          fontFamily: "'DM Mono', monospace",
+                        }}
+                      >
+                        ${(p.revenue ?? 0).toLocaleString()}
                       </span>
                     </div>
                   ))}
@@ -1085,7 +1809,20 @@ export default function POSDashboardPage() {
                 <SectionHeader
                   title="Recent Orders"
                   action={
-                    <button style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 500, color: "var(--accent)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                    <button
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: "var(--accent)",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
                       View all <ArrowRight size={12} />
                     </button>
                   }
@@ -1093,44 +1830,84 @@ export default function POSDashboardPage() {
               </CardPad>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {recentOrders.map((o: any, i: number) => {
-                  const s = orderStatusConfig[o.status as OrderStatus] ?? orderStatusConfig.paid;
+                  const s =
+                    orderStatusConfig[o.status as OrderStatus] ??
+                    orderStatusConfig.paid;
                   return (
                     <div
                       key={o.id}
                       className="hover-row"
                       style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
                         padding: "11px 20px",
                         borderTop: i > 0 ? "1px solid var(--border)" : "none",
                         transition: "background 0.15s",
                       }}
                     >
                       <div>
-                        <div className="row" style={{ gap: 7, marginBottom: 3 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'DM Mono', monospace" }}>
+                        <div
+                          className="row"
+                          style={{ gap: 7, marginBottom: 3 }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: "var(--text-primary)",
+                              fontFamily: "'DM Mono', monospace",
+                            }}
+                          >
                             {o.id}
                           </span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          <span
+                            style={{ fontSize: 11, color: "var(--text-muted)" }}
+                          >
                             {o.items} item{o.items !== 1 ? "s" : ""}
                           </span>
                         </div>
-                        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                        <div
+                          style={{ fontSize: 11.5, color: "var(--text-muted)" }}
+                        >
                           {o.time} · {o.channel}
                         </div>
                       </div>
                       <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'DM Mono', monospace" }}>
-                          {typeof o.amount === "number" ? fmt(o.amount) : o.amount}
+                        {/* FIX: guard o.amount */}
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "var(--text-primary)",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
+                        >
+                          {typeof o.amount === "number"
+                            ? safeFmt(o.amount)
+                            : (o.amount ?? "—")}
                         </span>
                         <div
                           style={{
-                            display: "flex", alignItems: "center", gap: 5,
-                            fontSize: 11.5, fontWeight: 600,
-                            padding: "3px 9px", borderRadius: 20,
-                            color: s.color, background: s.bg,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            padding: "3px 9px",
+                            borderRadius: 20,
+                            color: s.color,
+                            background: s.bg,
                           }}
                         >
-                          <div style={{ width: 5, height: 5, borderRadius: "50%", background: s.dot }} />
+                          <div
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: "50%",
+                              background: s.dot,
+                            }}
+                          />
                           {s.label}
                         </div>
                       </div>
@@ -1145,43 +1922,118 @@ export default function POSDashboardPage() {
               <CardPad>
                 <SectionHeader
                   title="Cashier Performance"
-                  subtitle={period === "today" ? "Today" : period === "week" ? "This week" : "This month"}
+                  subtitle={
+                    period === "today"
+                      ? "Today"
+                      : period === "week"
+                        ? "This week"
+                        : "This month"
+                  }
                 />
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 14 }}
+                >
                   {staffData.map((s: any) => (
-                    <div key={s.cashierId ?? s.name} className="row" style={{ gap: 11 }}>
+                    <div
+                      key={s.cashierId ?? s.name}
+                      className="row"
+                      style={{ gap: 11 }}
+                    >
                       <div
                         style={{
-                          width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                          background: `${s.color}18`, color: s.color,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 12, fontWeight: 800, letterSpacing: "-0.02em",
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          flexShrink: 0,
+                          background: `${s.color}18`,
+                          color: s.color,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          letterSpacing: "-0.02em",
                           border: `1.5px solid ${s.color}30`,
                         }}
                       >
                         {s.initials}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="row" style={{ justifyContent: "space-between", marginBottom: 5 }}>
+                        <div
+                          className="row"
+                          style={{
+                            justifyContent: "space-between",
+                            marginBottom: 5,
+                          }}
+                        >
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", lineHeight: 1 }}>{s.name}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{s.role}</div>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: "var(--text-primary)",
+                                lineHeight: 1,
+                              }}
+                            >
+                              {s.name}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {s.role}
+                            </div>
                           </div>
                           <div style={{ textAlign: "right" }}>
-                            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", fontFamily: "'DM Mono', monospace" }}>
-                              ${s.sales.toLocaleString()}
+                            {/* FIX: guard s.sales */}
+                            <div
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 800,
+                                color: "var(--text-primary)",
+                                fontFamily: "'DM Mono', monospace",
+                              }}
+                            >
+                              ${(s.sales ?? 0).toLocaleString()}
                             </div>
-                            <div style={{ fontSize: 11, fontWeight: 600, marginTop: 1, color: s.trend > 0 ? "#10b981" : "#e11d48" }}>
-                              {s.trend > 0 ? "+" : ""}{s.trend}%
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                marginTop: 1,
+                                color:
+                                  (s.trend ?? 0) > 0 ? "#10b981" : "#e11d48",
+                              }}
+                            >
+                              {(s.trend ?? 0) > 0 ? "+" : ""}
+                              {s.trend ?? 0}%
                             </div>
                           </div>
                         </div>
                         <div className="row" style={{ gap: 8 }}>
-                          <div className="progress-bar" style={{ flex: 1, height: 4 }}>
-                            <div className="progress-fill" style={{ width: `${(s.sales / maxStaffSales) * 100}%`, background: s.color }} />
+                          <div
+                            className="progress-bar"
+                            style={{ flex: 1, height: 4 }}
+                          >
+                            <div
+                              className="progress-fill"
+                              style={{
+                                width: `${((s.sales ?? 0) / maxStaffSales) * 100}%`,
+                                background: s.color,
+                              }}
+                            />
                           </div>
-                          <span style={{ fontSize: 11.5, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                            {s.txn} txn
+                          <span
+                            style={{
+                              fontSize: 11.5,
+                              color: "var(--text-muted)",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {s.txn ?? 0} txn
                           </span>
                         </div>
                       </div>
@@ -1194,43 +2046,114 @@ export default function POSDashboardPage() {
 
           {/* ── Row 8: Customer insights + Discounts + Table status ── */}
           <div className="grid3">
-
             {/* Customer Insights */}
             <Card>
               <CardPad>
                 <SectionHeader title="Customer Insights" />
                 <div className="grid2" style={{ marginBottom: 14 }}>
                   {[
-                    { label: "New Today",  value: customerData?.newToday  ?? 0, color: "#3b82f6" },
-                    { label: "Returning",  value: customerData?.returning ?? 0, color: "#10b981" },
+                    {
+                      label: "New Today",
+                      value: customerData?.newToday ?? 0,
+                      color: "#3b82f6",
+                    },
+                    {
+                      label: "Returning",
+                      value: customerData?.returning ?? 0,
+                      color: "#10b981",
+                    },
                   ].map((c) => (
                     <div
                       key={c.label}
-                      style={{ background: `${c.color}09`, borderRadius: 10, padding: "12px 14px", border: `1px solid ${c.color}20` }}
+                      style={{
+                        background: `${c.color}09`,
+                        borderRadius: 10,
+                        padding: "12px 14px",
+                        border: `1px solid ${c.color}20`,
+                      }}
                     >
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--text-muted)",
+                          fontWeight: 500,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                          marginBottom: 6,
+                        }}
+                      >
                         {c.label}
                       </div>
-                      <div style={{ fontSize: 24, fontWeight: 800, color: c.color, letterSpacing: "-0.03em" }}>
+                      <div
+                        style={{
+                          fontSize: 24,
+                          fontWeight: 800,
+                          color: c.color,
+                          letterSpacing: "-0.03em",
+                        }}
+                      >
                         {c.value}
                       </div>
                     </div>
                   ))}
                 </div>
                 <Divider style={{ marginBottom: 14 }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
                   {[
-                    { label: "Top spender today",  value: customerData?.topSpender ?? "—",                          mono: false },
-                    { label: "Amount spent",        value: customerData ? fmt(customerData.topAmount) : "—",         mono: true,  color: "#10b981" },
-                    { label: "Avg visits / period", value: customerData ? `${customerData.avgVisits}×` : "—",        mono: true },
+                    {
+                      label: "Top spender today",
+                      value: customerData?.topSpender ?? "—",
+                      mono: false,
+                    },
+                    // FIX: safeFmt guards topAmount
+                    {
+                      label: "Amount spent",
+                      value: customerData
+                        ? safeFmt(customerData.topAmount)
+                        : "—",
+                      mono: true,
+                      color: "#10b981",
+                    },
+                    {
+                      label: "Avg visits / period",
+                      value: customerData
+                        ? `${customerData.avgVisits ?? 0}×`
+                        : "—",
+                      mono: true,
+                    },
                     ...(customerData?.satisfaction != null
-                      ? [{ label: "Satisfaction score", value: `${customerData.satisfaction} ★`, mono: false, color: "#f59e0b" }]
-                      : []
-                    ),
+                      ? [
+                          {
+                            label: "Satisfaction score",
+                            value: `${customerData.satisfaction} ★`,
+                            mono: false,
+                            color: "#f59e0b",
+                          },
+                        ]
+                      : []),
                   ].map((r) => (
-                    <div key={r.label} className="row" style={{ justifyContent: "space-between" }}>
-                      <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{r.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: (r as any).color || "var(--text-primary)", fontFamily: r.mono ? "'DM Mono', monospace" : "inherit" }}>
+                    <div
+                      key={r.label}
+                      className="row"
+                      style={{ justifyContent: "space-between" }}
+                    >
+                      <span
+                        style={{ fontSize: 12.5, color: "var(--text-muted)" }}
+                      >
+                        {r.label}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: (r as any).color || "var(--text-primary)",
+                          fontFamily: r.mono
+                            ? "'DM Mono', monospace"
+                            : "inherit",
+                        }}
+                      >
                         {r.value}
                       </span>
                     </div>
@@ -1244,12 +2167,25 @@ export default function POSDashboardPage() {
               <CardPad style={{ paddingBottom: 12 }}>
                 <SectionHeader
                   title="Discounts & Promos"
-                  subtitle={period === "today" ? "Applied today" : period === "week" ? "Applied this week" : "Applied this month"}
+                  subtitle={
+                    period === "today"
+                      ? "Applied today"
+                      : period === "week"
+                        ? "Applied this week"
+                        : "Applied this month"
+                  }
                 />
               </CardPad>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {discountData.length === 0 ? (
-                  <div style={{ padding: "24px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+                  <div
+                    style={{
+                      padding: "24px 20px",
+                      textAlign: "center",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                    }}
+                  >
                     No discounts applied
                   </div>
                 ) : (
@@ -1258,22 +2194,47 @@ export default function POSDashboardPage() {
                       key={d.code}
                       className="hover-row"
                       style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "12px 20px", borderTop: "1px solid var(--border)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 20px",
+                        borderTop: "1px solid var(--border)",
                         transition: "background 0.15s",
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'DM Mono', monospace" }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "var(--text-primary)",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
+                        >
                           {d.code}
                         </div>
                         <div className="row" style={{ gap: 6, marginTop: 3 }}>
                           <Chip color="#8b5cf6">{d.type}</Chip>
-                          <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{d.uses} uses</span>
+                          <span
+                            style={{
+                              fontSize: 11.5,
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {d.uses ?? 0} uses
+                          </span>
                         </div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "#e11d48", fontFamily: "'DM Mono', monospace" }}>
-                        {fmt(d.saved)}
+                      {/* FIX: safeFmt guards d.saved */}
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: "#e11d48",
+                          fontFamily: "'DM Mono', monospace",
+                        }}
+                      >
+                        {safeFmt(d.saved)}
                       </div>
                     </div>
                   ))
@@ -1281,10 +2242,23 @@ export default function POSDashboardPage() {
               </div>
               <CardPad style={{ paddingTop: 12, paddingBottom: 14 }}>
                 <Divider style={{ marginBottom: 12 }} />
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Total discounts given</span>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: "#e11d48", fontFamily: "'DM Mono', monospace" }}>
-                    {fmt(discountTotal)}
+                <div
+                  className="row"
+                  style={{ justifyContent: "space-between" }}
+                >
+                  <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                    Total discounts given
+                  </span>
+                  {/* FIX: safeFmt guards discountTotal */}
+                  <span
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: "#e11d48",
+                      fontFamily: "'DM Mono', monospace",
+                    }}
+                  >
+                    {safeFmt(discountTotal)}
                   </span>
                 </div>
               </CardPad>
@@ -1297,44 +2271,143 @@ export default function POSDashboardPage() {
                   title="Floor Plan"
                   subtitle={`${(tableData as any[]).filter((t) => t.status === "occupied").length} of ${(tableData as any[]).length} tables in use`}
                 />
-                {(tableData as any[]).length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "var(--text-muted)", fontSize: 13 }}>
+
+                {/* FIX: show error state when the /tables endpoint returns 500 */}
+                {tablesError ? (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                    }}
+                  >
+                    Unable to load tables — server error
+                  </div>
+                ) : (tableData as any[]).length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "var(--text-muted)",
+                      fontSize: 13,
+                    }}
+                  >
                     No tables configured
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4,1fr)",
+                      gap: 8,
+                      marginBottom: 16,
+                    }}
+                  >
                     {(tableData as any[]).map((t) => {
-                      const s = tableStatusConfig[t.status as TableStatus] ?? tableStatusConfig.available;
+                      const s =
+                        tableStatusConfig[t.status as TableStatus] ??
+                        tableStatusConfig.available;
                       return (
                         <div
                           key={t.id}
                           style={{
-                            borderRadius: 10, border: `1.5px solid ${s.border}`,
-                            background: s.bg, padding: "10px 6px", textAlign: "center",
-                            cursor: "default", transition: "transform 0.15s",
+                            borderRadius: 10,
+                            border: `1.5px solid ${s.border}`,
+                            background: s.bg,
+                            padding: "10px 6px",
+                            textAlign: "center",
+                            cursor: "default",
+                            transition: "transform 0.15s",
                           }}
-                          onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.04)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.transform = "scale(1.04)")
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.transform = "scale(1)")
+                          }
                         >
-                          <div style={{ fontSize: 12.5, fontWeight: 800, color: s.color, marginBottom: 2 }}>{t.id}</div>
-                          <div style={{ fontSize: 10, color: s.color, opacity: 0.75, fontWeight: 500 }}>
-                            {t.status === "occupied" ? t.duration : t.status === "reserved" ? "resv." : "free"}
+                          <div
+                            style={{
+                              fontSize: 12.5,
+                              fontWeight: 800,
+                              color: s.color,
+                              marginBottom: 2,
+                            }}
+                          >
+                            {t.id}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: s.color,
+                              opacity: 0.75,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {t.status === "occupied"
+                              ? t.duration
+                              : t.status === "reserved"
+                                ? "resv."
+                                : "free"}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 )}
+
                 <Divider style={{ marginBottom: 12 }} />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3,1fr)",
+                    gap: 6,
+                  }}
+                >
                   {[
-                    { label: "Occupied",  count: (tableData as any[]).filter((t) => t.status === "occupied").length,  color: "#3b82f6" },
-                    { label: "Available", count: (tableData as any[]).filter((t) => t.status === "available").length, color: "#10b981" },
-                    { label: "Reserved",  count: (tableData as any[]).filter((t) => t.status === "reserved").length,  color: "#f59e0b" },
+                    {
+                      label: "Occupied",
+                      count: (tableData as any[]).filter(
+                        (t) => t.status === "occupied",
+                      ).length,
+                      color: "#3b82f6",
+                    },
+                    {
+                      label: "Available",
+                      count: (tableData as any[]).filter(
+                        (t) => t.status === "available",
+                      ).length,
+                      color: "#10b981",
+                    },
+                    {
+                      label: "Reserved",
+                      count: (tableData as any[]).filter(
+                        (t) => t.status === "reserved",
+                      ).length,
+                      color: "#f59e0b",
+                    },
                   ].map((s) => (
                     <div key={s.label} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: s.color, letterSpacing: "-0.02em" }}>{s.count}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{s.label}</div>
+                      <div
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 800,
+                          color: s.color,
+                          letterSpacing: "-0.02em",
+                        }}
+                      >
+                        {s.count}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--text-muted)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {s.label}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1343,7 +2416,15 @@ export default function POSDashboardPage() {
           </div>
 
           {/* ── Footer ── */}
-          <div className="row" style={{ justifyContent: "space-between", padding: "8px 0", flexWrap: "wrap", gap: 8 }}>
+          <div
+            className="row"
+            style={{
+              justifyContent: "space-between",
+              padding: "8px 0",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               POS Analytics · Last synced {timeLabel}
             </span>
@@ -1351,16 +2432,23 @@ export default function POSDashboardPage() {
               {["Documentation", "Support", "API Status"].map((l) => (
                 <span
                   key={l}
-                  style={{ fontSize: 12, color: "var(--text-muted)", cursor: "pointer" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "var(--accent)")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "var(--text-muted)")
+                  }
                 >
                   {l}
                 </span>
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </>
