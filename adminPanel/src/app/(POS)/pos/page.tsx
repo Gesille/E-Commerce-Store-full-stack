@@ -1024,7 +1024,7 @@ export default function POSDashboardPage() {
                         display: "flex",
                         flexDirection: "column",
                         gap: 11,
-                        maxHeight: 220,
+                        maxHeight: 160,
                         overflowY: "auto",
                         paddingRight: 4,
                       }}
