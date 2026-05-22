@@ -15,7 +15,7 @@ const receiptRouter = express.Router();
 // ─────────────────────────────────────────────────────────
 
 receiptRouter.get(
-  "/get-all-receipts",
+  "/get-all-receipts-printed",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
   getReceipts
