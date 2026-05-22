@@ -85,10 +85,7 @@ const HOURS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * FIX: Safe wrapper around fmt() — prevents the `.toFixed` crash when any
- * API endpoint returns undefined/null (e.g. the tables 500, session errors).
- */
+
 function safeFmt(val: number | undefined | null): string {
   if (val == null || isNaN(val as number)) return "$0.00";
   return fmt(val);
@@ -333,7 +330,7 @@ export default function POSDashboardPage() {
   // Live clock
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    const t = setInterval(() => setLiveTime(new Date()), 30000);
+    const t = setInterval(() => setLiveTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
