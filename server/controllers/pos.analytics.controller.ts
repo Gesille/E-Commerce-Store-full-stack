@@ -331,52 +331,103 @@ export const getRecentOrders = CatchAsyncError(
 );
 
 // ─── Payment Methods ──────────────────────────────────────────────────────────
-// GET /api/pos/analytics/payment-methods?period=today|week|month&configId=1
+
 
 export const getPaymentMethodsSplit = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId);
-    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+    const configId = Number(req.query.configId) || 0;
+    const sessionFilter: any[] = configId
+      ? [["config_id", "=", configId]]
+      : [];
 
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest("pos.order", "search_read",
+    // ─── 1. Fetch orders ───────────────────────────────────────────────────
+    const orders = await odooRequest(
+      "pos.order",
+      "search_read",
       [orderDomain(from, to, sessionFilter)],
-      { fields: ["payment_ids"], limit: 5000 }
+      { fields: ["id"], limit: 5000 }
     );
 
-    const orderIds = orders.map((o: any) => o.id);
+    const orderIds: number[] = orders.map((o: any) => o.id);
+
     if (!orderIds.length) {
-      return res.status(200).json({ status: "success", period, methods: [] });
+      return res.status(200).json({
+        status: "success",
+        period,
+        total: 0,
+        methods: [],
+      });
     }
 
-    const payments = await odooRequest("pos.payment", "search_read",
-      [[["pos_order_id", "in", orderIds]]],
-      { fields: ["payment_method_id", "amount"], limit: 20000 }
-    );
+    // ─── 2. Fetch payments (handle Odoo v14/v15 field name difference) ─────
+    let payments: any[] = [];
+    try {
+      // Odoo 16+ uses "pos_order_id"
+      payments = await odooRequest(
+        "pos.payment",
+        "search_read",
+        [[["pos_order_id", "in", orderIds]]],
+        { fields: ["payment_method_id", "amount"], limit: 20000 }
+      );
+    } catch {
+      // Odoo 14/15 uses "order_id"
+      payments = await odooRequest(
+        "pos.payment",
+        "search_read",
+        [[["order_id", "in", orderIds]]],
+        { fields: ["payment_method_id", "amount"], limit: 20000 }
+      );
+    }
 
+    if (!payments.length) {
+      return res.status(200).json({
+        status: "success",
+        period,
+        total: 0,
+        methods: [],
+      });
+    }
+
+    // ─── 3. Aggregate amounts per payment method ───────────────────────────
     const methodMap: Record<string, { name: string; amount: number }> = {};
     let total = 0;
+
     for (const p of payments) {
-      const id   = String(p.payment_method_id?.[0]);
-      const name = p.payment_method_id?.[1] ?? "Unknown";
-      if (!methodMap[id]) methodMap[id] = { name, amount: 0 };
-      methodMap[id].amount += p.amount ?? 0;
-      total += p.amount ?? 0;
+      const id = String(p.payment_method_id?.[0] ?? "unknown");
+      const name = (p.payment_method_id?.[1] as string) ?? "Unknown";
+      const amount = typeof p.amount === "number" ? p.amount : 0;
+
+      if (!methodMap[id]) {
+        methodMap[id] = { name, amount: 0 };
+      }
+      methodMap[id].amount += amount;
+      total += amount;
     }
 
-    const methods = Object.values(methodMap)
-      .sort((a, b) => b.amount - a.amount)
-      .map((m) => ({
-        name:   m.name,
+    // ─── 4. Format & sort ──────────────────────────────────────────────────
+    const methods = Object.entries(methodMap)
+      .sort(([, a], [, b]) => b.amount - a.amount)
+      .map(([id, m]) => ({
+        id: id === "unknown" ? null : Number(id),
+        name: m.name,
         amount: Math.round(m.amount * 100) / 100,
-        value:  total > 0 ? Math.round((m.amount / total) * 100) : 0,
+        percentage:
+          total > 0 ? Math.round((m.amount / total) * 10000) / 100 : 0,
       }));
 
-    res.status(200).json({ status: "success", period, methods });
+    // ─── 5. Respond ────────────────────────────────────────────────────────
+    return res.status(200).json({
+      status: "success",
+      period,
+      total: Math.round(total * 100) / 100,
+      methods,
+    });
   }
 );
+
 
 // ─── Category Breakdown ───────────────────────────────────────────────────────
 // GET /api/pos/analytics/categories?period=today|week|month&configId=1
