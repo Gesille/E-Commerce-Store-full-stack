@@ -208,18 +208,28 @@ export const posApi = apiSlice.injectEndpoints({
         date_to?: string;
       }) => {
         const params = new URLSearchParams();
+
         params.set("page", String(page));
         params.set("limit", String(limit));
+
         if (status) params.set("status", status);
         if (search) params.set("search", search);
         if (date_from) params.set("date_from", date_from);
         if (date_to) params.set("date_to", date_to);
+
         return {
-          url: `pos-orders?${params}`,
+          url: `pos-orders?${params.toString()}`,
           method: "GET",
           credentials: "include" as const,
         };
       },
+
+      serializeQueryArgs: ({ endpointName }) => endpointName,
+
+      forceRefetch({ currentArg, previousArg }) {
+        return JSON.stringify(currentArg) !== JSON.stringify(previousArg);
+      },
+
       transformResponse: (res: any) => res,
     }),
 
@@ -229,6 +239,7 @@ export const posApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
+
       transformResponse: (res: any) => res.order,
     }),
   }),
