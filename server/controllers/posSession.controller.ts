@@ -1606,7 +1606,7 @@ export const getPosOrderById = CatchAsyncError(
           "amount_tax",
           "lines",
           "session_id",
-          "employee_id",
+          "user_id",
           "payment_ids",
         ],
       },
