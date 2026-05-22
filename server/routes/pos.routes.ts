@@ -19,7 +19,7 @@ import {
   getPaymentMethods,
   createOrder,
   confirmOpeningBalance,
-  getOrderReceiptPdf,
+ 
   createOdooInvoice,
   getPOSConfigs,
   
@@ -119,7 +119,7 @@ POSRouter.post(
   createCustomer,
 );
 POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
-POSRouter.get("/order/:orderId/receipt-pdf", isAuthenticated, getOrderReceiptPdf);
+
 POSRouter.post("/order/invoice",isAuthenticated,createOdooInvoice);
 
 export default POSRouter;

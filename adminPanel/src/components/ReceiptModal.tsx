@@ -193,15 +193,7 @@ export function ReceiptModal({
             🖨 Print
           </button>
 
-          {odooOrderId && (
-            <button
-              onClick={handleDownloadPdf}
-              disabled={isPdfLoading}
-              className="h-9 border border-violet-200 bg-violet-50 text-violet-700 rounded-xl text-[13px] font-semibold hover:bg-violet-100 cursor-pointer transition-colors disabled:opacity-50 whitespace-nowrap px-2"
-            >
-              {isPdfLoading ? "Loading..." : "⬇ PDF Receipt"}
-            </button>
-          )}
+          
 
           {odooOrderId && invoiceState.status !== "success" && (
             <button

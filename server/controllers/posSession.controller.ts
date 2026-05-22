@@ -1460,68 +1460,7 @@ export const debugPOSConfig = CatchAsyncError(
   },
 );
 
-export const getOrderReceiptPdf = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const orderId = Number(req.params.orderId);
-    if (!orderId) return next(new ErrorHandler("orderId is required", 400));
 
-const authResponse = await fetch(`${process.env.ODOO_URL}/web/session/authenticate`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    jsonrpc: "2.0",
-    method: "call",
-    id: Date.now(),
-    params: {
-      db: process.env.ODOO_DB,
-      login: process.env.ODOO_USER,
-      password: process.env.ODOO_PASSWORD,
-      base_location: process.env.ODOO_URL,
-    },
-  }),
-});
-
-console.log("Auth status:", authResponse.status);
-console.log("Set-Cookie:", authResponse.headers.get("set-cookie"));
-const authData = await authResponse.json();
-console.log("Auth result:", JSON.stringify(authData?.result?.uid));
-    const setCookie = authResponse.headers.get("set-cookie") ?? "";
-    const match = setCookie.match(/session_id=([^;]+)/);
-    if (!match)
-      return next(new ErrorHandler("Failed to authenticate with Odoo", 502));
-
-    const sessionId = match[1];
-
-    const pdfResponse = await fetch(
-      `${process.env.ODOO_URL}/report/pdf/point_of_sale.report_receipt/${orderId}`,
-      {
-        headers: {
-          "X-Openerp-Session-Id": sessionId,
-          Cookie: `session_id=${sessionId}`,
-        },
-      },
-    );
-
-    if (!pdfResponse.ok) {
-      return next(new ErrorHandler("Failed to fetch receipt from Odoo", 502));
-    }
-
-    const buf = Buffer.from(await pdfResponse.arrayBuffer());
-
-    if (!buf.subarray(0, 4).toString("ascii").startsWith("%PDF")) {
-      console.error("Invalid PDF:", buf.toString("utf-8").slice(0, 300));
-      return next(new ErrorHandler("Odoo returned invalid PDF", 502));
-    }
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Length", buf.length);
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="receipt-${orderId}.pdf"`,
-    );
-    res.end(buf);
-  },
-);
 export const createOdooInvoice = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { odooOrderId } = req.body;
