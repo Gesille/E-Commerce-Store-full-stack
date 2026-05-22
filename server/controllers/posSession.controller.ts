@@ -1465,26 +1465,26 @@ export const getOrderReceiptPdf = CatchAsyncError(
     const orderId = Number(req.params.orderId);
     if (!orderId) return next(new ErrorHandler("orderId is required", 400));
 
-    // Get a fresh session using your existing credentials
-    const authResponse = await fetch(
-      `${process.env.ODOO_URL}/web/session/authenticate`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "call",
-          params: {
-            db: process.env.ODOO_DB,
-            login: process.env.ODOO_USER,
-            password: process.env.ODOO_PASSWORD,
-          },
-        }),
-      },
-    );
+const authResponse = await fetch(`${process.env.ODOO_URL}/web/session/authenticate`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    method: "call",
+    id: Date.now(),
+    params: {
+      db: process.env.ODOO_DB,
+      login: process.env.ODOO_USER,
+      password: process.env.ODOO_PASSWORD,
+      base_location: process.env.ODOO_URL,
+    },
+  }),
+});
+
+console.log("Auth status:", authResponse.status);
+console.log("Set-Cookie:", authResponse.headers.get("set-cookie"));
 const authData = await authResponse.json();
-console.log("Auth result:", JSON.stringify(authData, null, 2));
-console.log("Set-Cookie header:", authResponse.headers.get("set-cookie"));
+console.log("Auth result:", JSON.stringify(authData?.result?.uid));
     const setCookie = authResponse.headers.get("set-cookie") ?? "";
     const match = setCookie.match(/session_id=([^;]+)/);
     if (!match)
