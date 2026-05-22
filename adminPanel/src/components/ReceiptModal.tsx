@@ -51,22 +51,22 @@ export function ReceiptModal({
   const handlePrint = () => window.print();
 
   const handleDownloadPdf = async () => {
-  if (!odooOrderId) return;
-  const result = await fetchPdf(odooOrderId).unwrap();
+    if (!odooOrderId) return;
+    const result = await fetchPdf(odooOrderId).unwrap();
 
-  // Explicitly type the blob as PDF
-  const blob = new Blob([result], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
+    // Explicitly type the blob as PDF
+    const blob = new Blob([result], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
 
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `receipt-${odooOrderId}.pdf`;
-  document.body.appendChild(a); // required in Firefox
-  a.click();
-  document.body.removeChild(a);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `receipt-${odooOrderId}.pdf`;
+    document.body.appendChild(a); // required in Firefox
+    a.click();
+    document.body.removeChild(a);
 
-  setTimeout(() => URL.revokeObjectURL(url), 100); // delay revoke
-};
+    setTimeout(() => URL.revokeObjectURL(url), 100); // delay revoke
+  };
 
   const handleCreateInvoice = async () => {
     if (!odooOrderId) return;
@@ -185,29 +185,29 @@ export function ReceiptModal({
         </div>
 
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-2 px-5 py-4">
+        <div className="grid grid-cols-3 gap-2 px-5 py-4">
           <button
             onClick={handlePrint}
-            className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors whitespace-nowrap px-2"
+            className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
           >
             🖨 Print
           </button>
 
-          
-
-          {odooOrderId && invoiceState.status !== "success" && (
+          {odooOrderId && invoiceState.status !== "success" ? (
             <button
               onClick={handleCreateInvoice}
               disabled={isInvoicing}
-              className="h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50 whitespace-nowrap px-2"
+              className="h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50"
             >
-              {isInvoicing ? "Creating..." : "🧾 Invoice"}
+              {isInvoicing ? "..." : "🧾 Invoice"}
             </button>
+          ) : (
+            <div /> 
           )}
 
           <button
             onClick={onNewOrder}
-            className="h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors whitespace-nowrap px-2"
+            className="h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors"
           >
             New Order
           </button>
