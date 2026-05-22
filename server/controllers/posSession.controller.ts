@@ -1098,9 +1098,12 @@ export const createOrder = CatchAsyncError(
       const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
 
       console.log(
-        "[STOCK CHECK]", realProduct.name,
-        "| AVAILABLE:", availableQty,
-        "| REQUESTED:", item.qty,
+        "[STOCK CHECK]",
+        realProduct.name,
+        "| AVAILABLE:",
+        availableQty,
+        "| REQUESTED:",
+        item.qty,
       );
 
       if (availableQty <= 0) {
@@ -1231,7 +1234,7 @@ export const createOrder = CatchAsyncError(
             description_picking: item.realProductName,
             product_id: item.realProductId,
             product_uom_qty: item.qty,
-        
+
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
             picking_id: pickingId,
@@ -1244,7 +1247,7 @@ export const createOrder = CatchAsyncError(
           {
             move_id: moveId,
             product_id: item.realProductId,
-            
+
             qty_done: item.qty,
             location_id: sourceLocationId,
             location_dest_id: destLocationId,
@@ -1473,20 +1476,27 @@ export const getOrderReceiptPdf = CatchAsyncError(
     );
 
     if (!pdfResponse.ok) {
+      const errText = await pdfResponse.text();
+      console.error("Odoo error:", errText.slice(0, 300));
       return next(new ErrorHandler("Failed to fetch receipt from Odoo", 502));
     }
 
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-
+    // Use arrayBuffer → Buffer directly, no JSON parsing middleware interference
+    const arrayBuffer = await pdfResponse.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    if (!buf.subarray(0, 4).toString("ascii").startsWith("%PDF")) {
+      console.error("Invalid PDF, got:", buf.subarray(0, 200).toString());
+      return next(new ErrorHandler("Odoo returned invalid PDF", 502));
+    }
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Length", buf.length);
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="receipt-${orderId}.pdf"`,
     );
-    res.send(Buffer.from(pdfBuffer));
+    res.end(buf);
   },
 );
-
 export const createOdooInvoice = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { odooOrderId } = req.body;

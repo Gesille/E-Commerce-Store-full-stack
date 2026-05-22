@@ -51,15 +51,22 @@ export function ReceiptModal({
   const handlePrint = () => window.print();
 
   const handleDownloadPdf = async () => {
-    if (!odooOrderId) return;
-    const result = await fetchPdf(odooOrderId).unwrap();
-    const url = URL.createObjectURL(result);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `receipt-${odooOrderId}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  if (!odooOrderId) return;
+  const result = await fetchPdf(odooOrderId).unwrap();
+
+  // Explicitly type the blob as PDF
+  const blob = new Blob([result], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `receipt-${odooOrderId}.pdf`;
+  document.body.appendChild(a); // required in Firefox
+  a.click();
+  document.body.removeChild(a);
+
+  setTimeout(() => URL.revokeObjectURL(url), 100); // delay revoke
+};
 
   const handleCreateInvoice = async () => {
     if (!odooOrderId) return;
