@@ -129,7 +129,6 @@ export async function getReceiptByIdService(id: number) {
       "state",
       "lines",
       "payment_ids",
-      "note",
     ],
   });
 
