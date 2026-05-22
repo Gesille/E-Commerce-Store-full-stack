@@ -93,7 +93,7 @@ const POSSidebar = () => {
             <SidebarMenu>
               {navItem("/pos", <LayoutDashboard size={16} />, "Dashboard")}
               {navItem("/pos/cashier", <ScanBarcode size={16} />, "Cashier")}
-              {navItem("/pos/orders", <ClipboardList size={16} />, "POS Orders")}
+              {navItem("/pos/posorders", <ClipboardList size={16} />, "POS Orders")}
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
               {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
             </SidebarMenu>
