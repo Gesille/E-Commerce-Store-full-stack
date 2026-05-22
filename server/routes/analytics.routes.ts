@@ -83,7 +83,7 @@ AnalyticsRouter.get(
 );
 
 AnalyticsRouter.get(
-  "/low-stock",
+  "/low-stock-alerts",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
   getLowStockAlerts,

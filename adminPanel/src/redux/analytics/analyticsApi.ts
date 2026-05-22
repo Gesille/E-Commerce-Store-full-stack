@@ -155,7 +155,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
         threshold?: number;
         limit?: number;
       }) => ({
-        url: `low-stock?threshold=${threshold}&limit=${limit}`,
+        url: `low-stock-alerts?threshold=${threshold}&limit=${limit}`,
         method: "GET",
         credentials: "include" as const,
       }),
