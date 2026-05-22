@@ -1614,7 +1614,7 @@ export const getPosOrderById = CatchAsyncError(
 
     if (!order) return next(new ErrorHandler("Order not found", 404));
 
-    // Lines detail
+    // Lines detail - UPDATED FIELDS ARRAY HERE
     const lines = order.lines?.length
       ? await odooRequest(
           "pos.order.line",
@@ -1622,15 +1622,11 @@ export const getPosOrderById = CatchAsyncError(
           [[["id", "in", order.lines]]],
           {
             fields: [
-              "name",
-              "date_order",
-              "state",
-              "amount_total",
-              "amount_tax",
-              "lines",
-              "session_id",
-              "user_id",
-              "payment_ids",
+              "product_id",
+              "qty",
+              "price_unit",
+              "price_subtotal_incl",
+              "discount",
             ],
           },
         )
