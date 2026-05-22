@@ -1531,17 +1531,17 @@ export const getPosOrders = CatchAsyncError(
     const orders = await odooRequest("pos.order", "search_read",
       [domain],
       {
-        fields: [
-          "name",
-          "date_order",
-          "state",
-          "amount_total",
-          "amount_tax",
-          "lines",
-          "session_id",
-          "employee_id",
-          "payment_ids",
-        ],
+       fields: [
+  "id",
+  "name",
+  "date_order",
+  "state",
+  "amount_total",
+  "amount_tax",
+  "lines",
+  "session_id",
+  "payment_ids",
+],
         order: "date_order desc",
         limit,
         offset: (page - 1) * limit,
@@ -1600,9 +1600,16 @@ export const getPosOrderById = CatchAsyncError(
       [[["id", "=", id]]],
       {
         fields: [
-          "name", "date_order", "state", "amount_total",
-          "amount_tax", "lines", "session_id", "employee_id", "payment_ids",
-        ],
+  "id",
+  "name",
+  "date_order",
+  "state",
+  "amount_total",
+  "amount_tax",
+  "lines",
+  "session_id",
+  "payment_ids",
+],
       }
     );
 
