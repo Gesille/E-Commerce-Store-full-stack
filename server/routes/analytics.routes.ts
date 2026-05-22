@@ -48,7 +48,7 @@ AnalyticsRouter.get(
 );
 
 AnalyticsRouter.get(
-  "/payment-methods",
+  "/payment-methods/split",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
   getPaymentMethodsSplit,
