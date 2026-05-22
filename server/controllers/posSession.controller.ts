@@ -1531,17 +1531,17 @@ export const getPosOrders = CatchAsyncError(
     const orders = await odooRequest("pos.order", "search_read",
       [domain],
       {
-       fields: [
-  "id",
-  "name",
-  "date_order",
-  "state",
-  "amount_total",
-  "amount_tax",
-  "lines",
-  "session_id",
-  "payment_ids",
-],
+        fields: [
+          "name",
+          "date_order",
+          "state",
+          "amount_total",
+          "amount_tax",
+          "lines",
+          "session_id",
+          "user_id",
+          "payment_ids",
+        ],
         order: "date_order desc",
         limit,
         offset: (page - 1) * limit,
@@ -1578,7 +1578,7 @@ export const getPosOrders = CatchAsyncError(
       tax:         o.amount_tax,
       lineCount:   (o.lines ?? []).length,
       session:     o.session_id?.[1]  ?? "—",
-      cashier:     o.employee_id?.[1] ?? "—",
+      cashier:     o.user_id?.[1] ?? "—",
       payments:    paymentMap[o.id]   ?? [],
     }));
 
@@ -1600,16 +1600,9 @@ export const getPosOrderById = CatchAsyncError(
       [[["id", "=", id]]],
       {
         fields: [
-  "id",
-  "name",
-  "date_order",
-  "state",
-  "amount_total",
-  "amount_tax",
-  "lines",
-  "session_id",
-  "payment_ids",
-],
+          "name", "date_order", "state", "amount_total",
+          "amount_tax", "lines", "session_id", "employee_id", "payment_ids",
+        ],
       }
     );
 
@@ -1641,7 +1634,7 @@ export const getPosOrderById = CatchAsyncError(
         total:    order.amount_total,
         tax:      order.amount_tax,
         session:  order.session_id?.[1]  ?? "—",
-        cashier:  order.employee_id?.[1] ?? "—",
+        cashier:  order.user_id?.[1] ?? "—",
         lines: lines.map((l: any) => ({
           product:  l.product_id?.[1] ?? "—",
           qty:      l.qty,
