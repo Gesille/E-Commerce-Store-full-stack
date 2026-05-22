@@ -450,76 +450,75 @@ export const getCategoryBreakdown = CatchAsyncError(
 export const getStaffPerformance = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId);
+    const configId = Number(req.query.configId) || 0;
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to, prevFrom, prevTo } = getPeriodRange(period);
 
-    // Use MongoDB POSOrder (has shiftId and cashierId)
-    const [currentAgg, prevAgg] = await Promise.all([
-      POSOrder.aggregate([
-        {
-          $match: {
-            status: "paid",
-            createdAt: { $gte: from, $lte: to },
-          },
-        },
-        {
-          $group: {
-            _id: "$cashierId",
-            totalSales:  { $sum: "$subtotal" },
-            totalOrders: { $sum: 1 },
-          },
-        },
-      ]),
-      POSOrder.aggregate([
-        {
-          $match: {
-            status: "paid",
-            createdAt: { $gte: prevFrom, $lte: prevTo },
-          },
-        },
-        {
-          $group: {
-            _id: "$cashierId",
-            totalSales: { $sum: "$subtotal" },
-          },
-        },
-      ]),
+    // Pull from Odoo — reliable source with cashier (user_id) on every order
+    const [currentOrders, prevOrders] = await Promise.all([
+      odooRequest(
+        "pos.order",
+        "search_read",
+        [orderDomain(from, to, sessionFilter)],
+        { fields: ["user_id", "amount_total"], limit: 5000 }
+      ),
+      odooRequest(
+        "pos.order",
+        "search_read",
+        [orderDomain(prevFrom, prevTo, sessionFilter)],
+        { fields: ["user_id", "amount_total"], limit: 5000 }
+      ),
     ]);
 
-    const prevMap: Record<string, number> = {};
-    for (const p of prevAgg) prevMap[String(p._id)] = p.totalSales;
-
-    // Populate cashier names from shifts
-    const cashierIds = currentAgg.map((a: any) => a._id);
-    const shifts = await CashierShiftLog.find({
-      cashierId: { $in: cashierIds },
-    })
-      .populate("cashierId", "name role")
-      .lean();
-
-    const cashierInfo: Record<string, { name: string; role: string }> = {};
-    for (const s of shifts) {
-      const u = s.cashierId as any;
-      if (u?._id) cashierInfo[String(u._id)] = { name: u.name ?? "Unknown", role: u.role ?? "Cashier" };
+    // Aggregate current period by cashier
+    const currMap: Record<
+      string,
+      { name: string; sales: number; txn: number }
+    > = {};
+    for (const o of currentOrders) {
+      const uid = String(o.user_id?.[0] ?? "unknown");
+      const name = o.user_id?.[1] ?? "Unknown Cashier";
+      if (!currMap[uid]) currMap[uid] = { name, sales: 0, txn: 0 };
+      currMap[uid].sales += o.amount_total ?? 0;
+      currMap[uid].txn += 1;
     }
 
-    const COLORS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#e11d48","#06b6d4"];
-    const staff = currentAgg
-      .sort((a: any, b: any) => b.totalSales - a.totalSales)
-      .map((a: any, i: number) => {
-        const id    = String(a._id);
-        const prev  = prevMap[id] ?? 0;
-        const trend = prev > 0 ? Math.round(((a.totalSales - prev) / prev) * 100) : 0;
-        const info  = cashierInfo[id] ?? { name: "Cashier", role: "Cashier" };
-        const initials = info.name.split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
+    // Aggregate previous period for trend
+    const prevMap: Record<string, number> = {};
+    for (const o of prevOrders) {
+      const uid = String(o.user_id?.[0] ?? "unknown");
+      prevMap[uid] = (prevMap[uid] ?? 0) + (o.amount_total ?? 0);
+    }
+
+    const COLORS = [
+      "#3b82f6",
+      "#10b981",
+      "#f59e0b",
+      "#8b5cf6",
+      "#e11d48",
+      "#06b6d4",
+    ];
+
+    const staff = Object.entries(currMap)
+      .sort((a, b) => b[1].sales - a[1].sales)
+      .map(([uid, data], i) => {
+        const prev = prevMap[uid] ?? 0;
+        const trend =
+          prev > 0 ? Math.round(((data.sales - prev) / prev) * 100) : 0;
+        const initials = data.name
+          .split(" ")
+          .map((w: string) => w[0])
+          .join("")
+          .substring(0, 2)
+          .toUpperCase();
         return {
-          cashierId: id,
+          cashierId: uid,
           initials,
-          name:  info.name,
-          role:  info.role,
-          txn:   a.totalOrders,
-          sales: Math.round(a.totalSales * 100) / 100,
+          name: data.name,
+          role: "Cashier",
+          txn: data.txn,
+          sales: Math.round(data.sales * 100) / 100,
           color: COLORS[i % COLORS.length],
           trend,
         };
@@ -528,6 +527,7 @@ export const getStaffPerformance = CatchAsyncError(
     res.status(200).json({ status: "success", period, staff });
   }
 );
+
 
 // ─── Revenue Target ───────────────────────────────────────────────────────────
 // GET /api/pos/analytics/target?period=today|week|month&configId=1
