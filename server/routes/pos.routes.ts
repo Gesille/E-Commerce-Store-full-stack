@@ -19,11 +19,11 @@ import {
   getPaymentMethods,
   createOrder,
   confirmOpeningBalance,
- 
   createOdooInvoice,
   getPOSConfigs,
-  
-  
+  getPosOrders,
+ 
+  getPosOrderById,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -31,14 +31,14 @@ POSRouter.get("/configs", isAuthenticated, getPOSConfigs);
 POSRouter.post(
   "/session/open",
   isAuthenticated,
-  authorizeRoles("admin","cashier"),
+  authorizeRoles("admin", "cashier"),
   openSession,
 );
 
 POSRouter.post(
   "/session-close",
   isAuthenticated,
-  authorizeRoles("admin","cashier"),
+  authorizeRoles("admin", "cashier"),
   closeSession,
 );
 POSRouter.post(
@@ -120,6 +120,17 @@ POSRouter.post(
 );
 POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
 
-POSRouter.post("/order/invoice",isAuthenticated,createOdooInvoice);
-
+POSRouter.post("/order/invoice", isAuthenticated, createOdooInvoice);
+POSRouter.get(
+  "/pos-orders",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getPosOrders,
+);
+POSRouter.get(
+  "/pos-orders/:id",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getPosOrderById,
+);
 export default POSRouter;

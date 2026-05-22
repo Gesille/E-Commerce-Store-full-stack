@@ -127,7 +127,7 @@ export const posApi = apiSlice.injectEndpoints({
         body,
         credentials: "include" as const,
       }),
-       invalidatesTags: ["Products"],
+      invalidatesTags: ["Products"],
     }),
 
     getProducts: builder.query<ProductsResponse, void>({
@@ -135,7 +135,7 @@ export const posApi = apiSlice.injectEndpoints({
         url: "products",
         credentials: "include" as const,
       }),
-       providesTags: ["Products"],
+      providesTags: ["Products"],
     }),
 
     getCustomers: builder.query<CustomersResponse, string | void>({
@@ -183,15 +183,55 @@ export const posApi = apiSlice.injectEndpoints({
         responseHandler: (response) => response.blob(),
       }),
     }),
-   createOdooInvoice: builder.mutation({
-  query: (body: { odooOrderId: number }) => ({
-    url: "order/invoice",
-    method: "POST",
-    body,
-    credentials: "include" as const,
-  }),
-}),
+    createOdooInvoice: builder.mutation({
+      query: (body: { odooOrderId: number }) => ({
+        url: "order/invoice",
+        method: "POST",
+        body,
+        credentials: "include" as const,
+      }),
     }),
+    getPosOrders: builder.query({
+      query: ({
+        page = 1,
+        limit = 20,
+        status,
+        search,
+        date_from,
+        date_to,
+      }: {
+        page?: number;
+        limit?: number;
+        status?: string;
+        search?: string;
+        date_from?: string;
+        date_to?: string;
+      }) => {
+        const params = new URLSearchParams();
+        params.set("page", String(page));
+        params.set("limit", String(limit));
+        if (status) params.set("status", status);
+        if (search) params.set("search", search);
+        if (date_from) params.set("date_from", date_from);
+        if (date_to) params.set("date_to", date_to);
+        return {
+          url: `pos-orders?${params}`,
+          method: "GET",
+          credentials: "include" as const,
+        };
+      },
+      transformResponse: (res: any) => res,
+    }),
+
+    getPosOrderById: builder.query({
+      query: (id: number) => ({
+        url: `pos-orders/${id}`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (res: any) => res.order,
+    }),
+  }),
 });
 
 export const {
@@ -209,7 +249,8 @@ export const {
   useGetActiveShiftsQuery,
   useCreateOdooInvoiceMutation,
   useCreateOrderMutation,
-
+  useGetPosOrdersQuery,
+  useGetPosOrderByIdQuery,
   useGetProductsQuery,
 
   useGetCustomersQuery,
