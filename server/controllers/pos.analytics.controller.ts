@@ -701,33 +701,52 @@ export const getLowStock = CatchAsyncError(
     const threshold = Number(req.query.threshold) || 10;
     const limit     = Number(req.query.limit) || 8;
 
-    // Step 1: Fetch eligible products WITHOUT qty_available in the domain
+    // Step 1: Get all valid POS product IDs (no stock filter)
     const products = await odooRequest("product.product", "search_read",
       [[
         ["available_in_pos", "=", true],
         ["active", "=", true],
         ["type", "in", ["product", "consu"]],
       ]],
-      {
-        fields: ["id", "name", "qty_available", "uom_id", "categ_id"],
-        order: "name asc",   // qty_available can't be used in order either
-      }
+      { fields: ["id", "name", "uom_id", "categ_id"] }
     );
 
-    // Step 2: Filter and sort in JavaScript
+    if (!products.length) {
+      return res.status(200).json({ status: "success", items: [] });
+    }
+
+    const productIds = products.map((p: any) => p.id);
+
+    // Step 2: Query stock.quant for actual stored quantities
+    const quants = await odooRequest("stock.quant", "search_read",
+      [[
+        ["product_id", "in", productIds],
+        ["location_id.usage", "=", "internal"],
+      ]],
+      { fields: ["product_id", "quantity"] }
+    );
+
+    // Step 3: Aggregate quantity per product (a product can span multiple locations)
+    const stockMap: Record<number, number> = {};
+    for (const q of quants) {
+      const pid = q.product_id[0];
+      stockMap[pid] = (stockMap[pid] ?? 0) + q.quantity;
+    }
+
+    // Step 4: Filter, sort, slice in JS
     const items = products
-      .filter((p: any) => (p.qty_available ?? 0) <= threshold)
-      .sort((a: any, b: any) => (a.qty_available ?? 0) - (b.qty_available ?? 0))
-      .slice(0, limit)
       .map((p: any) => ({
         id:       p.id,
         name:     p.name,
-        stock:    p.qty_available ?? 0,
-        unit:     p.uom_id?.[1]   ?? "units",
-        threshold,
-        critical: (p.qty_available ?? 0) <= Math.floor(threshold / 2),
+        stock:    stockMap[p.id] ?? 0,
+        unit:     p.uom_id?.[1]  ?? "units",
         category: p.categ_id?.[1] ?? "Other",
-      }));
+        threshold,
+        critical: (stockMap[p.id] ?? 0) <= Math.floor(threshold / 2),
+      }))
+      .filter((p:any) => p.stock <= threshold)
+      .sort((a:any, b:any) => a.stock - b.stock)
+      .slice(0, limit);
 
     res.status(200).json({ status: "success", items });
   }
