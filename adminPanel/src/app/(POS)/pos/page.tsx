@@ -578,7 +578,7 @@ export default function POSDashboardPage() {
                 >
                   {branch}
                 </span>
-                <ChevronDown size={13} color="var(--text-muted)" />
+                
               </div>
             </div>
 
@@ -636,15 +636,7 @@ export default function POSDashboardPage() {
                 </span>
               </div>
 
-              <GhostBtn onClick={handleRefreshAll}>
-                <RefreshCw size={13} />
-                <span className="hide-mobile">Refresh</span>
-              </GhostBtn>
-
-              <GhostBtn>
-                <Download size={13} />
-                <span className="hide-mobile">Export</span>
-              </GhostBtn>
+           
 
               {/* Notification bell */}
               <div style={{ position: "relative" }} ref={notifRef}>
