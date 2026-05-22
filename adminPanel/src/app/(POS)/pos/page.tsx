@@ -1410,97 +1410,82 @@ export default function POSDashboardPage() {
               </div>
             </Card>
 
-            {/* Payment methods donut */}
-            <Card>
-              <CardPad>
-                <SectionHeader
-                  title="Payment Methods"
-                  subtitle="Transaction split"
-                />
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    marginBottom: 4,
-                  }}
-                >
-                  <PieChart width={150} height={150}>
-                    <Pie
-                      data={paymentData}
-                      cx={71}
-                      cy={71}
-                      innerRadius={48}
-                      outerRadius={68}
-                      paddingAngle={3}
-                      dataKey="percentage"
-                      strokeWidth={0}
-                    >
-                      {paymentData.map((_: any, i: number) => (
-                        <Cell
-                          key={i}
-                          fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
-                >
-                  {paymentData.map((p: any, i: number) => (
-                    <div
-                      key={p.name}
-                      className="row"
-                      style={{ justifyContent: "space-between" }}
-                    >
-                      <div className="row" style={{ gap: 8 }}>
-                        <div
-                          style={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: 3,
-                            background:
-                              PAYMENT_COLORS[i % PAYMENT_COLORS.length],
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontSize: 13,
-                            color: "var(--text-secondary)",
-                          }}
-                        >
-                          {p.name}
-                        </span>
-                      </div>
-                      <div className="row" style={{ gap: 10 }}>
-                        {/* FIX: safeFmt guards p.amount */}
-                        <span
-                          style={{
-                            fontSize: 12,
-                            color: "var(--text-muted)",
-                            fontFamily: "'DM Mono', monospace",
-                          }}
-                        >
-                          {safeFmt(p.amount)}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: "var(--text-primary)",
-                            minWidth: 30,
-                            textAlign: "right",
-                          }}
-                        >
-                          {p.percentage}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardPad>
-            </Card>
+          {/* Payment methods donut */}
+<Card>
+  <CardPad>
+    <SectionHeader
+      title="Payment Methods"
+      subtitle="Transaction split"
+    />
+    <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
+      <PieChart width={150} height={150}>
+        <Pie
+          data={paymentData}
+          cx={71}
+          cy={71}
+          innerRadius={48}
+          outerRadius={68}
+          paddingAngle={paymentData.length > 1 ? 3 : 0}  {/* ✅ Fix 1: no padding for single item */}
+          dataKey="percentage"
+          strokeWidth={0}
+        >
+          {paymentData.map((_: any, i: number) => (
+            <Cell
+              key={i}
+              fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]}
+            />
+          ))}
+        </Pie>
+      </PieChart>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {paymentData.map((p: any, i: number) => (
+        <div
+          key={p.name}
+          className="row"
+          style={{ justifyContent: "space-between" }}
+        >
+          <div className="row" style={{ gap: 8 }}>
+            <div
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: 3,
+                background: PAYMENT_COLORS[i % PAYMENT_COLORS.length],
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              {p.name}
+            </span>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <span
+              style={{
+                fontSize: 12,
+                color: "var(--text-muted)",
+                fontFamily: "'DM Mono', monospace",
+              }}
+            >
+              {safeFmt(p.amount)}
+            </span>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                minWidth: 40,
+                textAlign: "right",
+              }}
+            >
+              {p.percentage ?? 0}%  {/* ✅ Fix 2: fallback to 0 */}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </CardPad>
+</Card>
           </div>
 
           {/* ── Row 5: Category breakdown ── */}
