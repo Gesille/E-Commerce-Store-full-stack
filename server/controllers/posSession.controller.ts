@@ -1460,7 +1460,6 @@ export const debugPOSConfig = CatchAsyncError(
   },
 );
 
-
 export const createOdooInvoice = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { odooOrderId } = req.body;
@@ -1511,51 +1510,49 @@ export const createOdooInvoice = CatchAsyncError(
   },
 );
 
-
 export const getPosOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const page     = Number(req.query.page)   || 1;
-    const limit    = Number(req.query.limit)  || 20;
-    const status   = req.query.status as string | undefined;  // "paid" | "invoiced" | "nothing"
-    const search   = req.query.search as string | undefined;
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const status = req.query.status as string | undefined; // "paid" | "invoiced" | "nothing"
+    const search = req.query.search as string | undefined;
     const dateFrom = req.query.date_from as string | undefined;
-    const dateTo   = req.query.date_to   as string | undefined;
+    const dateTo = req.query.date_to as string | undefined;
 
     const domain: any[] = [];
 
-    if (status)   domain.push(["state", "=", status]);
+    if (status) domain.push(["state", "=", status]);
     if (dateFrom) domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
-    if (dateTo)   domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
-    if (search)   domain.push(["name", "ilike", search]);
+    if (dateTo) domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
+    if (search) domain.push(["name", "ilike", search]);
 
-    const orders = await odooRequest("pos.order", "search_read",
-      [domain],
-      {
-        fields: [
-          "name",
-          "date_order",
-          "state",
-          "amount_total",
-          "amount_tax",
-          "lines",
-          "session_id",
-          "user_id",
-          "payment_ids",
-        ],
-        order: "date_order desc",
-        limit,
-        offset: (page - 1) * limit,
-      }
-    );
+    const orders = await odooRequest("pos.order", "search_read", [domain], {
+      fields: [
+        "name",
+        "date_order",
+        "state",
+        "amount_total",
+        "amount_tax",
+        "lines",
+        "session_id",
+        "user_id",
+        "payment_ids",
+      ],
+      order: "date_order desc, id desc",
+      limit,
+      offset: (page - 1) * limit,
+    });
 
     const total = await odooRequest("pos.order", "search_count", [domain]);
 
     // Enrich with payment method names
     const paymentIds = orders.flatMap((o: any) => o.payment_ids ?? []);
     const payments = paymentIds.length
-      ? await odooRequest("pos.payment", "search_read",
+      ? await odooRequest(
+          "pos.payment",
+          "search_read",
           [[["id", "in", paymentIds]]],
-          { fields: ["id", "payment_method_id", "amount", "pos_order_id"] }
+          { fields: ["id", "payment_method_id", "amount", "pos_order_id"] },
         )
       : [];
 
@@ -1570,16 +1567,16 @@ export const getPosOrders = CatchAsyncError(
     }
 
     const items = orders.map((o: any) => ({
-      id:          o.id,
-      ref:         o.name,
-      date:        o.date_order,
-      status:      o.state,
-      total:       o.amount_total,
-      tax:         o.amount_tax,
-      lineCount:   (o.lines ?? []).length,
-      session:     o.session_id?.[1]  ?? "—",
-      cashier:     o.user_id?.[1] ?? "—",
-      payments:    paymentMap[o.id]   ?? [],
+      id: o.id,
+      ref: o.name,
+      date: o.date_order,
+      status: o.state,
+      total: o.amount_total,
+      tax: o.amount_tax,
+      lineCount: (o.lines ?? []).length,
+      session: o.session_id?.[1] ?? "—",
+      cashier: o.user_id?.[1] ?? "—",
+      payments: paymentMap[o.id] ?? [],
     }));
 
     res.status(200).json({
@@ -1589,56 +1586,81 @@ export const getPosOrders = CatchAsyncError(
       pages: Math.ceil(total / limit),
       orders: items,
     });
-  }
+  },
 );
 
 export const getPosOrderById = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const id = Number(req.params.id);
 
-    const [order] = await odooRequest("pos.order", "search_read",
+    const [order] = await odooRequest(
+      "pos.order",
+      "search_read",
       [[["id", "=", id]]],
       {
         fields: [
-          "name", "date_order", "state", "amount_total",
-          "amount_tax", "lines", "session_id", "employee_id", "payment_ids",
+          "name",
+          "date_order",
+          "state",
+          "amount_total",
+          "amount_tax",
+          "lines",
+          "session_id",
+          "employee_id",
+          "payment_ids",
         ],
-      }
+      },
     );
 
     if (!order) return next(new ErrorHandler("Order not found", 404));
 
     // Lines detail
     const lines = order.lines?.length
-      ? await odooRequest("pos.order.line", "search_read",
+      ? await odooRequest(
+          "pos.order.line",
+          "search_read",
           [[["id", "in", order.lines]]],
-          { fields: ["product_id", "qty", "price_unit", "price_subtotal_incl", "discount"] }
+          {
+            fields: [
+              "name",
+              "date_order",
+              "state",
+              "amount_total",
+              "amount_tax",
+              "lines",
+              "session_id",
+              "user_id",
+              "payment_ids",
+            ],
+          },
         )
       : [];
 
     // Payments detail
     const payments = order.payment_ids?.length
-      ? await odooRequest("pos.payment", "search_read",
+      ? await odooRequest(
+          "pos.payment",
+          "search_read",
           [[["id", "in", order.payment_ids]]],
-          { fields: ["payment_method_id", "amount"] }
+          { fields: ["payment_method_id", "amount"] },
         )
       : [];
 
     res.status(200).json({
       success: true,
       order: {
-        id:       order.id,
-        ref:      order.name,
-        date:     order.date_order,
-        status:   order.state,
-        total:    order.amount_total,
-        tax:      order.amount_tax,
-        session:  order.session_id?.[1]  ?? "—",
-        cashier:  order.user_id?.[1] ?? "—",
+        id: order.id,
+        ref: order.name,
+        date: order.date_order,
+        status: order.state,
+        total: order.amount_total,
+        tax: order.amount_tax,
+        session: order.session_id?.[1] ?? "—",
+        cashier: order.user_id?.[1] ?? "—",
         lines: lines.map((l: any) => ({
-          product:  l.product_id?.[1] ?? "—",
-          qty:      l.qty,
-          price:    l.price_unit,
+          product: l.product_id?.[1] ?? "—",
+          qty: l.qty,
+          price: l.price_unit,
           subtotal: l.price_subtotal_incl,
           discount: l.discount,
         })),
@@ -1648,5 +1670,5 @@ export const getPosOrderById = CatchAsyncError(
         })),
       },
     });
-  }
+  },
 );
