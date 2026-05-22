@@ -1484,6 +1484,10 @@ export const getOrderReceiptPdf = CatchAsyncError(
     // Use arrayBuffer → Buffer directly, no JSON parsing middleware interference
     const arrayBuffer = await pdfResponse.arrayBuffer();
     const buf = Buffer.from(arrayBuffer);
+    console.log("Status:", pdfResponse.status);
+console.log("Content-Type:", pdfResponse.headers.get("content-type"));
+console.log("Buffer size:", buf.length);
+console.log("Raw response:", buf.toString("utf-8").slice(0, 1000));
     if (!buf.subarray(0, 4).toString("ascii").startsWith("%PDF")) {
       console.error("Invalid PDF, got:", buf.subarray(0, 200).toString());
       return next(new ErrorHandler("Odoo returned invalid PDF", 502));
