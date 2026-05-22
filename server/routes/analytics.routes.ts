@@ -4,7 +4,7 @@ import {
   getCustomerInsights,
   getDiscounts,
   getKpiSummary,
-  getLowStock,
+  getLowStockAlerts,
   getPaymentMethodsSplit,
   getPeakHoursHeatmap,
   getRecentOrders,
@@ -86,7 +86,7 @@ AnalyticsRouter.get(
   "/low-stock",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
-  getLowStock,
+  getLowStockAlerts,
 );
 
 AnalyticsRouter.get(

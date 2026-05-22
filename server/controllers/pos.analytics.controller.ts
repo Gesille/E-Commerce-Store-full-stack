@@ -696,59 +696,59 @@ export const getSessionInfo = CatchAsyncError(
 // ─── Low Stock Items ──────────────────────────────────────────────────────────
 // GET /api/pos/analytics/low-stock?threshold=10&limit=8
 
-export const getLowStock = CatchAsyncError(
+export const getLowStockAlerts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const threshold = Number(req.query.threshold) || 10;
-    const limit     = Number(req.query.limit) || 8;
+    const threshold = Number(req.query.threshold) || 5;
 
-    // Step 1: Get all valid POS product IDs (no stock filter)
-    const products = await odooRequest("product.product", "search_read",
-      [[
-        ["available_in_pos", "=", true],
-        ["active", "=", true],
-        ["type", "in", ["product", "consu"]],
-      ]],
-      { fields: ["id", "name", "uom_id", "categ_id"] }
+    // Step 1: Fetch all active products (no qty filter in domain)
+    const products = await odooRequest(
+      "product.template",
+      "search_read",
+      [[["active", "=", true]]],
+      { fields: ["id", "name", "default_code", "list_price"] }
     );
 
     if (!products.length) {
-      return res.status(200).json({ status: "success", items: [] });
+      return res.status(200).json({ success: true, count: 0, products: [] });
     }
 
     const productIds = products.map((p: any) => p.id);
 
-    // Step 2: Query stock.quant for actual stored quantities
-    const quants = await odooRequest("stock.quant", "search_read",
+    // Step 2: Get stored quantities from stock.quant
+    const quants = await odooRequest(
+      "stock.quant",
+      "search_read",
       [[
-        ["product_id", "in", productIds],
+        ["product_id.product_tmpl_id", "in", productIds],
         ["location_id.usage", "=", "internal"],
       ]],
-      { fields: ["product_id", "quantity"] }
+      { fields: ["product_id", "product_tmpl_id", "quantity"] }
     );
 
-    // Step 3: Aggregate quantity per product (a product can span multiple locations)
+    // Step 3: Aggregate per product.template id
     const stockMap: Record<number, number> = {};
     for (const q of quants) {
-      const pid = q.product_id[0];
-      stockMap[pid] = (stockMap[pid] ?? 0) + q.quantity;
+      const tmplId = q.product_tmpl_id?.[0] ?? q.product_id?.[0];
+      if (tmplId) stockMap[tmplId] = (stockMap[tmplId] ?? 0) + q.quantity;
     }
 
-    // Step 4: Filter, sort, slice in JS
-    const items = products
+    // Step 4: Filter and sort in JS
+    const filtered = products
       .map((p: any) => ({
-        id:       p.id,
-        name:     p.name,
-        stock:    stockMap[p.id] ?? 0,
-        unit:     p.uom_id?.[1]  ?? "units",
-        category: p.categ_id?.[1] ?? "Other",
-        threshold,
-        critical: (stockMap[p.id] ?? 0) <= Math.floor(threshold / 2),
+        id:           p.id,
+        name:         p.name,
+        default_code: p.default_code || "",
+        list_price:   p.list_price,
+        qty_available: stockMap[p.id] ?? 0,
       }))
-      .filter((p:any) => p.stock <= threshold)
-      .sort((a:any, b:any) => a.stock - b.stock)
-      .slice(0, limit);
+      .filter((p:any) => p.qty_available <= threshold)
+      .sort((a:any, b:any) => a.qty_available - b.qty_available);
 
-    res.status(200).json({ status: "success", items });
+    res.status(200).json({
+      success: true,
+      count: filtered.length,
+      products: filtered,
+    });
   }
 );
 
