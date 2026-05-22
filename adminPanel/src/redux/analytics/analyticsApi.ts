@@ -85,7 +85,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
-      transformResponse: (res: any) => res.methods,
+     transformResponse: (res: any) => res.methods ?? [],
     }),
 
     // Categories

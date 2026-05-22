@@ -1432,7 +1432,7 @@ export default function POSDashboardPage() {
                       innerRadius={48}
                       outerRadius={68}
                       paddingAngle={3}
-                      dataKey="value"
+                      dataKey="percentage"
                       strokeWidth={0}
                     >
                       {paymentData.map((_: any, i: number) => (
@@ -1493,7 +1493,7 @@ export default function POSDashboardPage() {
                             textAlign: "right",
                           }}
                         >
-                          {p.value}%
+                          {p.percentage}%
                         </span>
                       </div>
                     </div>
