@@ -193,6 +193,8 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
       paymentLines: lines,
       odooOrderId: result.orderId,
     });
+     updateCart([]);
+    setMeta({ customer: null, note: "" });
     setShowPayment(false);
   } catch (err: any) {
     alert(err?.data?.message ?? "Order failed. Please try again.");
