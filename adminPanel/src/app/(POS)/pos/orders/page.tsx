@@ -459,7 +459,7 @@ export default function PosOrdersPage() {
             >
               <option value="">All Statuses</option>
               <option value="paid">Paid</option>
-              <option value="invoiced">Invoiced</option>
+
               <option value="draft">Draft</option>
               <option value="done">Done</option>
             </select>
