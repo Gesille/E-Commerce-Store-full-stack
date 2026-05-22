@@ -1482,7 +1482,9 @@ export const getOrderReceiptPdf = CatchAsyncError(
         }),
       },
     );
-
+const authData = await authResponse.json();
+console.log("Auth result:", JSON.stringify(authData, null, 2));
+console.log("Set-Cookie header:", authResponse.headers.get("set-cookie"));
     const setCookie = authResponse.headers.get("set-cookie") ?? "";
     const match = setCookie.match(/session_id=([^;]+)/);
     if (!match)
