@@ -5,62 +5,37 @@ import { odooRequest } from "../odoo/odoo.client.js";
 import CashierShiftLog from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Period helpers ───────────────────────────────────────────────────────────
 
 type Period = "today" | "week" | "month";
 
-// ─── Period helpers ───────────────────────────────────────────────────────────
-
-function getPeriodRange(period: Period): {
-  from: Date;
-  to: Date;
-  prevFrom: Date;
-  prevTo: Date;
-} {
+function getPeriodRange(period: Period): { from: Date; to: Date; prevFrom: Date; prevTo: Date } {
   const now = new Date();
   let from: Date, to: Date, prevFrom: Date, prevTo: Date;
 
   if (period === "today") {
-    from = new Date(now);
-    from.setHours(0, 0, 0, 0);
-    to = new Date(now);
-    to.setHours(23, 59, 59, 999);
-    prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - 1);
-    prevTo = new Date(to);
-    prevTo.setDate(prevTo.getDate() - 1);
+    from = new Date(now); from.setHours(0, 0, 0, 0);
+    to   = new Date(now); to.setHours(23, 59, 59, 999);
+    prevFrom = new Date(from); prevFrom.setDate(prevFrom.getDate() - 1);
+    prevTo   = new Date(to);   prevTo.setDate(prevTo.getDate() - 1);
   } else if (period === "week") {
-    const day = now.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    from = new Date(now);
-    from.setDate(now.getDate() + diff);
-    from.setHours(0, 0, 0, 0);
-    to = new Date(from);
-    to.setDate(from.getDate() + 6);
-    to.setHours(23, 59, 59, 999);
-    prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - 7);
-    prevTo = new Date(to);
-    prevTo.setDate(prevTo.getDate() - 7);
+    const day = now.getDay(); // 0=Sun
+    const diff = (day === 0 ? -6 : 1 - day);
+    from = new Date(now); from.setDate(now.getDate() + diff); from.setHours(0, 0, 0, 0);
+    to   = new Date(from); to.setDate(from.getDate() + 6);   to.setHours(23, 59, 59, 999);
+    prevFrom = new Date(from); prevFrom.setDate(prevFrom.getDate() - 7);
+    prevTo   = new Date(to);   prevTo.setDate(prevTo.getDate() - 7);
   } else {
     from = new Date(now.getFullYear(), now.getMonth(), 1);
-    to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    prevTo = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      0,
-      23,
-      59,
-      59,
-      999
-    );
+    prevTo   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
   }
 
   return { from, to, prevFrom, prevTo };
 }
 
-/** Format a Date to Odoo-style UTC string: "YYYY-MM-DD HH:MM:SS" */
+/** Format a Date to Odoo-style string: "YYYY-MM-DD HH:MM:SS" */
 function toOdooDate(d: Date): string {
   return d.toISOString().replace("T", " ").substring(0, 19);
 }
@@ -75,122 +50,61 @@ function orderDomain(from: Date, to: Date, extra: any[] = []): any[] {
   ];
 }
 
-/**
- * Convert an Odoo UTC date string to the local hour in the store's timezone.
- * STORE_TIMEZONE should be set in your .env, e.g. "America/New_York".
- * Falls back to the server's local timezone if not set.
- */
-function getLocalHour(odooDateStr: string): number {
-  const tz = process.env.STORE_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  try {
-    const dateInTz = new Date(odooDateStr + " UTC");
-    const localHourStr = dateInTz.toLocaleString("en-US", {
-      timeZone: tz,
-      hour: "numeric",
-      hour12: false,
-    });
-    return parseInt(localHourStr, 10);
-  } catch {
-    return new Date(odooDateStr).getHours();
-  }
-}
-
-function getLocalDayOfWeek(odooDateStr: string): number {
-  const tz = process.env.STORE_TIMEZONE || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  try {
-    const dateInTz = new Date(odooDateStr + " UTC");
-    // "en-US" weekday numeric: 0=Sun...6=Sat — convert to 0=Mon...6=Sun
-    const rawDay = new Date(
-      dateInTz.toLocaleString("en-US", { timeZone: tz })
-    ).getDay();
-    return (rawDay + 6) % 7;
-  } catch {
-    return (new Date(odooDateStr).getDay() + 6) % 7;
-  }
-}
-
-function pctDelta(curr: number, prev: number): number {
-  if (prev === 0) return 0;
-  return Math.round(((curr - prev) / prev) * 1000) / 10;
-}
-
-// ─── KPI Summary ──────────────────────────────────────────────────────────────
+// ─── KPI Summary 
 
 export const getKpiSummary = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
-    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+    const configId = Number(req.query.configId);
 
     const { from, to, prevFrom, prevTo } = getPeriodRange(period);
 
-    const [currentOrders, prevOrders, refundOrders, prevRefunds] =
-      await Promise.all([
-        odooRequest(
-          "pos.order",
-          "search_read",
-          [orderDomain(from, to, sessionFilter)],
-          { fields: ["amount_total", "lines"], limit: 5000 }
-        ),
-        odooRequest(
-          "pos.order",
-          "search_read",
-          [orderDomain(prevFrom, prevTo, sessionFilter)],
-          { fields: ["amount_total"], limit: 5000 }
-        ),
-        odooRequest(
-          "pos.order",
-          "search_read",
-          [
-            [
-              ["date_order", ">=", toOdooDate(from)],
-              ["date_order", "<=", toOdooDate(to)],
-              ["amount_total", "<", 0],
-              ...sessionFilter,
-            ],
-          ],
-          { fields: ["amount_total"], limit: 5000 }
-        ),
-        odooRequest(
-          "pos.order",
-          "search_read",
-          [
-            [
-              ["date_order", ">=", toOdooDate(prevFrom)],
-              ["date_order", "<=", toOdooDate(prevTo)],
-              ["amount_total", "<", 0],
-              ...sessionFilter,
-            ],
-          ],
-          { fields: ["amount_total"], limit: 5000 }
-        ),
-      ]);
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
-    const totalRevenue = currentOrders.reduce(
-      (s: number, o: any) => s + (o.amount_total ?? 0),
-      0
-    );
-    const prevRevenue = prevOrders.reduce(
-      (s: number, o: any) => s + (o.amount_total ?? 0),
-      0
-    );
-    const orderCount = currentOrders.length;
-    const prevCount = prevOrders.length;
-    const avgOrder = orderCount > 0 ? totalRevenue / orderCount : 0;
-    const prevAvg = prevCount > 0 ? prevRevenue / prevCount : 0;
-    const totalRefunds = Math.abs(
-      refundOrders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0)
-    );
-    const prevRefundAmt = Math.abs(
-      prevRefunds.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0)
-    );
+    // Fetch current and previous period orders from Odoo
+    const [currentOrders, prevOrders, refundOrders, prevRefunds] = await Promise.all([
+      odooRequest("pos.order", "search_read",
+        [orderDomain(from, to, sessionFilter)],
+        { fields: ["amount_total", "lines"], limit: 5000 }
+      ),
+      odooRequest("pos.order", "search_read",
+        [orderDomain(prevFrom, prevTo, sessionFilter)],
+        { fields: ["amount_total"], limit: 5000 }
+      ),
+      // Refunds: state = "cancel" or amount < 0
+      odooRequest("pos.order", "search_read",
+        [[
+          ["date_order", ">=", toOdooDate(from)],
+          ["date_order", "<=", toOdooDate(to)],
+          ["amount_total", "<", 0],
+          ...sessionFilter,
+        ]],
+        { fields: ["amount_total"], limit: 5000 }
+      ),
+      odooRequest("pos.order", "search_read",
+        [[
+          ["date_order", ">=", toOdooDate(prevFrom)],
+          ["date_order", "<=", toOdooDate(prevTo)],
+          ["amount_total", "<", 0],
+          ...sessionFilter,
+        ]],
+        { fields: ["amount_total"], limit: 5000 }
+      ),
+    ]);
 
-    const periodLabel =
-      period === "today"
-        ? "vs yesterday"
-        : period === "week"
-        ? "vs last week"
-        : "vs last month";
+    const totalRevenue = currentOrders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0);
+    const prevRevenue  = prevOrders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0);
+    const orderCount   = currentOrders.length;
+    const prevCount    = prevOrders.length;
+    const avgOrder     = orderCount > 0 ? totalRevenue / orderCount : 0;
+    const prevAvg      = prevCount  > 0 ? prevRevenue  / prevCount  : 0;
+    const totalRefunds = Math.abs(refundOrders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0));
+    const prevRefundAmt= Math.abs(prevRefunds.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0));
+
+    const pctDelta = (curr: number, prev: number) =>
+      prev === 0 ? 0 : Math.round(((curr - prev) / prev) * 1000) / 10;
+
+    const periodLabel = period === "today" ? "vs yesterday" : period === "week" ? "vs last week" : "vs last month";
 
     res.status(200).json({
       status: "success",
@@ -198,8 +112,8 @@ export const getKpiSummary = CatchAsyncError(
       kpis: [
         {
           label: "Total Revenue",
-          value: Math.round(totalRevenue * 100) / 100,
-          prev: Math.round(prevRevenue * 100) / 100,
+          value: totalRevenue,
+          prev: prevRevenue,
           delta: pctDelta(totalRevenue, prevRevenue),
           up: totalRevenue >= prevRevenue,
           sub: periodLabel,
@@ -214,18 +128,18 @@ export const getKpiSummary = CatchAsyncError(
         },
         {
           label: "Avg Order Value",
-          value: Math.round(avgOrder * 100) / 100,
-          prev: Math.round(prevAvg * 100) / 100,
+          value: avgOrder,
+          prev: prevAvg,
           delta: pctDelta(avgOrder, prevAvg),
           up: avgOrder >= prevAvg,
           sub: periodLabel,
         },
         {
           label: "Refunds",
-          value: Math.round(totalRefunds * 100) / 100,
-          prev: Math.round(prevRefundAmt * 100) / 100,
+          value: totalRefunds,
+          prev: prevRefundAmt,
           delta: pctDelta(totalRefunds, prevRefundAmt),
-          up: totalRefunds <= prevRefundAmt,
+          up: totalRefunds <= prevRefundAmt, // fewer refunds = good
           sub: periodLabel,
         },
       ],
@@ -234,39 +148,38 @@ export const getKpiSummary = CatchAsyncError(
 );
 
 // ─── Revenue Over Time ────────────────────────────────────────────────────────
+// GET /api/pos/analytics/revenue-chart?period=today|week|month&configId=1
 
 export const getRevenueChart = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to, prevFrom, prevTo } = getPeriodRange(period);
 
     const [currentOrders, prevOrders] = await Promise.all([
-      odooRequest(
-        "pos.order",
-        "search_read",
+      odooRequest("pos.order", "search_read",
         [orderDomain(from, to, sessionFilter)],
         { fields: ["date_order", "amount_total"], limit: 5000 }
       ),
-      odooRequest(
-        "pos.order",
-        "search_read",
+      odooRequest("pos.order", "search_read",
         [orderDomain(prevFrom, prevTo, sessionFilter)],
         { fields: ["date_order", "amount_total"], limit: 5000 }
       ),
     ]);
 
+    // Bucket function returns a bucket key and label for each order
     function bucket(dateStr: string): string {
+      const d = new Date(dateStr);
       if (period === "today") {
-        return String(getLocalHour(dateStr));
+        return String(d.getHours()); // "8", "9", …
       } else if (period === "week") {
-        const dow = getLocalDayOfWeek(dateStr);
-        return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dow];
+        return ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][(d.getDay() + 6) % 7];
       } else {
-        const d = new Date(dateStr);
-        return `W${Math.ceil(d.getDate() / 7)}`;
+        // Week of month: W1–W4
+        const weekNo = Math.ceil(d.getDate() / 7);
+        return `W${weekNo}`;
       }
     }
 
@@ -282,14 +195,14 @@ export const getRevenueChart = CatchAsyncError(
     const curr = aggregateByBucket(currentOrders);
     const prev = aggregateByBucket(prevOrders);
 
-    // 12 buckets, 8am–7pm — aligned with heatmap and frontend HOURS constant
+    // Build ordered labels for each period
     let labels: string[] = [];
     if (period === "today") {
-      labels = Array.from({ length: 12 }, (_, i) => String(i + 8));
+      labels = Array.from({ length: 14 }, (_, i) => String(i + 7)); // 7am–8pm
     } else if (period === "week") {
-      labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     } else {
-      labels = ["W1", "W2", "W3", "W4"];
+      labels = ["W1","W2","W3","W4"];
     }
 
     const formatLabel = (l: string) => {
@@ -303,7 +216,7 @@ export const getRevenueChart = CatchAsyncError(
     const data = labels.map((l) => ({
       label: formatLabel(l),
       revenue: Math.round((curr[l] ?? 0) * 100) / 100,
-      prev: Math.round((prev[l] ?? 0) * 100) / 100,
+      prev:    Math.round((prev[l] ?? 0) * 100) / 100,
     }));
 
     res.status(200).json({ status: "success", period, data });
@@ -311,21 +224,21 @@ export const getRevenueChart = CatchAsyncError(
 );
 
 // ─── Top Products ─────────────────────────────────────────────────────────────
+// GET /api/pos/analytics/top-products?period=today|week|month&configId=1&limit=6
 
 export const getTopProducts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const limit = Number(req.query.limit) || 6;
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    // Get order lines within the period
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
-      { fields: ["id"], limit: 5000 }
+      { fields: ["lines"], limit: 5000 }
     );
 
     const orderIds = orders.map((o: any) => o.id);
@@ -333,23 +246,19 @@ export const getTopProducts = CatchAsyncError(
       return res.status(200).json({ status: "success", period, products: [] });
     }
 
-    const lines = await odooRequest(
-      "pos.order.line",
-      "search_read",
+    const lines = await odooRequest("pos.order.line", "search_read",
       [[["order_id", "in", orderIds]]],
       { fields: ["product_id", "qty", "price_subtotal_incl"], limit: 20000 }
     );
 
-    const productMap: Record<
-      string,
-      { name: string; revenue: number; orders: number }
-    > = {};
+    // Aggregate by product
+    const productMap: Record<string, { name: string; revenue: number; orders: number }> = {};
     for (const line of lines) {
-      const id = String(line.product_id?.[0] ?? "unknown");
+      const id   = String(line.product_id?.[0] ?? "unknown");
       const name = line.product_id?.[1] ?? "Unknown Product";
       if (!productMap[id]) productMap[id] = { name, revenue: 0, orders: 0 };
       productMap[id].revenue += line.price_subtotal_incl ?? 0;
-      productMap[id].orders += line.qty ?? 0;
+      productMap[id].orders  += line.qty ?? 0;
     }
 
     const sorted = Object.values(productMap)
@@ -360,9 +269,9 @@ export const getTopProducts = CatchAsyncError(
     const products = sorted.map((p, i) => ({
       ...p,
       revenue: Math.round(p.revenue * 100) / 100,
-      orders: Math.round(p.orders),
-      pct: Math.round((p.revenue / maxRevenue) * 100),
-      rank: i + 1,
+      orders:  Math.round(p.orders),
+      pct:     Math.round((p.revenue / maxRevenue) * 100),
+      rank:    i + 1,
     }));
 
     res.status(200).json({ status: "success", period, products });
@@ -370,32 +279,23 @@ export const getTopProducts = CatchAsyncError(
 );
 
 // ─── Recent Orders ────────────────────────────────────────────────────────────
+// GET /api/pos/analytics/recent-orders?configId=1&limit=6
 
 export const getRecentOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const limit = Number(req.query.limit) || 10;
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
-      [
-        [
-          ["state", "in", ["paid", "done", "invoiced", "cancel"]],
-          ...sessionFilter,
-        ],
-      ],
+    const orders = await odooRequest("pos.order", "search_read",
+      [[
+        ["state", "in", ["paid", "done", "invoiced", "cancel"]],
+        ...sessionFilter,
+      ]],
       {
         fields: [
-          "name",
-          "date_order",
-          "partner_id",
-          "amount_total",
-          "state",
-          "lines",
-          "config_id",
-          "user_id",
+          "name", "date_order", "partner_id", "amount_total",
+          "state", "lines", "config_id", "user_id",
         ],
         order: "date_order desc",
         limit,
@@ -404,24 +304,21 @@ export const getRecentOrders = CatchAsyncError(
 
     const now = Date.now();
     const result = orders.map((o: any) => {
-      const diffMs = now - new Date(o.date_order).getTime();
+      const diffMs  = now - new Date(o.date_order).getTime();
       const diffMin = Math.floor(diffMs / 60000);
-      const timeAgo =
-        diffMin < 1
-          ? "just now"
-          : diffMin < 60
-          ? `${diffMin} min ago`
-          : `${Math.floor(diffMin / 60)}h ago`;
+      const timeAgo = diffMin < 1 ? "just now"
+        : diffMin < 60 ? `${diffMin} min ago`
+        : `${Math.floor(diffMin / 60)}h ago`;
 
       let status: "paid" | "refund" | "pending" = "paid";
-      if (o.state === "cancel" || (o.amount_total ?? 0) < 0) status = "refund";
+      if (o.state === "cancel" || o.amount_total < 0) status = "refund";
       else if (o.state === "draft") status = "pending";
 
       return {
-        id: o.name ?? "—",
+        id: o.name,
         time: timeAgo,
         channel: o.config_id?.[1] ?? "POS",
-        amount: Math.round((o.amount_total ?? 0) * 100) / 100,
+        amount: o.amount_total,
         status,
         items: o.lines?.length ?? 0,
         cashier: o.user_id?.[1] ?? "",
@@ -434,52 +331,35 @@ export const getRecentOrders = CatchAsyncError(
 );
 
 // ─── Payment Methods ──────────────────────────────────────────────────────────
+// GET /api/pos/analytics/payment-methods?period=today|week|month&configId=1
 
 export const getPaymentMethodsSplit = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
-      { fields: ["id"], limit: 5000 }
+      { fields: ["payment_ids"], limit: 5000 }
     );
 
     const orderIds = orders.map((o: any) => o.id);
     if (!orderIds.length) {
-      return res
-        .status(200)
-        .json({ status: "success", period, methods: [] });
+      return res.status(200).json({ status: "success", period, methods: [] });
     }
 
-    // Try both field names for Odoo version compatibility
-    let payments: any[] = [];
-    try {
-      payments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["pos_order_id", "in", orderIds]]],
-        { fields: ["payment_method_id", "amount"], limit: 20000 }
-      );
-    } catch {
-      // Odoo 14/15 uses "order_id" instead of "pos_order_id"
-      payments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["order_id", "in", orderIds]]],
-        { fields: ["payment_method_id", "amount"], limit: 20000 }
-      );
-    }
+    const payments = await odooRequest("pos.payment", "search_read",
+      [[["pos_order_id", "in", orderIds]]],
+      { fields: ["payment_method_id", "amount"], limit: 20000 }
+    );
 
     const methodMap: Record<string, { name: string; amount: number }> = {};
     let total = 0;
     for (const p of payments) {
-      const id = String(p.payment_method_id?.[0] ?? "unknown");
+      const id   = String(p.payment_method_id?.[0]);
       const name = p.payment_method_id?.[1] ?? "Unknown";
       if (!methodMap[id]) methodMap[id] = { name, amount: 0 };
       methodMap[id].amount += p.amount ?? 0;
@@ -489,9 +369,9 @@ export const getPaymentMethodsSplit = CatchAsyncError(
     const methods = Object.values(methodMap)
       .sort((a, b) => b.amount - a.amount)
       .map((m) => ({
-        name: m.name,
+        name:   m.name,
         amount: Math.round(m.amount * 100) / 100,
-        value: total > 0 ? Math.round((m.amount / total) * 100) : 0,
+        value:  total > 0 ? Math.round((m.amount / total) * 100) : 0,
       }));
 
     res.status(200).json({ status: "success", period, methods });
@@ -499,45 +379,35 @@ export const getPaymentMethodsSplit = CatchAsyncError(
 );
 
 // ─── Category Breakdown ───────────────────────────────────────────────────────
+// GET /api/pos/analytics/categories?period=today|week|month&configId=1
 
 export const getCategoryBreakdown = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
-      { fields: ["id"], limit: 5000 }
+      { fields: ["lines"], limit: 5000 }
     );
 
     const orderIds = orders.map((o: any) => o.id);
     if (!orderIds.length) {
-      return res
-        .status(200)
-        .json({ status: "success", period, categories: [] });
+      return res.status(200).json({ status: "success", period, categories: [] });
     }
 
-    const lines = await odooRequest(
-      "pos.order.line",
-      "search_read",
+    const lines = await odooRequest("pos.order.line", "search_read",
       [[["order_id", "in", orderIds]]],
       { fields: ["product_id", "price_subtotal_incl", "qty"], limit: 20000 }
     );
 
-    const productIds = [
-      ...new Set(
-        lines.map((l: any) => l.product_id?.[0]).filter(Boolean)
-      ),
-    ];
+    const productIds = [...new Set(lines.map((l: any) => l.product_id?.[0]).filter(Boolean))];
 
-    const products = await odooRequest(
-      "product.product",
-      "search_read",
+    // Fetch product categories
+    const products = await odooRequest("product.product", "search_read",
       [[["id", "in", productIds]]],
       { fields: ["id", "categ_id"], limit: 1000 }
     );
@@ -550,32 +420,24 @@ export const getCategoryBreakdown = CatchAsyncError(
     const categoryMap: Record<string, { value: number; orders: number }> = {};
     let total = 0;
     for (const line of lines) {
-      const pid = line.product_id?.[0];
-      const cat = pid ? (productCategoryMap[pid] ?? "Other") : "Other";
-      const rev = line.price_subtotal_incl ?? 0;
+      const pid  = line.product_id?.[0];
+      const cat  = pid ? (productCategoryMap[pid] ?? "Other") : "Other";
+      const rev  = line.price_subtotal_incl ?? 0;
       if (!categoryMap[cat]) categoryMap[cat] = { value: 0, orders: 0 };
-      categoryMap[cat].value += rev;
+      categoryMap[cat].value  += rev;
       categoryMap[cat].orders += 1;
       total += rev;
     }
 
-    const COLORS = [
-      "#3b82f6",
-      "#10b981",
-      "#f59e0b",
-      "#8b5cf6",
-      "#e11d48",
-      "#06b6d4",
-      "#84cc16",
-    ];
+    const COLORS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#e11d48","#06b6d4","#84cc16"];
     const categories = Object.entries(categoryMap)
       .sort((a, b) => b[1].value - a[1].value)
       .map(([name, data], i) => ({
         name,
-        value: Math.round(data.value * 100) / 100,
+        value:  Math.round(data.value * 100) / 100,
         orders: data.orders,
-        color: COLORS[i % COLORS.length],
-        pct: total > 0 ? Math.round((data.value / total) * 100) : 0,
+        color:  COLORS[i % COLORS.length],
+        pct:    total > 0 ? Math.round((data.value / total) * 100) : 0,
       }));
 
     res.status(200).json({ status: "success", period, categories });
@@ -583,80 +445,81 @@ export const getCategoryBreakdown = CatchAsyncError(
 );
 
 // ─── Staff / Cashier Performance ──────────────────────────────────────────────
-// Uses Odoo pos.order for reliability; falls back to MongoDB if needed.
+// GET /api/pos/analytics/staff?period=today|week|month&configId=1
 
 export const getStaffPerformance = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
-    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
+    const configId = Number(req.query.configId);
 
     const { from, to, prevFrom, prevTo } = getPeriodRange(period);
 
-    // Pull from Odoo — reliable source with cashier (user_id) on every order
-    const [currentOrders, prevOrders] = await Promise.all([
-      odooRequest(
-        "pos.order",
-        "search_read",
-        [orderDomain(from, to, sessionFilter)],
-        { fields: ["user_id", "amount_total"], limit: 5000 }
-      ),
-      odooRequest(
-        "pos.order",
-        "search_read",
-        [orderDomain(prevFrom, prevTo, sessionFilter)],
-        { fields: ["user_id", "amount_total"], limit: 5000 }
-      ),
+    // Use MongoDB POSOrder (has shiftId and cashierId)
+    const [currentAgg, prevAgg] = await Promise.all([
+      POSOrder.aggregate([
+        {
+          $match: {
+            status: "paid",
+            createdAt: { $gte: from, $lte: to },
+          },
+        },
+        {
+          $group: {
+            _id: "$cashierId",
+            totalSales:  { $sum: "$subtotal" },
+            totalOrders: { $sum: 1 },
+          },
+        },
+      ]),
+      POSOrder.aggregate([
+        {
+          $match: {
+            status: "paid",
+            createdAt: { $gte: prevFrom, $lte: prevTo },
+          },
+        },
+        {
+          $group: {
+            _id: "$cashierId",
+            totalSales: { $sum: "$subtotal" },
+          },
+        },
+      ]),
     ]);
 
-    // Aggregate current period by cashier
-    const currMap: Record<
-      string,
-      { name: string; sales: number; txn: number }
-    > = {};
-    for (const o of currentOrders) {
-      const uid = String(o.user_id?.[0] ?? "unknown");
-      const name = o.user_id?.[1] ?? "Unknown Cashier";
-      if (!currMap[uid]) currMap[uid] = { name, sales: 0, txn: 0 };
-      currMap[uid].sales += o.amount_total ?? 0;
-      currMap[uid].txn += 1;
-    }
-
-    // Aggregate previous period for trend
     const prevMap: Record<string, number> = {};
-    for (const o of prevOrders) {
-      const uid = String(o.user_id?.[0] ?? "unknown");
-      prevMap[uid] = (prevMap[uid] ?? 0) + (o.amount_total ?? 0);
+    for (const p of prevAgg) prevMap[String(p._id)] = p.totalSales;
+
+    // Populate cashier names from shifts
+    const cashierIds = currentAgg.map((a: any) => a._id);
+    const shifts = await CashierShiftLog.find({
+      cashierId: { $in: cashierIds },
+    })
+      .populate("cashierId", "name role")
+      .lean();
+
+    const cashierInfo: Record<string, { name: string; role: string }> = {};
+    for (const s of shifts) {
+      const u = s.cashierId as any;
+      if (u?._id) cashierInfo[String(u._id)] = { name: u.name ?? "Unknown", role: u.role ?? "Cashier" };
     }
 
-    const COLORS = [
-      "#3b82f6",
-      "#10b981",
-      "#f59e0b",
-      "#8b5cf6",
-      "#e11d48",
-      "#06b6d4",
-    ];
-
-    const staff = Object.entries(currMap)
-      .sort((a, b) => b[1].sales - a[1].sales)
-      .map(([uid, data], i) => {
-        const prev = prevMap[uid] ?? 0;
-        const trend =
-          prev > 0 ? Math.round(((data.sales - prev) / prev) * 100) : 0;
-        const initials = data.name
-          .split(" ")
-          .map((w: string) => w[0])
-          .join("")
-          .substring(0, 2)
-          .toUpperCase();
+    const COLORS = ["#3b82f6","#10b981","#f59e0b","#8b5cf6","#e11d48","#06b6d4"];
+    const staff = currentAgg
+      .sort((a: any, b: any) => b.totalSales - a.totalSales)
+      .map((a: any, i: number) => {
+        const id    = String(a._id);
+        const prev  = prevMap[id] ?? 0;
+        const trend = prev > 0 ? Math.round(((a.totalSales - prev) / prev) * 100) : 0;
+        const info  = cashierInfo[id] ?? { name: "Cashier", role: "Cashier" };
+        const initials = info.name.split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
         return {
-          cashierId: uid,
+          cashierId: id,
           initials,
-          name: data.name,
-          role: "Cashier",
-          txn: data.txn,
-          sales: Math.round(data.sales * 100) / 100,
+          name:  info.name,
+          role:  info.role,
+          txn:   a.totalOrders,
+          sales: Math.round(a.totalSales * 100) / 100,
           color: COLORS[i % COLORS.length],
           trend,
         };
@@ -667,89 +530,58 @@ export const getStaffPerformance = CatchAsyncError(
 );
 
 // ─── Revenue Target ───────────────────────────────────────────────────────────
-// Targets can be overridden via env vars: TARGET_TODAY, TARGET_WEEK, TARGET_MONTH
+// GET /api/pos/analytics/target?period=today|week|month&configId=1
+// Targets are static defaults here; replace TARGET_* constants with your DB/config values.
 
-const DEFAULT_TARGETS: Record<Period, number> = {
+const TARGETS: Record<Period, number> = {
   today: 10000,
-  week: 60000,
+  week:  60000,
   month: 240000,
 };
-
-function getTarget(period: Period): number {
-  const envMap: Record<Period, string | undefined> = {
-    today: process.env.TARGET_TODAY,
-    week: process.env.TARGET_WEEK,
-    month: process.env.TARGET_MONTH,
-  };
-  const envVal = envMap[period];
-  if (envVal && !isNaN(Number(envVal))) return Number(envVal);
-  return DEFAULT_TARGETS[period];
-}
 
 export const getRevenueTarget = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
       { fields: ["amount_total"], limit: 5000 }
     );
 
-    const current = orders.reduce(
-      (s: number, o: any) => s + (o.amount_total ?? 0),
-      0
-    );
-    const target = getTarget(period);
-    const pct = Math.min(100, Math.round((current / target) * 100));
+    const current = orders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0);
+    const target  = TARGETS[period];
+    const pct     = Math.min(100, Math.round((current / target) * 100));
 
-    const label =
-      period === "today"
-        ? "Daily revenue target"
-        : period === "week"
-        ? "Weekly revenue target"
-        : "Monthly revenue target";
+    const label = period === "today" ? "Daily revenue target"
+      : period === "week"  ? "Weekly revenue target"
+      :                      "Monthly revenue target";
 
     res.status(200).json({
       status: "success",
       period,
-      target: {
-        target,
-        current: Math.round(current * 100) / 100,
-        pct,
-        label,
-      },
+      target: { target, current: Math.round(current * 100) / 100, pct, label },
     });
   }
 );
 
 // ─── Active Session Info ──────────────────────────────────────────────────────
+// GET /api/pos/analytics/session-info?configId=1
 
 export const getSessionInfo = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configId = Number(req.query.configId) || 0;
-    if (!configId) {
-      return next(new ErrorHandler("configId is required", 400));
-    }
+    const configId = Number(req.query.configId);
+    if (!configId) return next(new ErrorHandler("configId is required", 400));
 
-    const sessions = await odooRequest(
-      "pos.session",
-      "search_read",
+    const sessions = await odooRequest("pos.session", "search_read",
       [[["state", "=", "opened"], ["config_id", "=", configId]]],
       {
         fields: [
-          "id",
-          "name",
-          "state",
-          "start_at",
-          "cash_register_balance_start",
-          "cash_register_balance_end_real", // actual counted closing float
-          "user_id",
+          "id", "name", "state", "start_at",
+          "cash_register_balance_start", "user_id",
         ],
         limit: 1,
       }
@@ -757,131 +589,90 @@ export const getSessionInfo = CatchAsyncError(
 
     const session = sessions?.[0] ?? null;
     if (!session) {
-      return res
-        .status(200)
-        .json({ status: "success", session: null });
+      return res.status(200).json({ status: "success", session: null, shift: null });
     }
 
-    // Duration
-    const startAt = new Date(session.start_at);
-    const diffMs = Date.now() - startAt.getTime();
-    const hours = Math.floor(diffMs / 3_600_000);
-    const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
-    const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
-    // Cash payments made this session
-    let cashPayments: any[] = [];
-    try {
-      cashPayments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [
-          [
-            ["session_id", "=", session.id],
-            ["payment_method_id.is_cash_count", "=", true],
-          ],
-        ],
-        { fields: ["amount"], limit: 5000 }
-      );
-    } catch {
-      // is_cash_count field may not exist on all Odoo versions — try without filter
-      cashPayments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["session_id", "=", session.id]]],
-        { fields: ["amount", "payment_method_id"], limit: 5000 }
-      );
-      // Keep only cash-like methods by name heuristic
-      cashPayments = cashPayments.filter((p: any) =>
-        /cash/i.test(p.payment_method_id?.[1] ?? "")
-      );
-    }
-
-    const expectedFloat = session.cash_register_balance_start ?? 0;
-    const cashCollected = cashPayments.reduce(
-      (s: number, p: any) => s + (p.amount ?? 0),
-      0
-    );
-    const expectedDrawer = expectedFloat + cashCollected;
-
-    // Actual counted cash — only available after session close; null when open
-    const countedCash: number | null =
-      session.cash_register_balance_end_real != null &&
-      session.cash_register_balance_end_real !== false
-        ? (session.cash_register_balance_end_real as number)
-        : null;
-
-    // Variance = counted vs expected; null when session is still open
-    const variance =
-      countedCash !== null
-        ? Math.round((countedCash - expectedDrawer) * 100) / 100
-        : null;
-
-    // Active shift (if you use cashier shift tracking)
+    // Find the most recent active shift in this session
     const activeShift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
       state: { $in: ["active", "paused"] },
     })
-      .sort({ startTime: -1 })
+      .sort({ startTime: 1 })
       .populate("cashierId", "name role")
       .lean();
 
-    const cashier = activeShift
-      ? (activeShift.cashierId as any)?.name
-      : session.user_id?.[1] ?? "—";
+    // Duration of the session
+    const startAt = new Date(session.start_at);
+    const diffMs  = Date.now() - startAt.getTime();
+    const hours   = Math.floor(diffMs / 3_600_000);
+    const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
+    const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+    // Cash variance (actual drawer vs expected opening float)
+    const expectedFloat   = session.cash_register_balance_start ?? 0;
+
+    // Get cash payments made in this session to calculate drawer total
+    const cashPayments = await odooRequest("pos.payment", "search_read",
+      [[
+        ["session_id", "=", session.id],
+        ["payment_method_id.is_cash_count", "=", true],
+      ]],
+      { fields: ["amount"], limit: 5000 }
+    );
+    const cashTotal    = cashPayments.reduce((s: number, p: any) => s + (p.amount ?? 0), 0);
+    const drawerTotal  = expectedFloat + cashTotal;
+    const variance     = drawerTotal - expectedFloat;
+
+    const cashier = activeShift ? (activeShift.cashierId as any) : null;
 
     res.status(200).json({
       status: "success",
       session: {
-        id: session.id,
-        name: session.name,
-        state: session.state,
-        startedAt: session.start_at,
+        id:          session.id,
+        name:        session.name,
+        state:       session.state,
+        startedAt:   session.start_at,
         duration,
-        cashier: cashier ?? "—",
-        cashInDrawer: Math.round(expectedDrawer * 100) / 100,
-        expectedFloat: Math.round(expectedFloat * 100) / 100,
-        // variance is null while session is open — frontend hides it in that case
-        variance,
+        cashier:     cashier?.name ?? session.user_id?.[1] ?? "—",
+        cashInDrawer:    Math.round(drawerTotal  * 100) / 100,
+        expectedFloat:   Math.round(expectedFloat * 100) / 100,
+        variance:        Math.round(variance      * 100) / 100,
       },
     });
   }
 );
 
 // ─── Low Stock Items ──────────────────────────────────────────────────────────
+// GET /api/pos/analytics/low-stock?threshold=10&limit=8
 
 export const getLowStock = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const threshold = Number(req.query.threshold) || 10;
-    const limit = Number(req.query.limit) || 8;
+    const limit     = Number(req.query.limit) || 8;
 
-    const products = await odooRequest(
-      "product.product",
-      "search_read",
-      [
-        [
-          ["available_in_pos", "=", true],
-          ["active", "=", true],
-          ["type", "in", ["product", "consu"]],
-          ["qty_available", "<=", threshold],
-        ],
-      ],
+    // Fetch products available in POS with low quantity
+    const products = await odooRequest("product.product", "search_read",
+      [[
+        ["available_in_pos", "=", true],
+        ["active", "=", true],
+        ["type", "in", ["product", "consu"]], // storable or consumable
+        ["qty_available", "<=", threshold],
+      ]],
       {
-        fields: ["id", "name", "qty_available", "uom_id", "categ_id", "write_date"],
+        fields: ["id", "name", "qty_available", "uom_id", "categ_id"],
         order: "qty_available asc",
         limit,
       }
     );
 
     const items = products.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      stock: p.qty_available ?? 0,
-      unit: p.uom_id?.[1] ?? "units",
+      id:        p.id,
+      name:      p.name,
+      stock:     p.qty_available ?? 0,
+      unit:      p.uom_id?.[1] ?? "units",
       threshold,
-      critical: (p.qty_available ?? 0) <= Math.floor(threshold / 2),
-      category: p.categ_id?.[1] ?? "Other",
-      updatedAt: p.write_date ?? null,
+      critical:  (p.qty_available ?? 0) <= Math.floor(threshold / 2),
+      category:  p.categ_id?.[1] ?? "Other",
     }));
 
     res.status(200).json({ status: "success", items });
@@ -889,122 +680,98 @@ export const getLowStock = CatchAsyncError(
 );
 
 // ─── Peak Hours Heatmap ───────────────────────────────────────────────────────
-// 7×12 grid (Mon–Sun × 8am–7pm). Timezone-aware via getLocalHour/getLocalDayOfWeek.
+// GET /api/pos/analytics/heatmap?configId=1
+// Returns a 7×12 grid (Mon–Sun × 8am–7pm) of order counts
 
 export const getPeakHoursHeatmap = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - 28);
+    // Look back 4 weeks for heatmap data
+    const to   = new Date();
+    const from = new Date(); from.setDate(from.getDate() - 28);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
-      [
-        [
-          ["date_order", ">=", toOdooDate(from)],
-          ["date_order", "<=", toOdooDate(to)],
-          ["state", "in", ["paid", "done", "invoiced"]],
-          ...sessionFilter,
-        ],
-      ],
+    const orders = await odooRequest("pos.order", "search_read",
+      [[
+        ["date_order", ">=", toOdooDate(from)],
+        ["date_order", "<=", toOdooDate(to)],
+        ["state", "in", ["paid", "done", "invoiced"]],
+        ...sessionFilter,
+      ]],
       { fields: ["date_order"], limit: 10000 }
     );
 
-    // grid[dayIndex][hourIndex] — day: 0=Mon…6=Sun, hour: 0=8am…11=7pm
-    const grid: number[][] = Array.from({ length: 7 }, () =>
-      Array(12).fill(0)
-    );
+    // grid[dayIndex][hourIndex] = count  (day: 0=Mon, hour: 0=8am)
+    const grid: number[][] = Array.from({ length: 7 }, () => Array(12).fill(0));
 
     for (const o of orders) {
-      const dow = getLocalDayOfWeek(o.date_order);
-      const h = getLocalHour(o.date_order);
+      const d   = new Date(o.date_order);
+      const dow = (d.getDay() + 6) % 7; // 0=Mon … 6=Sun
+      const h   = d.getHours();         // 0–23
       if (h >= 8 && h <= 19) {
         grid[dow][h - 8]++;
       }
     }
 
-    // Average over 4 weeks
-    const normalised = grid.map((row) =>
-      row.map((v) => Math.round(v / 4))
-    );
+    // Normalise over 4 weeks → average per hour per day-of-week
+    const normalised = grid.map((row) => row.map((v) => Math.round(v / 4)));
 
     res.status(200).json({ status: "success", heatmap: normalised });
   }
 );
 
+
 // ─── Table Status ─────────────────────────────────────────────────────────────
+// GET /api/pos/analytics/tables?configId=1
 
 export const getTableStatus = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
+    const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
-    // restaurant.table may not exist if the restaurant module isn't installed
-    let tables: any[] = [];
-    try {
-      tables = await odooRequest(
-        "restaurant.table",
-        "search_read",
-        [configId ? [["pos_config_id", "=", configId]] : []],
-        {
-          fields: ["id", "name", "seats", "state", "current_order_id"],
-          limit: 100,
-        }
-      );
-    } catch {
-      // Module not installed — return empty list gracefully
-      return res.status(200).json({ status: "success", tables: [] });
-    }
+    // Fetch all tables (restaurant.table) for this config
+    const tables = await odooRequest("restaurant.table", "search_read",
+      [configId ? [["pos_config_id", "=", configId]] : []],
+      { fields: ["id", "name", "seats", "state", "current_order_id"], limit: 100 }
+    );
 
+    // Get open orders on those tables to compute duration
     const tableOrderIds = tables
       .map((t: any) => t.current_order_id?.[0])
       .filter(Boolean);
 
     let orderMap: Record<number, any> = {};
     if (tableOrderIds.length) {
-      const openOrders = await odooRequest(
-        "pos.order",
-        "search_read",
+      const openOrders = await odooRequest("pos.order", "search_read",
         [[["id", "in", tableOrderIds]]],
-        {
-          fields: ["id", "date_order", "partner_id", "amount_total", "lines"],
-          limit: 200,
-        }
+        { fields: ["id", "date_order", "partner_id", "amount_total", "lines"], limit: 200 }
       );
       for (const o of openOrders) orderMap[o.id] = o;
     }
 
     const now = Date.now();
     const result = tables.map((t: any) => {
-      const order = t.current_order_id
-        ? orderMap[t.current_order_id[0]]
-        : null;
+      const order = t.current_order_id ? orderMap[t.current_order_id[0]] : null;
       let duration = "—";
       if (order?.date_order) {
-        const diffMin = Math.floor(
-          (now - new Date(order.date_order).getTime()) / 60000
-        );
-        duration =
-          diffMin < 60
-            ? `${diffMin}m`
-            : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
+        const diffMin = Math.floor((now - new Date(order.date_order).getTime()) / 60000);
+        duration = diffMin < 60 ? `${diffMin}m` : `${Math.floor(diffMin / 60)}h ${diffMin % 60}m`;
       }
 
+      // Odoo table states: "available" | "occupied"
+      // Map reserved via a future_order check if you track reservations separately
       const status: "occupied" | "available" | "reserved" =
         t.state === "occupied" ? "occupied" : "available";
 
       return {
-        id: t.name,
+        id:       t.name,
         status,
         duration,
-        guests: order ? t.seats ?? 0 : 0,
-        seats: t.seats ?? 0,
-        orderId: order?.id ?? null,
-        amount:
-          order ? Math.round((order.amount_total ?? 0) * 100) / 100 : 0,
+        guests:   order ? (t.seats ?? 0) : 0,
+        seats:    t.seats ?? 0,
+        orderId:  order?.id ?? null,
+        amount:   order ? Math.round((order.amount_total ?? 0) * 100) / 100 : 0,
       };
     });
 
@@ -1013,106 +780,81 @@ export const getTableStatus = CatchAsyncError(
 );
 
 // ─── Discounts / Promotions ───────────────────────────────────────────────────
+// GET /api/pos/analytics/discounts?period=today|week|month&configId=1
 
 export const getDiscounts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    // Get order lines that have a discount applied
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
-      { fields: ["id"], limit: 5000 }
+      { fields: ["lines"], limit: 5000 }
     );
 
     const orderIds = orders.map((o: any) => o.id);
     if (!orderIds.length) {
-      return res
-        .status(200)
-        .json({ status: "success", discounts: [], total: 0 });
+      return res.status(200).json({ status: "success", discounts: [], total: 0 });
     }
 
-    const lines = await odooRequest(
-      "pos.order.line",
-      "search_read",
-      [
-        [
-          ["order_id", "in", orderIds],
-          ["discount", ">", 0],
-        ],
-      ],
-      {
-        fields: [
-          "product_id",
-          "discount",
-          "price_unit",
-          "qty",
-          "price_subtotal_incl",
-        ],
-        limit: 20000,
-      }
+    // Lines with discount > 0
+    const lines = await odooRequest("pos.order.line", "search_read",
+      [[
+        ["order_id", "in", orderIds],
+        ["discount", ">", 0],
+      ]],
+      { fields: ["product_id", "discount", "price_unit", "qty", "price_subtotal_incl"], limit: 20000 }
     );
 
+    // Also fetch coupon/promotion programs if you use pos_coupon
+    // If you don't use pos_coupon, this block can be skipped
     let couponLines: any[] = [];
     try {
-      couponLines = await odooRequest(
-        "pos.order.line",
-        "search_read",
-        [
-          [
-            ["order_id", "in", orderIds],
-            ["coupon_program_id", "!=", false],
-          ],
-        ],
-        {
-          fields: [
-            "coupon_program_id",
-            "price_subtotal_incl",
-            "qty",
-            "order_id",
-          ],
-          limit: 20000,
-        }
+      couponLines = await odooRequest("pos.order.line", "search_read",
+        [[
+          ["order_id", "in", orderIds],
+          ["coupon_program_id", "!=", false],
+        ]],
+        { fields: ["coupon_program_id", "price_subtotal_incl", "qty", "order_id"], limit: 20000 }
       );
-    } catch {
-      // pos_coupon module not installed
+    } catch (_) {
+      // pos_coupon module not installed — skip
     }
 
-    const discountMap: Record<
-      string,
-      { uses: number; saved: number; type: string }
-    > = {};
+    // Aggregate discount lines by product name as a proxy for discount type
+    const discountMap: Record<string, { uses: number; saved: number; type: string }> = {};
     let totalSaved = 0;
 
     for (const l of lines) {
       const key = l.product_id?.[1] ?? "Discount";
       const lineDiscount =
-        ((l.price_unit ?? 0) * (l.qty ?? 0) * (l.discount ?? 0)) / 100;
+        (l.price_unit * l.qty * l.discount) / 100;
       if (!discountMap[key]) discountMap[key] = { uses: 0, saved: 0, type: "Discount" };
-      discountMap[key].uses += 1;
+      discountMap[key].uses  += 1;
       discountMap[key].saved += lineDiscount;
-      totalSaved += lineDiscount;
+      totalSaved             += lineDiscount;
     }
 
+    // Merge coupon lines
     for (const l of couponLines) {
-      const key = l.coupon_program_id?.[1] ?? "Promo";
+      const key  = l.coupon_program_id?.[1] ?? "Promo";
       const saved = Math.abs(l.price_subtotal_incl ?? 0);
       if (!discountMap[key]) discountMap[key] = { uses: 0, saved: 0, type: "Promotion" };
-      discountMap[key].uses += 1;
+      discountMap[key].uses  += 1;
       discountMap[key].saved += saved;
-      totalSaved += saved;
+      totalSaved             += saved;
     }
 
     const discounts = Object.entries(discountMap)
       .sort((a, b) => b[1].uses - a[1].uses)
       .map(([code, d]) => ({
         code,
-        uses: d.uses,
+        uses:  d.uses,
         saved: Math.round(d.saved * 100) / 100,
-        type: d.type,
+        type:  d.type,
       }));
 
     res.status(200).json({
@@ -1124,79 +866,72 @@ export const getDiscounts = CatchAsyncError(
 );
 
 // ─── Customer Insights ────────────────────────────────────────────────────────
+// GET /api/pos/analytics/customers?period=today|week|month&configId=1
 
 export const getCustomerInsights = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const period = (req.query.period as Period) || "today";
-    const configId = Number(req.query.configId) || 0;
+    const configId = Number(req.query.configId);
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
     const { from, to } = getPeriodRange(period);
 
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
+    const orders = await odooRequest("pos.order", "search_read",
       [orderDomain(from, to, sessionFilter)],
       { fields: ["partner_id", "amount_total"], limit: 5000 }
     );
 
-    const withPartner = orders.filter((o: any) => o.partner_id);
+    // Segment: orders with a linked partner = known customer
+    const withPartner    = orders.filter((o: any) => o.partner_id);
     const withoutPartner = orders.filter((o: any) => !o.partner_id);
 
-    const partnerIds = [
-      ...new Set(withPartner.map((o: any) => o.partner_id[0])),
-    ] as number[];
+    // Identify "new" vs "returning" by checking if partner had any order BEFORE this period
+    const partnerIds = [...new Set(withPartner.map((o: any) => o.partner_id[0]))];
 
     let returningIds = new Set<number>();
     if (partnerIds.length) {
-      const prevOrders = await odooRequest(
-        "pos.order",
-        "search_read",
-        [
-          [
-            ["partner_id", "in", partnerIds],
-            ["date_order", "<", toOdooDate(from)],
-            ["state", "in", ["paid", "done", "invoiced"]],
-            ...sessionFilter,
-          ],
-        ],
+      const prevOrders = await odooRequest("pos.order", "search_read",
+        [[
+          ["partner_id", "in", partnerIds],
+          ["date_order", "<", toOdooDate(from)],
+          ["state", "in", ["paid", "done", "invoiced"]],
+          ...sessionFilter,
+        ]],
         { fields: ["partner_id"], limit: 5000 }
       );
       for (const o of prevOrders) returningIds.add(o.partner_id[0]);
     }
 
-    const newCustomers = withPartner.filter(
-      (o: any) => !returningIds.has(o.partner_id[0])
-    ).length;
-    const returningCustomers = withPartner.filter((o: any) =>
-      returningIds.has(o.partner_id[0])
-    ).length;
+    const newCustomers       = withPartner.filter((o: any) => !returningIds.has(o.partner_id[0])).length;
+    const returningCustomers = withPartner.filter((o: any) =>  returningIds.has(o.partner_id[0])).length;
 
+    // Top spender
     const spendMap: Record<number, { name: string; total: number }> = {};
     for (const o of withPartner) {
       const id = o.partner_id[0];
       if (!spendMap[id]) spendMap[id] = { name: o.partner_id[1], total: 0 };
       spendMap[id].total += o.amount_total ?? 0;
     }
-    const topSpenderEntry =
-      Object.values(spendMap).sort((a, b) => b.total - a.total)[0] ?? null;
+    const topSpenderEntry = Object.values(spendMap).sort((a, b) => b.total - a.total)[0] ?? null;
 
-    const avgVisits =
-      partnerIds.length > 0
-        ? Math.round((withPartner.length / partnerIds.length) * 10) / 10
-        : 0;
+    // Avg visits per known customer during period
+    const avgVisits = partnerIds.length > 0
+      ? Math.round((withPartner.length / partnerIds.length) * 10) / 10
+      : 0;
+
+    // Satisfaction — from pos.order rating field (if you use it), else null
+    // Odoo doesn't have a built-in rating on pos.order; return null and hide in UI
+    const satisfaction: number | null = null;
 
     res.status(200).json({
       status: "success",
       customers: {
-        newToday: newCustomers,
-        returning: returningCustomers,
-        anonymous: withoutPartner.length,
-        topSpender: topSpenderEntry?.name ?? null,
-        topAmount: topSpenderEntry
-          ? Math.round(topSpenderEntry.total * 100) / 100
-          : 0,
+        newToday:     newCustomers,
+        returning:    returningCustomers,
+        anonymous:    withoutPartner.length,
+        topSpender:   topSpenderEntry?.name    ?? null,
+        topAmount:    topSpenderEntry ? Math.round(topSpenderEntry.total * 100) / 100 : 0,
         avgVisits,
-        satisfaction: null,
+        satisfaction,
       },
     });
   }
