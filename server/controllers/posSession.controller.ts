@@ -1465,33 +1465,52 @@ export const getOrderReceiptPdf = CatchAsyncError(
     const orderId = Number(req.params.orderId);
     if (!orderId) return next(new ErrorHandler("orderId is required", 400));
 
+    // Get a fresh session using your existing credentials
+    const authResponse = await fetch(
+      `${process.env.ODOO_URL}/web/session/authenticate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            db: process.env.ODOO_DB,
+            login: process.env.ODOO_USER,
+            password: process.env.ODOO_PASSWORD,
+          },
+        }),
+      },
+    );
+
+    const setCookie = authResponse.headers.get("set-cookie") ?? "";
+    const match = setCookie.match(/session_id=([^;]+)/);
+    if (!match)
+      return next(new ErrorHandler("Failed to authenticate with Odoo", 502));
+
+    const sessionId = match[1];
+
     const pdfResponse = await fetch(
       `${process.env.ODOO_URL}/report/pdf/point_of_sale.report_receipt/${orderId}`,
       {
         headers: {
-          "X-Openerp-Session-Id": process.env.ODOO_SESSION_ID ?? "",
-          Cookie: `session_id=${process.env.ODOO_SESSION_ID ?? ""}`,
+          "X-Openerp-Session-Id": sessionId,
+          Cookie: `session_id=${sessionId}`,
         },
       },
     );
 
     if (!pdfResponse.ok) {
-      const errText = await pdfResponse.text();
-      console.error("Odoo error:", errText.slice(0, 300));
       return next(new ErrorHandler("Failed to fetch receipt from Odoo", 502));
     }
 
-    // Use arrayBuffer → Buffer directly, no JSON parsing middleware interference
-    const arrayBuffer = await pdfResponse.arrayBuffer();
-    const buf = Buffer.from(arrayBuffer);
-    console.log("Status:", pdfResponse.status);
-console.log("Content-Type:", pdfResponse.headers.get("content-type"));
-console.log("Buffer size:", buf.length);
-console.log("Raw response:", buf.toString("utf-8").slice(0, 1000));
+    const buf = Buffer.from(await pdfResponse.arrayBuffer());
+
     if (!buf.subarray(0, 4).toString("ascii").startsWith("%PDF")) {
-      console.error("Invalid PDF, got:", buf.subarray(0, 200).toString());
+      console.error("Invalid PDF:", buf.toString("utf-8").slice(0, 300));
       return next(new ErrorHandler("Odoo returned invalid PDF", 502));
     }
+
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Length", buf.length);
     res.setHeader(
