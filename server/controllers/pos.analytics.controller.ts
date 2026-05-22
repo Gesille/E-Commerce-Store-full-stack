@@ -701,30 +701,33 @@ export const getLowStock = CatchAsyncError(
     const threshold = Number(req.query.threshold) || 10;
     const limit     = Number(req.query.limit) || 8;
 
-    // Fetch products available in POS with low quantity
+    // Step 1: Fetch eligible products WITHOUT qty_available in the domain
     const products = await odooRequest("product.product", "search_read",
       [[
         ["available_in_pos", "=", true],
         ["active", "=", true],
-        ["type", "in", ["product", "consu"]], // storable or consumable
-        ["qty_available", "<=", threshold],
+        ["type", "in", ["product", "consu"]],
       ]],
       {
         fields: ["id", "name", "qty_available", "uom_id", "categ_id"],
-        order: "qty_available asc",
-        limit,
+        order: "name asc",   // qty_available can't be used in order either
       }
     );
 
-    const items = products.map((p: any) => ({
-      id:        p.id,
-      name:      p.name,
-      stock:     p.qty_available ?? 0,
-      unit:      p.uom_id?.[1] ?? "units",
-      threshold,
-      critical:  (p.qty_available ?? 0) <= Math.floor(threshold / 2),
-      category:  p.categ_id?.[1] ?? "Other",
-    }));
+    // Step 2: Filter and sort in JavaScript
+    const items = products
+      .filter((p: any) => (p.qty_available ?? 0) <= threshold)
+      .sort((a: any, b: any) => (a.qty_available ?? 0) - (b.qty_available ?? 0))
+      .slice(0, limit)
+      .map((p: any) => ({
+        id:       p.id,
+        name:     p.name,
+        stock:    p.qty_available ?? 0,
+        unit:     p.uom_id?.[1]   ?? "units",
+        threshold,
+        critical: (p.qty_available ?? 0) <= Math.floor(threshold / 2),
+        category: p.categ_id?.[1] ?? "Other",
+      }));
 
     res.status(200).json({ status: "success", items });
   }
