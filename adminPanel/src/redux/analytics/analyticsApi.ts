@@ -159,7 +159,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
-      transformResponse: (res: any) => res.items,
+      transformResponse: (res: any) => res.products ?? [],
     }),
 
     // Heatmap
