@@ -124,7 +124,6 @@ export async function getReceiptByIdService(id: number) {
       "session_id",
       "amount_total",
       "amount_tax",
-      "amount_untaxed",
       "amount_paid",
       "amount_return",
       "state",
