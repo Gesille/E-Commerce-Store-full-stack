@@ -1425,7 +1425,7 @@ export default function POSDashboardPage() {
           cy={71}
           innerRadius={48}
           outerRadius={68}
-          paddingAngle={paymentData.length > 1 ? 3 : 0}  {/* ✅ Fix 1: no padding for single item */}
+          paddingAngle={paymentData.length > 1 ? 3 : 0} 
           dataKey="percentage"
           strokeWidth={0}
         >
