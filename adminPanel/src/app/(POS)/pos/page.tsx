@@ -85,7 +85,6 @@ const HOURS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-
 function safeFmt(val: number | undefined | null): string {
   if (val == null || isNaN(val as number)) return "$0.00";
   return fmt(val);
@@ -578,7 +577,6 @@ export default function POSDashboardPage() {
                 >
                   {branch}
                 </span>
-                
               </div>
             </div>
 
@@ -635,8 +633,6 @@ export default function POSDashboardPage() {
                   {dateLabel}
                 </span>
               </div>
-
-           
 
               {/* Notification bell */}
               <div style={{ position: "relative" }} ref={notifRef}>
@@ -987,7 +983,6 @@ export default function POSDashboardPage() {
                 )}
               </CardPad>
             </Card>
-
             {/* Low stock */}
             <Card>
               <CardPad>
@@ -1022,62 +1017,86 @@ export default function POSDashboardPage() {
                     All stock levels healthy
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 11,
-                    }}
-                  >
-                    {lowStockItems.map((item: any) => {
-                      const pct = Math.min(
-                        100,
-                        (item.stock / item.threshold) * 100,
-                      );
-                      const color = item.critical ? "#e11d48" : "#f59e0b";
-                      return (
-                        <div
-                          key={item.name}
-                          className="row"
-                          style={{ gap: 10 }}
-                        >
-                          <Package
-                            size={13}
-                            color="var(--text-muted)"
-                            style={{ flexShrink: 0 }}
-                          />
-                          <span
-                            style={{
-                              flex: 1,
-                              fontSize: 13,
-                              color: "var(--text-primary)",
-                              fontWeight: 500,
-                            }}
+                  <>
+                    {/* ✅ scrollable container with max height */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 11,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                        paddingRight: 4,
+                      }}
+                    >
+                      {lowStockItems.map((item: any) => {
+                        const pct =
+                          item.threshold > 0
+                            ? Math.min(100, (item.stock / item.threshold) * 100)
+                            : 0;
+                        const color = item.critical ? "#e11d48" : "#f59e0b";
+                        return (
+                          <div
+                            key={item.id ?? item.name}
+                            className="row"
+                            style={{ gap: 10 }}
                           >
-                            {item.name}
-                          </span>
-                          <div className="progress-bar" style={{ width: 80 }}>
-                            <div
-                              className="progress-fill"
-                              style={{ width: `${pct}%`, background: color }}
+                            <Package
+                              size={13}
+                              color="var(--text-muted)"
+                              style={{ flexShrink: 0 }}
                             />
+                            <span
+                              style={{
+                                flex: 1,
+                                fontSize: 13,
+                                color: "var(--text-primary)",
+                                fontWeight: 500,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.name}
+                            </span>
+                            <div className="progress-bar" style={{ width: 80 }}>
+                              <div
+                                className="progress-fill"
+                                style={{ width: `${pct}%`, background: color }}
+                              />
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color,
+                                minWidth: 76,
+                                textAlign: "right",
+                                fontFamily: "'DM Mono', monospace",
+                              }}
+                            >
+                              {item.stock} {item.unit}
+                            </span>
                           </div>
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 600,
-                              color,
-                              minWidth: 76,
-                              textAlign: "right",
-                              fontFamily: "'DM Mono', monospace",
-                            }}
-                          >
-                            {item.stock} {item.unit}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* ✅ footer count when list is long */}
+                    {lowStockItems.length > 5 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          fontSize: 11.5,
+                          color: "var(--text-muted)",
+                          textAlign: "center",
+                        }}
+                      >
+                        Showing all {lowStockItems.length} items · scroll to see
+                        more
+                      </div>
+                    )}
+                  </>
                 )}
               </CardPad>
             </Card>
@@ -1399,82 +1418,96 @@ export default function POSDashboardPage() {
               </div>
             </Card>
 
-          {/* Payment methods donut */}
-<Card>
-  <CardPad>
-    <SectionHeader
-      title="Payment Methods"
-      subtitle="Transaction split"
-    />
-    <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
-      <PieChart width={150} height={150}>
-        <Pie
-          data={paymentData}
-          cx={71}
-          cy={71}
-          innerRadius={48}
-          outerRadius={68}
-          paddingAngle={paymentData.length > 1 ? 3 : 0} 
-          dataKey="percentage"
-          strokeWidth={0}
-        >
-          {paymentData.map((_: any, i: number) => (
-            <Cell
-              key={i}
-              fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]}
-            />
-          ))}
-        </Pie>
-      </PieChart>
-    </div>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {paymentData.map((p: any, i: number) => (
-        <div
-          key={p.name}
-          className="row"
-          style={{ justifyContent: "space-between" }}
-        >
-          <div className="row" style={{ gap: 8 }}>
-            <div
-              style={{
-                width: 9,
-                height: 9,
-                borderRadius: 3,
-                background: PAYMENT_COLORS[i % PAYMENT_COLORS.length],
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-              {p.name}
-            </span>
-          </div>
-          <div className="row" style={{ gap: 10 }}>
-            <span
-              style={{
-                fontSize: 12,
-                color: "var(--text-muted)",
-                fontFamily: "'DM Mono', monospace",
-              }}
-            >
-              {safeFmt(p.amount)}
-            </span>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: "var(--text-primary)",
-                minWidth: 40,
-                textAlign: "right",
-              }}
-            >
-              {p.percentage ?? 0}%  {/* ✅ Fix 2: fallback to 0 */}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  </CardPad>
-</Card>
+            {/* Payment methods donut */}
+            <Card>
+              <CardPad>
+                <SectionHeader
+                  title="Payment Methods"
+                  subtitle="Transaction split"
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    marginBottom: 4,
+                  }}
+                >
+                  <PieChart width={150} height={150}>
+                    <Pie
+                      data={paymentData}
+                      cx={71}
+                      cy={71}
+                      innerRadius={48}
+                      outerRadius={68}
+                      paddingAngle={paymentData.length > 1 ? 3 : 0}
+                      dataKey="percentage"
+                      strokeWidth={0}
+                    >
+                      {paymentData.map((_: any, i: number) => (
+                        <Cell
+                          key={i}
+                          fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </div>
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
+                  {paymentData.map((p: any, i: number) => (
+                    <div
+                      key={p.name}
+                      className="row"
+                      style={{ justifyContent: "space-between" }}
+                    >
+                      <div className="row" style={{ gap: 8 }}>
+                        <div
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: 3,
+                            background:
+                              PAYMENT_COLORS[i % PAYMENT_COLORS.length],
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 13,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          {p.name}
+                        </span>
+                      </div>
+                      <div className="row" style={{ gap: 10 }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "var(--text-muted)",
+                            fontFamily: "'DM Mono', monospace",
+                          }}
+                        >
+                          {safeFmt(p.amount)}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "var(--text-primary)",
+                            minWidth: 40,
+                            textAlign: "right",
+                          }}
+                        >
+                          {p.percentage ?? 0}% {/* ✅ Fix 2: fallback to 0 */}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardPad>
+            </Card>
           </div>
 
           {/* ── Row 5: Category breakdown ── */}
