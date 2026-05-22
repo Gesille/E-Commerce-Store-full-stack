@@ -6,47 +6,37 @@ import {
 } from "../services/receipts.service.js";
 
 // ─────────────────────────────────────────────────────────
-
-import { odooRequest } from "../odoo/odoo.client.js";
+// GET /receipts
+// ─────────────────────────────────────────────────────────
 
 export const getReceipts = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-
   try {
+    const { page, limit, search, dateFrom, dateTo, state } = req.query;
 
-    console.log("START");
-
-    const test = await odooRequest(
-      "pos.order",
-      "search_read",
-      [[]],
-      {
-        fields: ["id", "name"],
-        limit: 1,
-      }
-    );
-
-    console.log("ODOO OK");
+    const result = await getReceiptsService({
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+      search: String(search || ""),
+      dateFrom: dateFrom as string | undefined,
+      dateTo: dateTo as string | undefined,
+      state: state as any,
+    });
 
     return res.status(200).json({
       success: true,
-      test,
+      ...result,
     });
-
-  } catch (error:any) {
-
-    console.log(error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  } catch (error) {
+    next(error);
   }
 };
 
+// ─────────────────────────────────────────────────────────
+// GET /receipts/:receiptId
 // ─────────────────────────────────────────────────────────
 
 export const getReceiptById = async (
@@ -57,7 +47,7 @@ export const getReceiptById = async (
   try {
     const receiptId = Number(req.params.receiptId);
 
-    if (!receiptId) {
+    if (!receiptId || isNaN(receiptId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid receipt id",
@@ -70,7 +60,13 @@ export const getReceiptById = async (
       success: true,
       receipt,
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === "Receipt not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Receipt not found",
+      });
+    }
     next(error);
   }
 };
