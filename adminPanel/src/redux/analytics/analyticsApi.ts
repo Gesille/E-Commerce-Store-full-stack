@@ -81,7 +81,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
         period?: Period;
         configId?: number;
       }) => ({
-        url: `payment-methods?period=${period}&configId=${configId}`,
+        url: `payment-methods/split?period=${period}&configId=${configId}`,
         method: "GET",
         credentials: "include" as const,
       }),
