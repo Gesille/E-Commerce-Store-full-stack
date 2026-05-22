@@ -113,4 +113,5 @@ AnalyticsRouter.get(
   authorizeRoles("admin", "cashier"),
   getCustomerInsights,
 );
+
 export default AnalyticsRouter;
