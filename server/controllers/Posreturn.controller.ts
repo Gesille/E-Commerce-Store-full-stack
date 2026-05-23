@@ -13,6 +13,25 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// pos_reference format: "Return of POS-XXXX | reason — notes"
+function extractOriginalReceipt(posRef: string): string {
+  if (!posRef) return "—";
+  const match = posRef.match(/^Return of ([^|]+)/);
+  return match ? match[1].trim() : posRef;
+}
+
+function extractReason(posRef: string): string {
+  if (!posRef) return "—";
+  const match = posRef.match(/\| (.+)$/);
+  return match ? match[1].trim() : "—";
+}
+
+function mapState(state: string): "completed" | "pending" | "voided" {
+  if (state === "cancel") return "voided";
+  if (state === "draft") return "pending";
+  return "completed";
+}
+
 // ─── Lookup Receipt ───────────────────────────────────────────────────────────
 // GET /receipt-lookup?receiptNumber=POS-XXXX
 
@@ -278,10 +297,8 @@ export const createReturn = CatchAsyncError(
           amount_total: -total,
           amount_paid: 0,
           amount_return: 0,
-          // note field stores the reason (visible in Odoo backend)
-          note: `[Return] ${reason}${notes ? " — " + notes : ""}`,
-          // pos_reference links back visually in Odoo backend
-          pos_reference: `Return of ${receiptNumber}`,
+          // stores reason visibly in Odoo backend: "Return of RECEIPT | reason — notes"
+          pos_reference: `Return of ${receiptNumber} | ${reason}${notes ? " — " + notes : ""}`,
         },
       ]
     );
@@ -414,7 +431,6 @@ export const getReturns = CatchAsyncError(
           "state",
           "user_id",
           "lines",
-          "note",
         ],
         limit,
         offset: (page - 1) * limit,
@@ -449,16 +465,6 @@ export const getReturns = CatchAsyncError(
       linesByOrder[oid].push(line);
     }
 
-    const mapState = (state: string) => {
-      if (state === "cancel") return "voided";
-      if (state === "draft") return "pending";
-      return "completed";
-    };
-
-    // Extract original receipt number from pos_reference "Return of POS-XXXX"
-    const extractOriginalReceipt = (posRef: string) =>
-      posRef?.replace("Return of ", "") ?? "—";
-
     const returns = orders.map((o: any) => {
       const lines = linesByOrder[o.id] ?? [];
       const subtotal = round2(
@@ -475,7 +481,7 @@ export const getReturns = CatchAsyncError(
         returnNumber: o.name,
         receiptNumber: extractOriginalReceipt(o.pos_reference),
         cashier: o.user_id?.[1] ?? "Unknown",
-        reason: o.note?.replace("[Return] ", "") ?? "—",
+        reason: extractReason(o.pos_reference),
         subtotal,
         taxTotal,
         total: round2(Math.abs(o.amount_total)),
@@ -549,7 +555,6 @@ export const getReturnById = CatchAsyncError(
           "state",
           "user_id",
           "lines",
-          "note",
         ],
       }
     );
@@ -576,12 +581,6 @@ export const getReturnById = CatchAsyncError(
         )
       : [];
 
-    const mapState = (s: string) => {
-      if (s === "cancel") return "voided";
-      if (s === "draft") return "pending";
-      return "completed";
-    };
-
     const subtotal = round2(
       lines.reduce(
         (s: number, l: any) => s + Math.abs(l.price_unit) * Math.abs(l.qty),
@@ -595,9 +594,9 @@ export const getReturnById = CatchAsyncError(
       return: {
         _id: String(o.id),
         returnNumber: o.name,
-        receiptNumber: o.pos_reference?.replace("Return of ", "") ?? "—",
+        receiptNumber: extractOriginalReceipt(o.pos_reference),
         cashier: o.user_id?.[1] ?? "Unknown",
-        reason: o.note?.replace("[Return] ", "") ?? "—",
+        reason: extractReason(o.pos_reference),
         subtotal,
         taxTotal,
         total: round2(Math.abs(o.amount_total)),
@@ -636,7 +635,7 @@ export const voidReturn = CatchAsyncError(
       "pos.order",
       "read",
       [[id]],
-      { fields: ["id", "name", "state", "pos_reference", "note"] }
+      { fields: ["id", "name", "state", "pos_reference"] }
     );
 
     if (!orders?.length)
@@ -654,9 +653,6 @@ export const voidReturn = CatchAsyncError(
           [id],
           {
             state: "cancel",
-            note: `${order.note ?? ""} | Voided by: ${
-              voidedBy ?? "Unknown"
-            }${notes ? " — " + notes : ""}`,
           },
         ]);
       }
@@ -697,7 +693,7 @@ export const getReturnStats = CatchAsyncError(
       "pos.order",
       "search_read",
       [domain],
-      { fields: ["id", "amount_total", "lines", "note", "date_order"] }
+      { fields: ["id", "amount_total", "lines", "pos_reference", "date_order"] }
     );
 
     const totalRefunded = round2(
@@ -714,7 +710,7 @@ export const getReturnStats = CatchAsyncError(
     // Group by reason
     const reasonMap: Record<string, { count: number; total: number }> = {};
     for (const o of orders) {
-      const r = o.note?.replace("[Return] ", "").split(" — ")[0] || "Unspecified";
+      const r = extractReason(o.pos_reference) || "Unspecified";
       if (!reasonMap[r]) reasonMap[r] = { count: 0, total: 0 };
       reasonMap[r].count += 1;
       reasonMap[r].total = round2(
