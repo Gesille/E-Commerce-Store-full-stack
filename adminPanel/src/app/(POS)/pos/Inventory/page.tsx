@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { DailyMovement, InventoryRange, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery, Movement, useGetInventoryMovementsQuery } from "@/redux/posinventory/posinverntoryApi";
+import { fmtCompact } from "@/types/pos";
 
 
 
@@ -33,11 +34,7 @@ const fmt = (n: number) =>
     minimumFractionDigits: 2,
   }).format(n);
 
-const fmtCompact = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(n);
+
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
