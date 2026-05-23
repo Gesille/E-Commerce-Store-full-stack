@@ -1,3 +1,5 @@
+"use client";
+
 import { InventoryRange, Movement, ProductRow, useGetInventoryMovementsQuery, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery } from "@/redux/posinventory/posinverntoryApi";
 import { useState, useMemo } from "react";
 import {
@@ -180,7 +182,7 @@ function ProductDrawer({
               </tr>
             </thead>
             <tbody>
-              {data.movements.map((m: any) => (
+              {data.movements.map((m:any) => (
                 <tr key={m._id} className="mvt-row">
                   <td>
                     <span className={`badge ${m.type === "sale" ? "badge-sale" : "badge-return"}`}>
@@ -229,13 +231,13 @@ export default function InventoryPage() {
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
-        (p: any) =>
+        (p:any) =>
           p.name.toLowerCase().includes(q) ||
           p.reference?.toLowerCase().includes(q) ||
           p.barcode?.toLowerCase().includes(q)
       );
     }
-    if (lowStockOnly) rows = rows.filter((p: any) => p.stock > 0 && p.stock <= 5);
+    if (lowStockOnly) rows = rows.filter((p:any) => p.stock > 0 && p.stock <= 5);
     rows = [...rows].sort((a, b) => {
       const av = a[sortKey] as any;
       const bv = b[sortKey] as any;
@@ -938,7 +940,7 @@ export default function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p: any) => {
+                    {products.map((p:any) => {
                       const stockClass =
                         p.stock === 0
                           ? "stock-zero"
@@ -1014,7 +1016,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {movData.movements.map((m: any) => (
+                  {movData.movements.map((m:any) => (
                     <MovementRow key={m._id} m={m} />
                   ))}
                 </tbody>
@@ -1035,7 +1037,7 @@ export default function InventoryPage() {
                   <div className="chart-title">Daily Movement — {range}</div>
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart
-                      data={(inv?.daily ?? []).map((d: any) => ({
+                      data={(inv?.daily ?? []).map((d:any) => ({
                         ...d,
                         label: fmtAxisDate(d.date),
                       }))}
@@ -1062,7 +1064,7 @@ export default function InventoryPage() {
                           return (
                             <div className="custom-tooltip">
                               <div className="tt-label">{label}</div>
-                              {payload.map((p: any) => (
+                              {payload.map((p:any) => (
                                 <div key={p.dataKey} className="tt-row">
                                   <span>{p.name}</span>
                                   <span style={{ color: p.color as string }}>
@@ -1088,7 +1090,7 @@ export default function InventoryPage() {
                   <div className="chart-title">Daily Revenue — {range}</div>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart
-                      data={(inv?.daily ?? []).map((d: any) => ({
+                      data={(inv?.daily ?? []).map((d:any) => ({
                         ...d,
                         label: fmtAxisDate(d.date),
                       }))}
@@ -1141,7 +1143,7 @@ export default function InventoryPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(inv?.weekly ?? []).map((w: any) => (
+                      {(inv?.weekly ?? []).map((w:any) => (
                         <tr key={w.weekLabel}>
                           <td className="dim">{w.weekLabel}</td>
                           <td className="mono neg">{w.sold}</td>
