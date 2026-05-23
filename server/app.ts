@@ -19,6 +19,7 @@ import POSRouter from "./routes/pos.routes.js";
 
 import AnalyticsRouter from "./routes/analytics.routes.js";
 import receiptRouter from "./routes/receipts.route.js";
+import ReturnRouter from "./routes/Posreturn.route.js";
 
 
 export const app = express();
@@ -65,6 +66,7 @@ app.use("/api/v1",reportRouter);
 app.use("/api/v1",POSRouter)
 app.use("/api/v1",AnalyticsRouter);
 app.use("/api/v1", receiptRouter);
+app.use("api/v1", ReturnRouter);
 
 // test route
 app.get("/test", (req: Request, res: Response) => {
