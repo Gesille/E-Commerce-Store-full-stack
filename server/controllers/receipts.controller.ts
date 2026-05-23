@@ -70,3 +70,5 @@ export const getReceiptById = async (
     next(error);
   }
 };
+
+
