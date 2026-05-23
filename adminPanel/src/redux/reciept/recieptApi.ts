@@ -81,7 +81,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
         dateTo = "",
         state = "",
       }) => ({
-        url: "/receipts-all",
+        url: "/get-receipts-for-admin-and-cashier",
         method: "GET",
         credentials: "include" as const,
         params: {
