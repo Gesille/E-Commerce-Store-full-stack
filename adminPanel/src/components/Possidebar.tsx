@@ -120,7 +120,7 @@ const POSSidebar = () => {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItem("/pos/products", <Package size={16} />, "Products")}
+              {navItem("/pos/Inventory", <Package size={16} />, "POSInventory")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
