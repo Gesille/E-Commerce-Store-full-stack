@@ -1,109 +1,206 @@
-"use client";
-
-import { useState } from "react";
+import { InventoryRange, Movement, ProductRow, useGetInventoryMovementsQuery, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery } from "@/redux/posinventory/posinverntoryApi";
+import { useState, useMemo } from "react";
 import {
-  Package,
-  TrendingDown,
-  TrendingUp,
-  RotateCcw,
-  ArrowDownRight,
-  ArrowUpRight,
-  AlertTriangle,
-  Search,
-  Download,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  Eye,
-  BarChart2,
-  Calendar,
-  Layers,
-} from "lucide-react";
-import { format, parseISO } from "date-fns";
-import {
-  DailyMovement,
-  InventoryRange,
-  useGetInventoryQuery,
-  useGetInventorySummaryQuery,
-  useLazyGetProductMovementsQuery,
-  Movement,
-  useGetInventoryMovementsQuery,
-} from "@/redux/posinventory/posinverntoryApi";
-import { fmtCompact } from "@/types/pos";
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Tab = "products" | "movements" | "chart";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(n: number, decimals = 2) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   }).format(n);
+}
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
-function StatCard({
-  icon: Icon,
+function fmtAxisDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function KpiCard({
   label,
   value,
   sub,
   accent,
-  trend,
-  trendValue,
 }: {
-  icon: React.ElementType;
   label: string;
   value: string;
   sub?: string;
-  accent: "neutral" | "green" | "red" | "amber";
-  trend?: "up" | "down";
-  trendValue?: string;
+  accent?: string;
 }) {
-  const iconColors: Record<string, string> = {
-    neutral: "bg-stone-100 text-stone-500",
-    green: "bg-emerald-50 text-emerald-700",
-    red: "bg-red-50 text-red-700",
-    amber: "bg-amber-50 text-amber-700",
-  };
-  const trendColors: Record<string, string> = {
-    neutral: "",
-    green: "bg-emerald-50 text-emerald-700",
-    red: "bg-red-50 text-red-700",
-    amber: "bg-amber-50 text-amber-700",
-  };
-  const TrendIcon = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : null;
-
   return (
-    <div className="bg-white border border-stone-200 rounded-xl p-4">
-      <div className="flex items-start justify-between mb-3">
-        <div className={`inline-flex items-center justify-center rounded-lg p-2 ${iconColors[accent]}`}>
-          <Icon size={16} />
-        </div>
-        {TrendIcon && trendValue && (
-          <span className={`flex items-center gap-0.5 text-[11px] font-600 px-2 py-0.5 rounded-full ${trendColors[accent]}`}>
-            <TrendIcon size={11} />
-            {trendValue}
-          </span>
-        )}
-      </div>
-      <p className="text-[22px] font-700 tracking-tight text-stone-900 leading-none">{value}</p>
-      <p className="mt-1.5 text-[10px] font-600 text-stone-400 uppercase tracking-widest">{label}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-stone-400">{sub}</p>}
+    <div className="kpi-card">
+      <span className="kpi-label">{label}</span>
+      <span className="kpi-value" style={accent ? { color: accent } : undefined}>
+        {value}
+      </span>
+      {sub && <span className="kpi-sub">{sub}</span>}
     </div>
   );
 }
 
-// ─── DailyBar ─────────────────────────────────────────────────────────────────
-
-function DailyBar({ day, maxRevenue }: { day: DailyMovement; maxRevenue: number }) {
-  const height = maxRevenue > 0 ? Math.max(4, (day.revenue / maxRevenue) * 60) : 4;
-  const retHeight = maxRevenue > 0 ? Math.max(2, (day.returned / Math.max(day.sold, 1)) * height) : 2;
+function RangeTabs({
+  value,
+  onChange,
+}: {
+  value: InventoryRange;
+  onChange: (r: InventoryRange) => void;
+}) {
+  const opts: InventoryRange[] = ["day", "week", "month"];
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="text-[9px] text-stone-400">{fmt(day.revenue).replace("$", "")}</span>
-      <div className="flex items-end gap-0.5">
-        <div className="w-5 rounded-t-sm bg-stone-800/70" style={{ height }} title={`Sold: ${day.sold}`} />
-        <div className="w-2.5 rounded-t-sm bg-stone-400/50" style={{ height: retHeight }} title={`Returned: ${day.returned}`} />
+    <div className="range-tabs">
+      {opts.map((r) => (
+        <button
+          key={r}
+          className={`range-tab${value === r ? " active" : ""}`}
+          onClick={() => onChange(r)}
+        >
+          {r.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MovementRow({ m }: { m: Movement }) {
+  const isSale = m.type === "sale";
+  return (
+    <tr className="mvt-row">
+      <td>
+        <span className={`badge ${isSale ? "badge-sale" : "badge-return"}`}>
+          {isSale ? "SALE" : "RETURN"}
+        </span>
+      </td>
+      <td className="mvt-product">{m.productName}</td>
+      <td className={`mvt-qty ${isSale ? "neg" : "pos"}`}>
+        {isSale ? "-" : "+"}
+        {m.qty}
+      </td>
+      <td className="mono">${fmt(m.price)}</td>
+      <td className="dim">{m.cashier}</td>
+      <td className="mono dim">{m.receiptNumber}</td>
+      <td className="dim">{fmtDate(m.date)}</td>
+    </tr>
+  );
+}
+
+function ProductDrawer({
+  product,
+  range,
+  onClose,
+}: {
+  product: ProductRow;
+  range: InventoryRange;
+  onClose: () => void;
+}) {
+  const [fetchMovements, { data, isFetching }] = useLazyGetProductMovementsQuery();
+
+  useMemo(() => {
+    fetchMovements({ productId: product._id, range });
+  }, [product._id, range]);
+
+  return (
+    <div className="drawer">
+      <div className="drawer-header">
+        <div className="drawer-title">
+          {product.image && (
+            <img src={product.image} alt={product.name} className="drawer-img" />
+          )}
+          <div>
+            <div className="drawer-name">{product.name}</div>
+            <div className="drawer-ref dim">REF: {product.reference}</div>
+          </div>
+        </div>
+        <button className="close-btn" onClick={onClose}>
+          ✕
+        </button>
       </div>
-      <span className="text-[10px] text-stone-400">{format(parseISO(day.date), "EEE")}</span>
+
+      <div className="drawer-stats">
+        <div className="dstat">
+          <span className="dstat-label">STOCK</span>
+          <span className="dstat-val">{product.stock}</span>
+        </div>
+        <div className="dstat">
+          <span className="dstat-label">SOLD</span>
+          <span className="dstat-val neg">{product.sold}</span>
+        </div>
+        <div className="dstat">
+          <span className="dstat-label">RETURNED</span>
+          <span className="dstat-val pos">{product.returned}</span>
+        </div>
+        <div className="dstat">
+          <span className="dstat-label">STOCK VALUE</span>
+          <span className="dstat-val">${fmt(product.stockValue)}</span>
+        </div>
+      </div>
+
+      <div className="drawer-section-title">MOVEMENT HISTORY</div>
+      {isFetching ? (
+        <div className="loading-pulse">Loading…</div>
+      ) : !data?.movements.length ? (
+        <div className="empty">No movements in range</div>
+      ) : (
+        <div className="mvt-scroll">
+          <table className="mvt-table">
+            <thead>
+              <tr>
+                <th>TYPE</th>
+                <th>QTY</th>
+                <th>PRICE</th>
+                <th>CASHIER</th>
+                <th>RECEIPT</th>
+                <th>DATE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.movements.map((m: any) => (
+                <tr key={m._id} className="mvt-row">
+                  <td>
+                    <span className={`badge ${m.type === "sale" ? "badge-sale" : "badge-return"}`}>
+                      {m.type === "sale" ? "SALE" : "RTN"}
+                    </span>
+                  </td>
+                  <td className={`mono ${m.type === "sale" ? "neg" : "pos"}`}>
+                    {m.type === "sale" ? "-" : "+"}
+                    {m.qty}
+                  </td>
+                  <td className="mono">${fmt(m.price)}</td>
+                  <td className="dim">{m.cashier}</td>
+                  <td className="mono dim">{m.receiptNumber}</td>
+                  <td className="dim">{fmtDate(m.date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -112,416 +209,972 @@ function DailyBar({ day, maxRevenue }: { day: DailyMovement; maxRevenue: number 
 
 export default function InventoryPage() {
   const [range, setRange] = useState<InventoryRange>("week");
-  const [viewMode, setViewMode] = useState<"list" | "movements">("list");
+  const [tab, setTab] = useState<Tab>("products");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<"name" | "stock" | "sold" | "stockValue">("sold");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductRow | null>(null);
+  const [sortKey, setSortKey] = useState<keyof ProductRow>("name");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [lowStockOnly, setLowStockOnly] = useState(false);
 
-  const { data: inventoryData, isFetching: invFetching, refetch: refetchInventory } =
-    useGetInventoryQuery({ range });
-  const { data: summaryData, isFetching: sumFetching, refetch: refetchSummary } =
-    useGetInventorySummaryQuery();
-  const { data: movementsData, isFetching: movFetching, refetch: refetchMovements } =
-    useGetInventoryMovementsQuery({ range, limit: 50 });
-  const [fetchProductMovements, { data: productMovData, isFetching: productMovFetching }] =
-    useLazyGetProductMovementsQuery();
+  const { data: inv, isFetching: invFetching } = useGetInventoryQuery({ range });
+  const { data: summary } = useGetInventorySummaryQuery();
+  const { data: movData, isFetching: movFetching } = useGetInventoryMovementsQuery(
+    { range, limit: 100 },
+    { skip: tab !== "movements" }
+  );
 
-  const loading = invFetching || sumFetching || movFetching;
-  const refetchAll = () => { refetchInventory(); refetchSummary(); refetchMovements(); };
-
-  const toggleExpand = (productId: string) => {
-    if (expandedProduct === productId) { setExpandedProduct(null); return; }
-    setExpandedProduct(productId);
-    fetchProductMovements({ productId, range });
-  };
-
-  const products = inventoryData?.products ?? [];
-  const dailyMovements = inventoryData?.daily ?? [];
-  const weeklyMovements = inventoryData?.weekly ?? [];
-  const recentMovements = movementsData?.movements ?? [];
-  const productMovements: Movement[] = productMovData?.movements ?? [];
-  const summary = summaryData ?? null;
-  const maxRev = Math.max(...dailyMovements.map((d: any) => d.revenue), 1);
-
-  const sorted = [...products]
-    .filter(
-      (p) =>
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.reference?.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => {
-      const av = a[sortKey] as number | string;
-      const bv = b[sortKey] as number | string;
-      if (typeof av === "number" && typeof bv === "number")
-        return sortDir === "asc" ? av - bv : bv - av;
-      return sortDir === "asc"
-        ? String(av).localeCompare(String(bv))
-        : String(bv).localeCompare(String(av));
+  // Filter + sort products
+  const products = useMemo(() => {
+    let rows = inv?.products ?? [];
+    if (search) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (p: any) =>
+          p.name.toLowerCase().includes(q) ||
+          p.reference?.toLowerCase().includes(q) ||
+          p.barcode?.toLowerCase().includes(q)
+      );
+    }
+    if (lowStockOnly) rows = rows.filter((p: any) => p.stock > 0 && p.stock <= 5);
+    rows = [...rows].sort((a, b) => {
+      const av = a[sortKey] as any;
+      const bv = b[sortKey] as any;
+      if (typeof av === "string") return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortAsc ? av - bv : bv - av;
     });
+    return rows;
+  }, [inv?.products, search, sortKey, sortAsc, lowStockOnly]);
 
-  const setSort = (key: typeof sortKey) => {
-    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortKey(key); setSortDir("desc"); }
-  };
+  function toggleSort(key: keyof ProductRow) {
+    if (sortKey === key) setSortAsc((v) => !v);
+    else { setSortKey(key); setSortAsc(true); }
+  }
 
-  const SortIcon = ({ k }: { k: typeof sortKey }) =>
-    sortKey === k ? (
-      sortDir === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />
-    ) : (
-      <ChevronDown size={11} className="opacity-30" />
+  function SortTh({
+    col,
+    label,
+  }: {
+    col: keyof ProductRow;
+    label: string;
+  }) {
+    const active = sortKey === col;
+    return (
+      <th
+        className={`sortable${active ? " sorted" : ""}`}
+        onClick={() => toggleSort(col)}
+      >
+        {label}
+        <span className="sort-icon">{active ? (sortAsc ? " ↑" : " ↓") : " ⇅"}</span>
+      </th>
     );
-
-  const exportCSV = () => {
-    const headers = ["Name", "Reference", "Stock", "Sold", "Returned", "Net", "Stock Value"];
-    const rows = sorted.map((p) => [p.name, p.reference, p.stock, p.sold, p.returned, p.netMovement, p.stockValue.toFixed(2)]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `inventory-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f3] text-stone-900" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap');
 
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-stone-200">
-        <div className="mx-auto max-w-[1400px] px-6 py-0 h-[52px] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-stone-900 text-white">
-              <Layers size={14} />
-            </div>
-            <div>
-              <h1 className="text-[14px] font-600 leading-tight text-stone-900">Inventory</h1>
-              <p className="text-[11px] text-stone-400">Products · Movements · Analytics</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-stone-200 overflow-hidden bg-stone-50">
-              {(["day", "week", "month"] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={`px-3 py-1.5 text-[11.5px] font-500 capitalize transition-colors ${
-                    range === r ? "bg-stone-900 text-white" : "text-stone-400 hover:text-stone-700"
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-[11.5px] text-stone-500 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <Download size={12} /> Export
-            </button>
-            <button
-              onClick={refetchAll}
-              className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-[11.5px] text-stone-500 hover:text-stone-900 hover:border-stone-300 transition-colors"
-            >
-              <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
-          </div>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+          --bg: #0d0f12;
+          --bg2: #141720;
+          --bg3: #1c2030;
+          --border: #252a3a;
+          --border2: #2e3450;
+          --text: #e2e8f4;
+          --dim: #6b7494;
+          --accent: #4fffb0;
+          --accent2: #ff6b6b;
+          --accent3: #ffd166;
+          --blue: #5b8cff;
+          --sale: #ff6b6b;
+          --return: #4fffb0;
+          --font-display: 'Syne', sans-serif;
+          --font-mono: 'IBM Plex Mono', monospace;
+        }
+
+        body { background: var(--bg); color: var(--text); font-family: var(--font-mono); }
+
+        .inv-page {
+          min-height: 100vh;
+          padding: 0 0 60px;
+          background: var(--bg);
+        }
+
+        /* ─── Header ─────────────────────────── */
+        .inv-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 28px 32px 20px;
+          border-bottom: 1px solid var(--border);
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+
+        .inv-title {
+          font-family: var(--font-display);
+          font-size: 26px;
+          font-weight: 800;
+          letter-spacing: -0.5px;
+          color: var(--text);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .inv-title::before {
+          content: '';
+          display: inline-block;
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: var(--accent);
+          box-shadow: 0 0 10px var(--accent);
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+
+        .range-tabs {
+          display: flex;
+          gap: 2px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 3px;
+        }
+
+        .range-tab {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 1px;
+          padding: 5px 14px;
+          border: none;
+          background: transparent;
+          color: var(--dim);
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .range-tab:hover { color: var(--text); }
+        .range-tab.active {
+          background: var(--border2);
+          color: var(--accent);
+        }
+
+        /* ─── KPI Strip ──────────────────────── */
+        .kpi-strip {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 1px;
+          background: var(--border);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .kpi-card {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 20px 24px;
+          background: var(--bg);
+          transition: background 0.15s;
+        }
+        .kpi-card:hover { background: var(--bg2); }
+
+        .kpi-label {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 1.5px;
+          color: var(--dim);
+          text-transform: uppercase;
+        }
+
+        .kpi-value {
+          font-family: var(--font-display);
+          font-size: 28px;
+          font-weight: 800;
+          color: var(--text);
+          line-height: 1;
+          letter-spacing: -1px;
+        }
+
+        .kpi-sub {
+          font-size: 11px;
+          color: var(--dim);
+          margin-top: 2px;
+        }
+
+        /* ─── Tabs ───────────────────────────── */
+        .tab-row {
+          display: flex;
+          gap: 0;
+          padding: 0 32px;
+          border-bottom: 1px solid var(--border);
+          margin-top: 0;
+        }
+
+        .tab-btn {
+          font-family: var(--font-mono);
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 1px;
+          padding: 14px 20px;
+          border: none;
+          background: transparent;
+          color: var(--dim);
+          cursor: pointer;
+          border-bottom: 2px solid transparent;
+          transition: all 0.15s;
+          text-transform: uppercase;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active {
+          color: var(--accent);
+          border-bottom-color: var(--accent);
+        }
+
+        /* ─── Toolbar ────────────────────────── */
+        .toolbar {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 16px 32px;
+          flex-wrap: wrap;
+        }
+
+        .search-box {
+          flex: 1;
+          min-width: 200px;
+          max-width: 340px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: var(--bg2);
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 8px 12px;
+        }
+
+        .search-box input {
+          background: transparent;
+          border: none;
+          outline: none;
+          color: var(--text);
+          font-family: var(--font-mono);
+          font-size: 13px;
+          width: 100%;
+        }
+
+        .search-box input::placeholder { color: var(--dim); }
+
+        .search-icon { color: var(--dim); font-size: 14px; }
+
+        .filter-btn {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+          padding: 8px 14px;
+          border: 1px solid var(--border);
+          background: transparent;
+          color: var(--dim);
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.15s;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .filter-btn:hover { border-color: var(--border2); color: var(--text); }
+        .filter-btn.active {
+          border-color: var(--accent3);
+          color: var(--accent3);
+          background: rgba(255, 209, 102, 0.07);
+        }
+
+        .result-count {
+          font-size: 11px;
+          color: var(--dim);
+          margin-left: auto;
+        }
+
+        /* ─── Products Table ─────────────────── */
+        .table-wrap {
+          overflow-x: auto;
+          padding: 0 32px 32px;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+
+        thead tr {
+          border-bottom: 1px solid var(--border2);
+        }
+
+        th {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 1.2px;
+          color: var(--dim);
+          text-transform: uppercase;
+          padding: 10px 12px;
+          text-align: left;
+          white-space: nowrap;
+        }
+
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { color: var(--text); }
+        th.sorted { color: var(--accent); }
+
+        .sort-icon { font-size: 10px; }
+
+        tbody tr {
+          border-bottom: 1px solid var(--border);
+          transition: background 0.1s;
+          cursor: pointer;
+        }
+        tbody tr:hover { background: var(--bg2); }
+        tbody tr.row-selected { background: rgba(79, 255, 176, 0.04); border-left: 2px solid var(--accent); }
+
+        td {
+          padding: 12px 12px;
+          vertical-align: middle;
+        }
+
+        .prod-cell {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .prod-thumb {
+          width: 32px;
+          height: 32px;
+          border-radius: 4px;
+          object-fit: cover;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+
+        .prod-thumb-placeholder {
+          width: 32px;
+          height: 32px;
+          border-radius: 4px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          color: var(--dim);
+        }
+
+        .prod-name {
+          font-weight: 500;
+          color: var(--text);
+        }
+
+        .prod-ref {
+          font-size: 11px;
+          color: var(--dim);
+          margin-top: 1px;
+        }
+
+        .mono { font-family: var(--font-mono); }
+        .dim { color: var(--dim); }
+        .neg { color: var(--sale); }
+        .pos { color: var(--return); }
+
+        .stock-chip {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .stock-ok { background: rgba(79,255,176,0.1); color: var(--accent); }
+        .stock-low { background: rgba(255,209,102,0.1); color: var(--accent3); }
+        .stock-zero { background: rgba(255,107,107,0.1); color: var(--sale); }
+
+        /* ─── Chart Section ──────────────────── */
+        .chart-section {
+          padding: 0 32px 32px;
+        }
+
+        .chart-block {
+          background: var(--bg2);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 24px;
+          margin-bottom: 20px;
+        }
+
+        .chart-title {
+          font-family: var(--font-display);
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+          color: var(--text);
+          margin-bottom: 20px;
+          text-transform: uppercase;
+        }
+
+        .weekly-table {
+          width: 100%;
+        }
+
+        .weekly-table th {
+          background: var(--bg3);
+        }
+
+        .weekly-table td {
+          border-bottom: 1px solid var(--border);
+        }
+
+        /* ─── Movements Table ────────────────── */
+        .mvt-scroll {
+          overflow-x: auto;
+        }
+
+        .mvt-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+
+        .mvt-table thead tr {
+          border-bottom: 1px solid var(--border2);
+        }
+
+        .mvt-table tbody tr {
+          border-bottom: 1px solid var(--border);
+        }
+
+        .mvt-table th {
+          font-size: 10px;
+          letter-spacing: 1.2px;
+          color: var(--dim);
+          text-transform: uppercase;
+          padding: 10px 12px;
+          text-align: left;
+        }
+
+        .mvt-table td {
+          padding: 10px 12px;
+          vertical-align: middle;
+        }
+
+        .mvt-product { max-width: 220px; font-weight: 500; }
+        .mvt-qty { font-weight: 600; font-family: var(--font-mono); font-size: 14px; }
+
+        .badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 3px;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.8px;
+        }
+        .badge-sale { background: rgba(255,107,107,0.15); color: var(--sale); }
+        .badge-return { background: rgba(79,255,176,0.12); color: var(--return); }
+
+        /* ─── Drawer ─────────────────────────── */
+        .drawer-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.6);
+          backdrop-filter: blur(2px);
+          z-index: 100;
+          animation: fadeIn 0.15s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .drawer {
+          position: fixed;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          width: min(520px, 95vw);
+          background: var(--bg);
+          border-left: 1px solid var(--border2);
+          overflow-y: auto;
+          z-index: 101;
+          animation: slideIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .drawer-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          padding: 24px;
+          border-bottom: 1px solid var(--border);
+          gap: 16px;
+        }
+
+        .drawer-title {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .drawer-img {
+          width: 56px;
+          height: 56px;
+          border-radius: 6px;
+          object-fit: cover;
+          border: 1px solid var(--border2);
+        }
+
+        .drawer-name {
+          font-family: var(--font-display);
+          font-size: 17px;
+          font-weight: 700;
+          color: var(--text);
+          line-height: 1.2;
+        }
+
+        .drawer-ref {
+          font-size: 11px;
+          letter-spacing: 1px;
+          margin-top: 4px;
+        }
+
+        .close-btn {
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          color: var(--dim);
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.15s;
+        }
+        .close-btn:hover { color: var(--text); border-color: var(--border2); }
+
+        .drawer-stats {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1px;
+          background: var(--border);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .dstat {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 16px;
+          background: var(--bg);
+        }
+
+        .dstat-label {
+          font-size: 9px;
+          letter-spacing: 1.2px;
+          color: var(--dim);
+          text-transform: uppercase;
+        }
+
+        .dstat-val {
+          font-family: var(--font-display);
+          font-size: 20px;
+          font-weight: 800;
+          color: var(--text);
+        }
+
+        .drawer-section-title {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 1.5px;
+          color: var(--dim);
+          padding: 16px 24px 8px;
+          text-transform: uppercase;
+        }
+
+        /* ─── Loading & Empty ────────────────── */
+        .loading-pulse {
+          text-align: center;
+          padding: 48px;
+          color: var(--dim);
+          font-size: 13px;
+          animation: blink 1.2s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .empty {
+          text-align: center;
+          padding: 48px;
+          color: var(--dim);
+          font-size: 13px;
+        }
+
+        /* ─── Custom Tooltip ─────────────────── */
+        .custom-tooltip {
+          background: var(--bg2);
+          border: 1px solid var(--border2);
+          border-radius: 6px;
+          padding: 10px 14px;
+          font-size: 12px;
+        }
+        .custom-tooltip .tt-label {
+          color: var(--dim);
+          font-size: 11px;
+          margin-bottom: 6px;
+        }
+        .custom-tooltip .tt-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 24px;
+          color: var(--text);
+        }
+        .custom-tooltip .tt-row span:first-child { color: var(--dim); }
+      `}</style>
+
+      <div className="inv-page">
+        {/* ─── Header ─────────────────────────────────────────────── */}
+        <div className="inv-header">
+          <div className="inv-title">Inventory</div>
+          <RangeTabs value={range} onChange={setRange} />
         </div>
-      </div>
 
-      <div className="mx-auto max-w-[1400px] px-6 py-5 space-y-4">
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <StatCard icon={Package} label="Products" value={String(summary?.totalProducts ?? "—")} accent="neutral" />
-          <StatCard icon={Layers} label="Stock Value" value={summary ? fmtCompact(summary.totalStockValue) : "—"} sub="All inventory" accent="neutral" />
-          <StatCard icon={AlertTriangle} label="Low Stock" value={String(summary?.lowStockCount ?? "—")} sub="≤ 5 units" accent="amber" />
-          <StatCard icon={TrendingDown} label="Sold Today" value={String(summary?.soldToday ?? "—")} accent="green" trend="up" trendValue="+12%" />
-          <StatCard icon={RotateCcw} label="Returned" value={String(summary?.returnedToday ?? "—")} accent="red" trend="down" trendValue="−4%" />
-          <StatCard icon={TrendingUp} label="Revenue Today" value={summary ? fmt(summary.revenueToday) : "—"} accent="green" trend="up" trendValue="+9%" />
+        {/* ─── KPI Strip ──────────────────────────────────────────── */}
+        <div className="kpi-strip">
+          <KpiCard
+            label="Total Products"
+            value={String(summary?.totalProducts ?? "—")}
+          />
+          <KpiCard
+            label="Stock Value"
+            value={summary ? `$${fmt(summary.totalStockValue)}` : "—"}
+            accent="var(--accent)"
+          />
+          <KpiCard
+            label="Low Stock"
+            value={String(summary?.lowStockCount ?? "—")}
+            accent={summary && summary.lowStockCount > 0 ? "var(--accent3)" : undefined}
+          />
+          <KpiCard
+            label="Sold Today"
+            value={String(summary?.soldToday ?? "—")}
+            sub="units"
+          />
+          <KpiCard
+            label="Returned Today"
+            value={String(summary?.returnedToday ?? "—")}
+            sub="units"
+          />
+          <KpiCard
+            label="Revenue Today"
+            value={summary ? `$${fmt(summary.revenueToday)}` : "—"}
+            accent="var(--blue)"
+          />
         </div>
 
-        {/* Chart + Weekly */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="col-span-2 bg-white border border-stone-200 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <BarChart2 size={14} className="text-stone-400" />
-                <span className="text-[13px] font-600 text-stone-900">Daily sales vs returns</span>
-              </div>
-              <div className="flex items-center gap-3 text-[10px] text-stone-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-3 rounded-sm bg-stone-800/70" /> Sales
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block h-2 w-2 rounded-sm bg-stone-400/50" /> Returns
-                </span>
-              </div>
-            </div>
-            {invFetching ? (
-              <div className="flex h-20 items-center justify-center text-stone-300 text-sm">Loading…</div>
-            ) : (
-              <div className="flex items-end gap-3 overflow-x-auto pb-1">
-                {dailyMovements.length === 0 ? (
-                  <p className="text-stone-300 text-xs">No data for this range.</p>
-                ) : (
-                  dailyMovements.map((d: any) => (
-                    <DailyBar key={d.date} day={d} maxRevenue={maxRev} />
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white border border-stone-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Calendar size={14} className="text-stone-400" />
-              <span className="text-[13px] font-600 text-stone-900">Weekly summary</span>
-            </div>
-            <div className="space-y-2">
-              {invFetching ? (
-                <div className="text-stone-300 text-xs text-center py-4">Loading…</div>
-              ) : weeklyMovements.length === 0 ? (
-                <p className="text-stone-300 text-xs">No data.</p>
-              ) : (
-                weeklyMovements.map((w: any) => (
-                  <div key={w.weekLabel} className="flex items-center justify-between rounded-lg bg-stone-50 border border-stone-100 px-3 py-2.5">
-                    <div>
-                      <p className="text-[12px] font-500 text-stone-800">{w.weekLabel}</p>
-                      <p className="text-[10px] text-stone-400 mt-0.5">↓{w.sold} sold · ↑{w.returned} ret</p>
-                    </div>
-                    <span className="text-[12px] font-700 text-stone-900">{fmt(w.revenue)}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* View tabs */}
-        <div className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white p-1 w-fit">
-          {[
-            { id: "list", label: "Products", icon: Package },
-            { id: "movements", label: "Movements", icon: RotateCcw },
-          ].map(({ id, label, icon: Icon }) => (
+        {/* ─── Tab Nav ────────────────────────────────────────────── */}
+        <div className="tab-row">
+          {(["products", "movements", "chart"] as Tab[]).map((t) => (
             <button
-              key={id}
-              onClick={() => setViewMode(id as "list" | "movements")}
-              className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-[12px] font-500 transition-all ${
-                viewMode === id ? "bg-stone-900 text-white" : "text-stone-400 hover:text-stone-700"
-              }`}
+              key={t}
+              className={`tab-btn${tab === t ? " active" : ""}`}
+              onClick={() => setTab(t)}
             >
-              <Icon size={12} /> {label}
+              {t === "products" ? "Products" : t === "movements" ? "Movements" : "Analytics"}
             </button>
           ))}
         </div>
 
-        {/* Products table */}
-        {viewMode === "list" && (
-          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-            <div className="flex items-center gap-3 border-b border-stone-100 px-4 py-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+        {/* ─── Products Tab ───────────────────────────────────────── */}
+        {tab === "products" && (
+          <>
+            <div className="toolbar">
+              <div className="search-box">
+                <span className="search-icon">⌕</span>
                 <input
+                  placeholder="Search name, ref, barcode…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search products…"
-                  className="w-full rounded-lg border border-stone-200 bg-stone-50 pl-8 pr-3 py-1.5 text-[12px] text-stone-900 placeholder-stone-400 focus:border-stone-400 focus:bg-white outline-none transition-colors"
                 />
               </div>
-              <span className="text-[11px] text-stone-400">{sorted.length} products</span>
+              <button
+                className={`filter-btn${lowStockOnly ? " active" : ""}`}
+                onClick={() => setLowStockOnly((v) => !v)}
+              >
+                ⚠ Low Stock
+              </button>
+              <span className="result-count">{products.length} products</span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+            <div className="table-wrap">
+              {invFetching ? (
+                <div className="loading-pulse">Fetching inventory…</div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <SortTh col="name" label="Product" />
+                      <SortTh col="stock" label="Stock" />
+                      <SortTh col="price" label="Price" />
+                      <SortTh col="sold" label="Sold" />
+                      <SortTh col="returned" label="Returned" />
+                      <SortTh col="netMovement" label="Net Move" />
+                      <SortTh col="stockValue" label="Value" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((p: any) => {
+                      const stockClass =
+                        p.stock === 0
+                          ? "stock-zero"
+                          : p.stock <= 5
+                          ? "stock-low"
+                          : "stock-ok";
+                      const isSelected = selectedProduct?._id === p._id;
+                      return (
+                        <tr
+                          key={p._id}
+                          className={isSelected ? "row-selected" : ""}
+                          onClick={() =>
+                            setSelectedProduct(isSelected ? null : p)
+                          }
+                        >
+                          <td>
+                            <div className="prod-cell">
+                              {p.image ? (
+                                <img
+                                  src={p.image}
+                                  alt={p.name}
+                                  className="prod-thumb"
+                                />
+                              ) : (
+                                <div className="prod-thumb-placeholder">□</div>
+                              )}
+                              <div>
+                                <div className="prod-name">{p.name}</div>
+                                <div className="prod-ref">{p.reference}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`stock-chip ${stockClass}`}>
+                              {p.stock}
+                            </span>
+                          </td>
+                          <td className="mono">${fmt(p.price)}</td>
+                          <td className="mono neg">{p.sold > 0 ? `-${p.sold}` : "0"}</td>
+                          <td className="mono pos">{p.returned > 0 ? `+${p.returned}` : "0"}</td>
+                          <td className={`mono ${p.netMovement < 0 ? "neg" : p.netMovement > 0 ? "pos" : "dim"}`}>
+                            {p.netMovement > 0 ? `+${p.netMovement}` : p.netMovement}
+                          </td>
+                          <td className="mono">${fmt(p.stockValue)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ─── Movements Tab ──────────────────────────────────────── */}
+        {tab === "movements" && (
+          <div className="table-wrap" style={{ paddingTop: 20 }}>
+            {movFetching ? (
+              <div className="loading-pulse">Loading movements…</div>
+            ) : !movData?.movements.length ? (
+              <div className="empty">No movements in this range</div>
+            ) : (
+              <table className="mvt-table">
                 <thead>
-                  <tr className="border-b border-stone-100 text-stone-400 text-[10px] uppercase tracking-wider">
-                    <th className="px-4 py-3 text-left font-600">Product</th>
-                    <th className="px-3 py-3 text-right font-600 cursor-pointer hover:text-stone-700 transition-colors" onClick={() => setSort("stock")}>
-                      <span className="flex items-center justify-end gap-1">Stock <SortIcon k="stock" /></span>
-                    </th>
-                    <th className="px-3 py-3 text-right font-600 cursor-pointer hover:text-stone-700 transition-colors" onClick={() => setSort("sold")}>
-                      <span className="flex items-center justify-end gap-1">Sold <SortIcon k="sold" /></span>
-                    </th>
-                    <th className="px-3 py-3 text-right font-600">Returned</th>
-                    <th className="px-3 py-3 text-right font-600">Net move</th>
-                    <th className="px-3 py-3 text-right font-600 cursor-pointer hover:text-stone-700 transition-colors" onClick={() => setSort("stockValue")}>
-                      <span className="flex items-center justify-end gap-1">Stock value <SortIcon k="stockValue" /></span>
-                    </th>
-                    <th className="px-3 py-3 text-center font-600">Status</th>
-                    <th className="px-3 py-3 text-center font-600">Detail</th>
+                  <tr>
+                    <th>Type</th>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Cashier</th>
+                    <th>Receipt</th>
+                    <th>Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {invFetching
-                    ? Array.from({ length: 5 }).map((_, i) => (
-                        <tr key={i} className="border-b border-stone-50">
-                          {Array.from({ length: 8 }).map((_, j) => (
-                            <td key={j} className="px-4 py-3">
-                              <div className="h-3 rounded bg-stone-100 animate-pulse" style={{ width: `${40 + (i * j * 7) % 40}%` }} />
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    : sorted.map((p) => {
-                        const lowStock = p.stock > 0 && p.stock <= 5;
-                        const outOfStock = p.stock === 0;
-                        const isExpanded = expandedProduct === p._id;
-                        return (
-                          <>
-                            <tr
-                              key={p._id}
-                              className={`border-b border-stone-50 hover:bg-stone-50/60 transition-colors ${isExpanded ? "bg-stone-50/60" : ""}`}
-                            >
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  {p.image ? (
-                                    <img src={p.image} alt={p.name} className="h-8 w-8 rounded-lg object-cover border border-stone-200" />
-                                  ) : (
-                                    <div className="h-8 w-8 rounded-lg bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-400">
-                                      <Package size={13} />
-                                    </div>
-                                  )}
-                                  <div>
-                                    <p className="font-500 text-[13px] text-stone-900">{p.name}</p>
-                                    <p className="text-[10px] text-stone-400 font-mono">{p.reference || p.barcode || `#${p.odooProductId}`}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 text-right">
-                                <span className={`font-mono font-600 text-[12px] ${outOfStock ? "text-red-600" : lowStock ? "text-amber-600" : "text-stone-700"}`}>
-                                  {p.stock}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3 text-right font-mono text-[12px] text-emerald-700">{p.sold}</td>
-                              <td className="px-3 py-3 text-right font-mono text-[12px] text-red-500">{p.returned}</td>
-                              <td className="px-3 py-3 text-right">
-                                <span className={`font-mono text-[12px] ${p.netMovement < 0 ? "text-red-500" : "text-stone-400"}`}>
-                                  {p.netMovement > 0 ? `+${p.netMovement}` : p.netMovement}
-                                </span>
-                              </td>
-                              <td className="px-3 py-3 text-right font-mono text-[12px] text-stone-600">{fmt(p.stockValue)}</td>
-                              <td className="px-3 py-3 text-center">
-                                {outOfStock ? (
-                                  <span className="rounded-full bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 text-[10px] font-600">Out of stock</span>
-                                ) : lowStock ? (
-                                  <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[10px] font-600">Low stock</span>
-                                ) : (
-                                  <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-600">In stock</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-3 text-center">
-                                <button
-                                  onClick={() => toggleExpand(p._id)}
-                                  className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[10px] text-stone-500 hover:text-stone-900 hover:border-stone-300 transition-colors"
-                                >
-                                  <Eye size={10} /> {isExpanded ? "Hide" : "View"}
-                                </button>
-                              </td>
-                            </tr>
-
-                            {isExpanded && (
-                              <tr key={`${p._id}-expand`} className="bg-stone-50/80">
-                                <td colSpan={8} className="px-4 py-4">
-                                  <p className="text-[10px] font-600 text-stone-400 uppercase tracking-wider mb-3">
-                                    Movement history — {p.name}
-                                  </p>
-                                  {productMovFetching ? (
-                                    <p className="text-stone-400 text-xs py-2">Loading…</p>
-                                  ) : productMovements.length === 0 ? (
-                                    <p className="text-stone-400 text-xs py-2">No movements in this range.</p>
-                                  ) : (
-                                    <div className="space-y-1.5">
-                                      {productMovements.map((m) => (
-                                        <div key={m._id} className="flex items-center justify-between rounded-lg bg-white border border-stone-100 px-3 py-2.5">
-                                          <div className="flex items-center gap-3">
-                                            <span className={`h-6 w-6 rounded-md flex items-center justify-center ${
-                                              m.type === "sale" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                                            }`}>
-                                              {m.type === "sale" ? <ArrowDownRight size={11} /> : <RotateCcw size={11} />}
-                                            </span>
-                                            <div>
-                                              <p className="text-[12px] font-500 text-stone-800 capitalize">{m.type} · {m.receiptNumber}</p>
-                                              <p className="text-[10px] text-stone-400">{m.cashier}</p>
-                                            </div>
-                                          </div>
-                                          <div className="text-right">
-                                            <p className={`text-[12px] font-mono font-600 ${m.type === "sale" ? "text-emerald-700" : "text-red-600"}`}>
-                                              {m.type === "sale" ? `−${m.qty}` : `+${m.qty}`}
-                                            </p>
-                                            <p className="text-[10px] text-stone-400">{format(parseISO(m.date), "MMM d, h:mm a")}</p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </>
-                        );
-                      })}
+                  {movData.movements.map((m: any) => (
+                    <MovementRow key={m._id} m={m} />
+                  ))}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
         )}
 
-        {/* Movements feed */}
-        {viewMode === "movements" && (
-          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-            <div className="border-b border-stone-100 px-4 py-3 flex items-center gap-2">
-              <RotateCcw size={13} className="text-stone-400" />
-              <span className="text-[13px] font-600 text-stone-900">All stock movements</span>
-              <span className="ml-auto text-[11px] text-stone-400">{recentMovements.length} records</span>
-            </div>
-            <div className="divide-y divide-stone-50">
-              {movFetching
-                ? Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-4 px-4 py-3">
-                      <div className="h-8 w-8 rounded-lg bg-stone-100 animate-pulse" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-3 rounded bg-stone-100 animate-pulse w-40" />
-                        <div className="h-2.5 rounded bg-stone-50 animate-pulse w-24" />
-                      </div>
-                      <div className="h-3 rounded bg-stone-100 animate-pulse w-16" />
-                    </div>
-                  ))
-                : recentMovements.length === 0 ? (
-                    <p className="text-center text-stone-400 text-sm py-10">No movements found for this range.</p>
-                  ) : (
-                    recentMovements.map((m: any) => (
-                      <div key={m._id} className="flex items-center gap-4 px-4 py-3 hover:bg-stone-50/60 transition-colors">
-                        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                          m.type === "sale"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                            : "bg-red-50 text-red-600 border border-red-100"
-                        }`}>
-                          {m.type === "sale" ? <TrendingDown size={13} /> : <RotateCcw size={13} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12.5px] font-500 text-stone-800 truncate">{m.productName}</p>
-                          <p className="text-[10px] text-stone-400">{m.cashier} · {m.receiptNumber}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className={`text-[12px] font-mono font-600 ${m.type === "sale" ? "text-emerald-700" : "text-red-600"}`}>
-                            {m.type === "sale" ? `−${m.qty}` : `+${m.qty}`}
-                          </p>
-                          <p className="text-[10px] text-stone-400">{format(parseISO(m.date), "MMM d, HH:mm")}</p>
-                        </div>
-                        <div className="text-right shrink-0 w-20">
-                          <p className="text-[12px] font-mono text-stone-500">{fmt(m.price * m.qty)}</p>
-                          <p className="text-[10px] text-stone-400 capitalize">{m.type}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-            </div>
+        {/* ─── Chart Tab ──────────────────────────────────────────── */}
+        {tab === "chart" && (
+          <div className="chart-section" style={{ paddingTop: 24 }}>
+            {invFetching ? (
+              <div className="loading-pulse">Loading chart data…</div>
+            ) : (
+              <>
+                {/* Daily chart */}
+                <div className="chart-block">
+                  <div className="chart-title">Daily Movement — {range}</div>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart
+                      data={(inv?.daily ?? []).map((d: any) => ({
+                        ...d,
+                        label: fmtAxisDate(d.date),
+                      }))}
+                      barGap={2}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="rgba(255,255,255,0.05)"
+                      />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#6b7494", fontSize: 11, fontFamily: "IBM Plex Mono" }}
+                        axisLine={{ stroke: "#252a3a" }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "#6b7494", fontSize: 11, fontFamily: "IBM Plex Mono" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          return (
+                            <div className="custom-tooltip">
+                              <div className="tt-label">{label}</div>
+                              {payload.map((p: any) => (
+                                <div key={p.dataKey} className="tt-row">
+                                  <span>{p.name}</span>
+                                  <span style={{ color: p.color as string }}>
+                                    {p.value}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontSize: 11, fontFamily: "IBM Plex Mono", paddingTop: 12 }}
+                      />
+                      <Bar dataKey="sold" name="Sold" fill="#ff6b6b" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="returned" name="Returned" fill="#4fffb0" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Revenue chart */}
+                <div className="chart-block">
+                  <div className="chart-title">Daily Revenue — {range}</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart
+                      data={(inv?.daily ?? []).map((d: any) => ({
+                        ...d,
+                        label: fmtAxisDate(d.date),
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "#6b7494", fontSize: 11, fontFamily: "IBM Plex Mono" }}
+                        axisLine={{ stroke: "#252a3a" }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "#6b7494", fontSize: 11, fontFamily: "IBM Plex Mono" }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `$${v}`}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null;
+                          return (
+                            <div className="custom-tooltip">
+                              <div className="tt-label">{label}</div>
+                              <div className="tt-row">
+                                <span>Revenue</span>
+                                <span style={{ color: "#5b8cff" }}>
+                                  ${fmt(payload[0]?.value as number)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar dataKey="revenue" name="Revenue" fill="#5b8cff" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Weekly summary */}
+                <div className="chart-block">
+                  <div className="chart-title">4-Week Summary</div>
+                  <table className="weekly-table">
+                    <thead>
+                      <tr>
+                        <th>Week</th>
+                        <th>Sold</th>
+                        <th>Returned</th>
+                        <th>Net</th>
+                        <th>Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(inv?.weekly ?? []).map((w: any) => (
+                        <tr key={w.weekLabel}>
+                          <td className="dim">{w.weekLabel}</td>
+                          <td className="mono neg">{w.sold}</td>
+                          <td className="mono pos">{w.returned}</td>
+                          <td className={`mono ${w.sold - w.returned > 0 ? "neg" : "pos"}`}>
+                            {w.sold - w.returned}
+                          </td>
+                          <td className="mono">${fmt(w.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
-    </div>
+
+      {/* ─── Product Drawer ───────────────────────────────────────── */}
+      {selectedProduct && (
+        <>
+          <div
+            className="drawer-backdrop"
+            onClick={() => setSelectedProduct(null)}
+          />
+          <ProductDrawer
+            product={selectedProduct}
+            range={range}
+            onClose={() => setSelectedProduct(null)}
+          />
+        </>
+      )}
+    </>
   );
 }
