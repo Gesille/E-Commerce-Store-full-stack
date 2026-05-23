@@ -66,7 +66,7 @@ app.use("/api/v1",reportRouter);
 app.use("/api/v1",POSRouter)
 app.use("/api/v1",AnalyticsRouter);
 app.use("/api/v1", receiptRouter);
-app.use("api/v1", ReturnRouter);
+app.use("/api/v1", ReturnRouter);
 
 // test route
 app.get("/test", (req: Request, res: Response) => {
