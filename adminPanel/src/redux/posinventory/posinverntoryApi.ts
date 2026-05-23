@@ -1,7 +1,5 @@
 import { apiSlice } from "../api/apiSlice";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type InventoryRange = "day" | "week" | "month";
 
 export interface ProductRow {
@@ -54,8 +52,6 @@ export interface Movement {
   date: string;
 }
 
-// ─── Query param shapes ───────────────────────────────────────────────────────
-
 export interface GetInventoryParams {
   range?: InventoryRange;
 }
@@ -69,8 +65,6 @@ export interface GetProductMovementsParams {
   productId: string;
   range?: InventoryRange;
 }
-
-// ─── Response shapes ──────────────────────────────────────────────────────────
 
 export interface GetInventoryResponse {
   products: ProductRow[];
@@ -88,13 +82,9 @@ export interface GetProductMovementsResponse {
   movements: Movement[];
 }
 
-// ─── API slice ────────────────────────────────────────────────────────────────
-
 export const inventoryApi = apiSlice.injectEndpoints({
   overrideExisting: true,
   endpoints: (builder) => ({
-
-    // GET /inventory?range=
     getInventory: builder.query<GetInventoryResponse, GetInventoryParams>({
       query: ({ range = "week" } = {}) => ({
         url: "inventory",
@@ -105,7 +95,6 @@ export const inventoryApi = apiSlice.injectEndpoints({
       providesTags: ["Inventory"],
     }),
 
-    // GET /inventory/summary
     getInventorySummary: builder.query<GetInventorySummaryResponse, void>({
       query: () => ({
         url: "inventory/summary",
@@ -115,8 +104,10 @@ export const inventoryApi = apiSlice.injectEndpoints({
       providesTags: ["Inventory"],
     }),
 
-    // GET /inventory/movements?range=&limit=
-    getInventoryMovements: builder.query<GetMovementsResponse, GetMovementsParams>({
+    getInventoryMovements: builder.query<
+      GetMovementsResponse,
+      GetMovementsParams
+    >({
       query: ({ range = "week", limit = 50 } = {}) => ({
         url: "inventory/movements",
         method: "GET",
@@ -126,8 +117,10 @@ export const inventoryApi = apiSlice.injectEndpoints({
       providesTags: ["Inventory"],
     }),
 
-    // GET /inventory/product/:productId/movements?range=
-    getProductMovements: builder.query<GetProductMovementsResponse, GetProductMovementsParams>({
+    getProductMovements: builder.query<
+      GetProductMovementsResponse,
+      GetProductMovementsParams
+    >({
       query: ({ productId, range = "week" }) => ({
         url: `inventory/product/${productId}/movements`,
         method: "GET",
