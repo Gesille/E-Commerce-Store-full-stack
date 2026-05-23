@@ -20,7 +20,7 @@ import {
   Layers,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { DailyMovement, InventoryRange, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery, Movement, useGetInventoryMovementsQuery } from "@/redux/inventory/posinverntoryApi";
+import { DailyMovement, InventoryRange, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery, Movement, useGetInventoryMovementsQuery } from "@/redux/posinventory/posinverntoryApi";
 
 
 
