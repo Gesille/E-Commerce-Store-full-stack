@@ -206,55 +206,67 @@ export default function CashierPage() {
   );
 
   // ── Barcode scanner ────────────────────────────────────────────────────────
-  useEffect(() => {
-    let barcodeBuffer = "";
-    let barcodeTimer: ReturnType<typeof setTimeout>;
+useEffect(() => {
+  let barcodeBuffer = "";
+  let lastKeyTime = 0;
+  let barcodeTimer: ReturnType<typeof setTimeout>;
 
-    const handler = async (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+  const handler = async (e: KeyboardEvent) => {
+    const now = Date.now();
+    const timeSinceLast = now - lastKeyTime;
+    lastKeyTime = now;
 
-      clearTimeout(barcodeTimer);
+    // If a character arrives suspiciously fast (< 50 ms), it's a scanner —
+    // prevent it from landing in whatever input has focus.
+    const isScannerSpeed = timeSinceLast < 50;
 
-      if (e.key === "Enter") {
-        if (barcodeBuffer.length > 2) {
-          const code = barcodeBuffer.trim();
-          barcodeBuffer = "";
+    if (e.key === "Enter") {
+      if (barcodeBuffer.length > 2) {
+        const code = barcodeBuffer.trim();
+        barcodeBuffer = "";
+        clearTimeout(barcodeTimer);
 
-          // Show scanning indicator
-          setScanToast({ status: "scanning", code });
+        setScanToast({ status: "scanning", code });
 
-          try {
-            const result = await triggerGetProductByBarcode(code).unwrap();
-            if (result) {
-              addScannedProductToCart(result);
-            } else {
-              showToastFor(
-                { status: "error", message: `No product found for: ${code}` },
-                3000,
-              );
-            }
-          } catch {
+        try {
+          const result = await triggerGetProductByBarcode(code).unwrap();
+          if (result) {
+            addScannedProductToCart(result);
+          } else {
             showToastFor(
-              { status: "error", message: `Product not found: ${code}` },
+              { status: "error", message: `No product found for: ${code}` },
               3000,
             );
           }
+        } catch {
+          showToastFor(
+            { status: "error", message: `Product not found: ${code}` },
+            3000,
+          );
         }
-        barcodeBuffer = "";
-        return;
       }
+      barcodeBuffer = "";
+      return;
+    }
 
-      if (e.key.length === 1) barcodeBuffer += e.key;
+    if (e.key.length === 1) {
+      if (isScannerSpeed || barcodeBuffer.length > 0) {
+        // We're in a scan sequence — grab the char and block it from inputs
+        e.preventDefault();
+        barcodeBuffer += e.key;
 
-      barcodeTimer = setTimeout(() => {
-        barcodeBuffer = "";
-      }, 100);
-    };
+        clearTimeout(barcodeTimer);
+        barcodeTimer = setTimeout(() => {
+          barcodeBuffer = "";
+        }, 100);
+      }
+      // If it's the very first slow keystroke (manual typing), leave it alone
+    }
+  };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [triggerGetProductByBarcode, addScannedProductToCart, showToastFor]);
+  window.addEventListener("keydown", handler, true); // ← capture phase
+  return () => window.removeEventListener("keydown", handler, true);
+}, [triggerGetProductByBarcode, addScannedProductToCart, showToastFor]);
 
   const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
 
