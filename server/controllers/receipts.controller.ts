@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   getReceiptsService,
   getReceiptByIdService,
+  sendReceiptByEmailService,
 } from "../services/receipts.service.js";
 
 // ─────────────────────────────────────────────────────────
@@ -72,3 +73,43 @@ export const getReceiptById = async (
 };
 
 
+export const sendReceiptByEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const orderId = Number(req.params.receiptId);
+    const { email } = req.body;
+
+    if (!orderId || isNaN(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order id",
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email address",
+      });
+    }
+
+    await sendReceiptByEmailService(orderId, email);
+
+    return res.status(200).json({
+      success: true,
+      message: `Receipt sent to ${email}`,
+    });
+  } catch (error: any) {
+    if (error?.message === "Order not found") {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+    next(error);
+  }
+};

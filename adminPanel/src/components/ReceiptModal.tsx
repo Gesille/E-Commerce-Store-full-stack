@@ -2,6 +2,7 @@ import {
   useLazyGetOrderReceiptPdfQuery,
   useCreateOdooInvoiceMutation,
 } from "@/redux/pos/Posapi";
+import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
 import { useState } from "react";
 
@@ -50,24 +51,6 @@ export function ReceiptModal({
 
   const handlePrint = () => window.print();
 
-  const handleDownloadPdf = async () => {
-    if (!odooOrderId) return;
-    const result = await fetchPdf(odooOrderId).unwrap();
-
-    // Explicitly type the blob as PDF
-    const blob = new Blob([result], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `receipt-${odooOrderId}.pdf`;
-    document.body.appendChild(a); // required in Firefox
-    a.click();
-    document.body.removeChild(a);
-
-    setTimeout(() => URL.revokeObjectURL(url), 100); // delay revoke
-  };
-
   const handleCreateInvoice = async () => {
     if (!odooOrderId) return;
     try {
@@ -84,7 +67,32 @@ export function ReceiptModal({
       });
     }
   };
+  const [sendReceiptByEmail, { isLoading: isSending }] =
+    useSendReceiptByEmailMutation();
 
+  const [emailModal, setEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState(customer?.email ?? "");
+  const [emailState, setEmailState] = useState<{
+    status: "idle" | "success" | "error";
+    message?: string;
+  }>({ status: "idle" });
+
+  const handleSendEmail = async () => {
+    if (!odooOrderId) return;
+    try {
+      await sendReceiptByEmail({
+        receiptId: odooOrderId,
+        email: emailInput.trim(),
+      }).unwrap();
+      setEmailState({ status: "success" });
+      setTimeout(() => setEmailModal(false), 1500);
+    } catch (err: any) {
+      setEmailState({
+        status: "error",
+        message: err?.data?.message ?? "Failed to send email",
+      });
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-[360px] flex flex-col overflow-hidden">
@@ -183,37 +191,98 @@ export function ReceiptModal({
             Thank you for your purchase!
           </div>
         </div>
-{/* Actions */}
-<div className="flex flex-col gap-2 px-5 py-4">
-  <div className="grid grid-cols-2 gap-2">
-    <button
-      onClick={handlePrint}
-      className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
-    >
-      🖨 Print
-    </button>
+        {/* Actions */}
+        <div className="flex flex-col gap-2 px-5 py-4">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handlePrint}
+              className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
+            >
+              🖨 Print
+            </button>
 
-    {odooOrderId && invoiceState.status !== "success" ? (
-      <button
-        onClick={handleCreateInvoice}
-        disabled={isInvoicing}
-        className="h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50"
-      >
-        {isInvoicing ? "Creating..." : "🧾 Invoice"}
-      </button>
-    ) : (
-      <div />
-    )}
-  </div>
+            {odooOrderId && invoiceState.status !== "success" ? (
+              <button
+                onClick={handleCreateInvoice}
+                disabled={isInvoicing}
+                className="h-9 border border-amber-200 bg-amber-50 text-amber-700 rounded-xl text-[13px] font-semibold hover:bg-amber-100 cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {isInvoicing ? "Creating..." : "🧾 Invoice"}
+              </button>
+            ) : (
+              <div />
+            )}
+          </div>
+          {odooOrderId && (
+            <button
+              onClick={() => {
+                setEmailInput(customer?.email ?? "");
+                setEmailState({ status: "idle" });
+                setEmailModal(true);
+              }}
+              className="w-full h-9 border border-blue-200 bg-blue-50 text-blue-700 rounded-xl text-[13px] font-semibold hover:bg-blue-100 cursor-pointer transition-colors"
+            >
+              📧 Send Receipt by Email
+            </button>
+          )}
 
-  <button
-    onClick={onNewOrder}
-    className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors"
-  >
-    New Order
-  </button>
-</div>
+          <button
+            onClick={onNewOrder}
+            className="w-full h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors"
+          >
+            New Order
+          </button>
+        </div>
       </div>
+      {/* Email Modal */}
+      {emailModal && (
+        <div className="absolute inset-0 z-60 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-[300px] p-5 flex flex-col gap-3">
+            <div className="text-[15px] font-bold text-gray-900">
+              📧 Send Receipt
+            </div>
+            <div className="text-[12px] text-gray-500">
+              Enter the customer's email address
+            </div>
+
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="customer@email.com"
+              className="h-10 px-3 rounded-xl border border-gray-200 text-[13px] text-gray-800 outline-none focus:border-blue-400 transition-colors"
+            />
+
+            {/* Feedback */}
+            {emailState.status === "success" && (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[12px] text-emerald-700 font-medium">
+                ✅ Receipt sent successfully!
+              </div>
+            )}
+            {emailState.status === "error" && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-[12px] text-red-600">
+                ⚠️ {emailState.message}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                onClick={() => setEmailModal(false)}
+                className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={isSending || !emailInput.trim()}
+                className="h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[13px] font-semibold border-none cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {isSending ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

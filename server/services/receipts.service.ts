@@ -162,3 +162,66 @@ export async function getReceiptByIdService(id: number) {
 
   return { order, lines, payments };
 }
+
+export async function sendReceiptByEmailService(
+  orderId: number,
+  email: string
+): Promise<void> {
+
+  const orders = await odooRequest(
+    "pos.order",
+    "search_read",
+    [[["id", "=", orderId]]],
+    { fields: ["name", "amount_total"], limit: 1 }
+  );
+
+  if (!orders || orders.length === 0) {
+    throw new Error("Order not found");
+  }
+
+  const order = orders[0];
+
+  const pdfBase64 = await odooRequest(
+    "pos.order",
+    "action_receipt_to_mail",
+    [[orderId]],
+    {}
+  );
+
+  const mailId = await odooRequest(
+    "mail.mail",
+    "create",
+    [
+      {
+        subject: `Your Receipt - ${order.name}`,
+        body_html: `
+          <div style="font-family: Arial, sans-serif; max-width: 500px;">
+            <h3>Thank you for your purchase!</h3>
+            <p>Order: <strong>${order.name}</strong></p>
+            <p>Total: <strong>$${Number(order.amount_total).toFixed(2)}</strong></p>
+            <p>Please find your receipt attached.</p>
+          </div>
+        `,
+        email_to: email,
+        auto_delete: true,
+        ...(pdfBase64 && {
+          attachment_ids: [
+            [
+              0,
+              0,
+              {
+                name: `receipt-${order.name}.pdf`,
+                datas: pdfBase64,
+                mimetype: "application/pdf",
+              },
+            ],
+          ],
+        }),
+      },
+    ],
+    {}
+  );
+
+ 
+  await odooRequest("mail.mail", "send", [[mailId]], {});
+}

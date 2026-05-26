@@ -1,7 +1,10 @@
 import { apiSlice } from "../api/apiSlice";
 
 // ── Types ───────────────────────────────────────────────────────────────
-
+export interface SendReceiptEmailResponse {
+  success: boolean;
+  message: string;
+} 
 export interface Receipt {
   id: number;
   name: string;
@@ -102,8 +105,19 @@ export const receiptsApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
       }),
     }),
+    sendReceiptByEmail: builder.mutation<
+  SendReceiptEmailResponse,
+  { receiptId: number; email: string }
+>({
+  query: ({ receiptId, email }) => ({
+    url: `/receipts/${receiptId}/send-email`,
+    method: "POST",
+    credentials: "include" as const,
+    body: { email },
+  }),
+}),
   }),
 });
 
 
-export const { useGetReceiptsQuery, useGetReceiptByIdQuery } = receiptsApi;
+export const { useGetReceiptsQuery, useGetReceiptByIdQuery, useSendReceiptByEmailMutation } = receiptsApi;
