@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Welcome to ShopStore</title>
+  <title>Welcome to Chef's World</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -253,11 +253,19 @@
   <div class="wrapper">
     <div class="card">
 
-      <!-- Header -->
-      <div class="header">
-        <div class="logo">Shop<span>Store</span></div>
-        <div class="tagline">Your trusted equipment marketplace</div>
-      </div>
+    <!-- Header -->
+<div class="header">
+  <% if (logoUrl) { %>
+    <img 
+      src="<%= logoUrl %>" 
+      alt="<%= shopName %>" 
+      style="max-height: 70px; max-width: 200px; object-fit: contain; margin-bottom: 8px;"
+    />
+  <% } else { %>
+    <div class="logo">Chef's<span> World</span></div>
+  <% } %>
+  <div class="tagline">Your trusted equipment marketplace</div>
+</div>
 
       <!-- Banner -->
       <div class="banner">
@@ -269,7 +277,7 @@
       <!-- Body -->
       <div class="body">
         <p class="intro">
-          Hi <strong><%= name %></strong>, our team has created an account for you on ShopStore.
+          Hi <strong><%= name %></strong>, our team has created an account for you on Chef's World.
           You can now browse our full catalog and place orders. Use the credentials below to log in.
         </p>
 
@@ -317,7 +325,7 @@
 
       <!-- Footer -->
       <div class="footer">
-        <p>© <%= new Date().getFullYear() %> ShopStore. All rights reserved.<br/>
+        <p>© <%= new Date().getFullYear() %> Chef's World. All rights reserved.<br/>
         You received this email because an account was created for you.</p>
         <div class="social">
           <a href="#">🐦</a>

@@ -186,7 +186,7 @@ export async function sendReceiptByEmailService(
   email: string
 ): Promise<void> {
 
-  // 1️⃣ جيب بيانات الـ order
+  
   const orders = await odooRequest(
     "pos.order",
     "search_read",
@@ -209,7 +209,7 @@ export async function sendReceiptByEmailService(
   if (!orders?.length) throw new Error("Order not found");
   const order = orders[0];
 
-  // 2️⃣ جيب الـ lines
+
   const lines = await odooRequest(
     "pos.order.line",
     "search_read",
@@ -225,7 +225,7 @@ export async function sendReceiptByEmailService(
     }
   );
 
-  // 3️⃣ جيب طريقة الدفع
+
   const payments = await odooRequest(
     "pos.payment",
     "search_read",
@@ -233,7 +233,7 @@ export async function sendReceiptByEmailService(
     { fields: ["payment_method_id", "amount"] }
   );
 
-  // 4️⃣ احسب القيم
+
   const subtotal = order.amount_total - order.amount_tax;
   const change =
     order.amount_paid - order.amount_total > 0
@@ -242,9 +242,8 @@ export async function sendReceiptByEmailService(
   const paymentMethod =
     payments?.[0]?.payment_method_id?.[1] ?? "Cash";
 
-  // 5️⃣ ابنِ الـ template data
   const templateData = {
-    // بيانات الطلب
+ 
     orderName: order.name,
     dateOrder: new Date(order.date_order).toLocaleString("en-US", {
       month: "2-digit",
@@ -256,9 +255,9 @@ export async function sendReceiptByEmailService(
     }),
     servedBy: order.user_id?.[1] ?? "Staff",
     customerName: order.partner_id ? order.partner_id[1] : null,
-    orderType: "Dine In", // ← عدّل حسب مشروعك
+    orderType: "Dine In",
 
-    // المنتجات
+   
     lines: lines.map((l: any) => ({
       qty: l.qty,
       name: l.product_id[1],
@@ -267,7 +266,7 @@ export async function sendReceiptByEmailService(
       discount: Number(l.discount) || 0,
     })),
 
-    // الأرقام
+   
     subtotal: Number(subtotal),
     tax: Number(order.amount_tax),
     total: Number(order.amount_total),
@@ -275,7 +274,6 @@ export async function sendReceiptByEmailService(
     change: Number(change),
     paymentMethod,
 
-    // بيانات المتجر — عدّلها
     shopName: process.env.SHOP_NAME ?? "My Shop",
     shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
     shopAddress: process.env.SHOP_ADDRESS ?? "",
@@ -287,11 +285,10 @@ export async function sendReceiptByEmailService(
       : null,
   };
 
-  // 6️⃣ رندر الـ EJS template
+  
   const templatePath = path.join(__dirname, "../templates/receiptEmail.ejs");
   const htmlBody = await ejs.renderFile(templatePath, templateData);
 
-  // 7️⃣ أنشئ الإيميل في Odoo
   const mailId = await odooRequest(
     "mail.mail",
     "create",
