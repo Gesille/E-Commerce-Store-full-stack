@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Order,
   CartItem,
@@ -24,6 +24,7 @@ import { useGetAllUsersQuery } from "@/redux/user/userApi";
 import { CloseSessionConfirmModal } from "@/components/CloseSessionConfirmModal";
 import { useCreateOrderMutation } from "@/redux/pos/Posapi";
 import { useHeldOrders } from "@/hooks/Useheldorders";
+import { useLazyGetProductByBarcodeQuery } from "@/redux/product/productApi";
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function ClockDisplay() {
@@ -48,6 +49,88 @@ function ClockDisplay() {
   return <>{time}</>;
 }
 
+// ── Barcode Toast ─────────────────────────────────────────────────────────────
+type ScanToastState =
+  | { status: "scanning"; code: string }
+  | { status: "success"; name: string }
+  | { status: "error"; message: string }
+  | null;
+
+function ScanToast({ state }: { state: ScanToastState }) {
+  if (!state) return null;
+
+  let cfg: { bg: string; icon: React.ReactNode; text: string; label: string };
+
+  switch (state.status) {
+    case "scanning":
+      cfg = {
+        bg: "bg-blue-50 border-blue-200",
+        icon: (
+          <svg
+            className="w-4 h-4 text-blue-500 animate-pulse"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4M21 9V5a2 2 0 00-2-2h-4M21 15v4a2 2 0 01-2 2h-4" />
+            <line x1="7" y1="12" x2="17" y2="12" />
+          </svg>
+        ),
+        text: "text-blue-700",
+        label: `Scanning: ${state.code}`,
+      };
+      break;
+    case "success":
+      cfg = {
+        bg: "bg-emerald-50 border-emerald-200",
+        icon: (
+          <svg
+            className="w-4 h-4 text-emerald-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ),
+        text: "text-emerald-700",
+        label: `Added: ${state.name}`,
+      };
+      break;
+    case "error":
+      cfg = {
+        bg: "bg-red-50 border-red-200",
+        icon: (
+          <svg
+            className="w-4 h-4 text-red-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        ),
+        text: "text-red-700",
+        label: state.message,
+      };
+      break;
+  }
+
+  return (
+    <div
+      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl border shadow-lg text-[13px] font-medium transition-all duration-300 ${cfg.bg} ${cfg.text}`}
+    >
+      {cfg.icon}
+      <span>{cfg.label}</span>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CashierPage() {
   const [activeConfigId, setActiveConfigId] = useState<number | undefined>(
@@ -65,6 +148,11 @@ export default function CashierPage() {
   const [showSwitchCashier, setShowSwitchCashier] = useState(false);
   const [category, setCategory] = useState<string>("All");
   const [search, setSearch] = useState<string>("");
+
+  // ── Barcode scan state ─────────────────────────────────────────────────────
+  const [scanToast, setScanToast] = useState<ScanToastState>(null);
+  const scanToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [triggerGetProductByBarcode] = useLazyGetProductByBarcodeQuery();
 
   useEffect(() => {
     if (!loading && !session && activeConfigId !== undefined) {
@@ -110,7 +198,6 @@ export default function CashierPage() {
     odooOrderId?: number;
   } | null>(null);
 
-  // ── FIX: store the total coming from CartPanel (tax-inclusive, discount-aware)
   const [paymentTotal, setPaymentTotal] = useState<number>(0);
 
   const activeOrder = orders.find((o) => o.id === activeOrderId);
@@ -120,6 +207,18 @@ export default function CashierPage() {
   const updateCart = (newCart: CartItem[]) => {
     persistCart(activeOrderId, newCart);
   };
+
+  // Stable ref so barcode handler always gets latest cart
+  const activeOrderRef = useRef(activeOrder);
+  useEffect(() => {
+    activeOrderRef.current = activeOrder;
+  }, [activeOrder]);
+
+  const updateCartRef = useRef(updateCart);
+  useEffect(() => {
+    updateCartRef.current = updateCart;
+  });
+
   const setMeta = (
     patch: Partial<{ customer: Customer | null; note: string }>,
   ) => {
@@ -142,86 +241,92 @@ export default function CashierPage() {
     });
   };
 
-  const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
+  // ── Dismiss toast helper ───────────────────────────────────────────────────
+  const showToastFor = useCallback((state: ScanToastState, ms = 2500) => {
+    setScanToast(state);
+    if (scanToastTimerRef.current) clearTimeout(scanToastTimerRef.current);
+    scanToastTimerRef.current = setTimeout(() => setScanToast(null), ms);
+  }, []);
 
+  // ── Add scanned product to cart ────────────────────────────────────────────
+  const addScannedProductToCart = useCallback(
+    (product: any) => {
+      const currentOrder = activeOrderRef.current;
+      if (!currentOrder) return;
 
-const handlePaymentConfirm = async (lines: PaymentLine[]) => {
-  if (!activeOrder || !session) return;
+      const existingIdx = currentOrder.cart.findIndex(
+        (item) => item.productId === product.id,
+      );
 
-  // ── Resolve cashierId safely ────────────────────────────────────────────
-  const rawCashierId = session.activeShift?.cashierId;
+      let newCart: CartItem[];
+      if (existingIdx !== -1) {
+        // Increment qty if already in cart
+        newCart = currentOrder.cart.map((item, idx) =>
+          idx === existingIdx ? { ...item, qty: item.qty + 1 } : item,
+        );
+      } else {
+        // Add new cart item
+        const newItem: CartItem = {
+          id: Date.now(),
+          productId: product.id,
+          name: product.name,
+          price: product.list_price ?? 0,
+          unitPrice: product.list_price ?? 0,
+          qty: 1,
+          discount: 0,
+          note: "",
+        };
+        newCart = [...currentOrder.cart, newItem];
+      }
 
-  const cashierId: string =
-    rawCashierId == null
-      ? ""
-      : typeof rawCashierId === "object"
-      ? (rawCashierId as any)._id ?? ""
-      : String(rawCashierId);
-
-  if (!cashierId) {
-    alert("No active cashier shift found. Please switch cashier or reopen the session.");
-    return; // stop before sending a bad request
-  }
-
-  if (!activeConfigId) {
-    alert("No POS config selected. Please reopen the session.");
-    return;
-  }
-
-  // ── Submit order ────────────────────────────────────────────────────────
-  try {
-    const result = await createOrder({
-      cart: activeOrder.cart.map((item) => ({
-        productId: item.productId,
-        qty: item.qty,
-        price: item.price,
-        discount: item.discount ?? 0,
-        note: item.note ?? "",
-      })),
-      paymentLines: lines.map((l) => ({
-        method: l.method as "cash" | "card" | "bank",
-        amount: l.amount,
-      })),
-      cashierId,
-      configId: activeConfigId,
-      customerId: activeMeta.customer?.id ?? undefined,
-      note: activeMeta.note ?? "",
-    }).unwrap();
-
-    setReceipt({
-      order: { ...activeOrder },
-      paymentLines: lines,
-      odooOrderId: result.orderId,
-    });
-     updateCart([]);
-    setMeta({ customer: null, note: "" });
-    setShowPayment(false);
-  } catch (err: any) {
-    alert(err?.data?.message ?? "Order failed. Please try again.");
-  }
-};
-
-  const handleNewOrderAfterReceipt = () => {
-    removeOrder(activeOrderId);
-    setReceipt(null);
-  };
+      updateCartRef.current(newCart);
+      showToastFor({ status: "success", name: product.name });
+    },
+    [showToastFor],
+  );
 
   // ── Barcode scanner ────────────────────────────────────────────────────────
   useEffect(() => {
     let barcodeBuffer = "";
     let barcodeTimer: ReturnType<typeof setTimeout>;
 
-    const handler = (e: KeyboardEvent) => {
+    const handler = async (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
       clearTimeout(barcodeTimer);
-      if (e.key === "Enter" && barcodeBuffer.length > 3) {
-        console.log("Barcode scanned:", barcodeBuffer);
+
+      if (e.key === "Enter") {
+        if (barcodeBuffer.length > 2) {
+          const code = barcodeBuffer.trim();
+          barcodeBuffer = "";
+
+          // Show scanning indicator
+          setScanToast({ status: "scanning", code });
+
+          try {
+            const result = await triggerGetProductByBarcode(code).unwrap();
+            if (result) {
+              addScannedProductToCart(result);
+            } else {
+              showToastFor(
+                { status: "error", message: `No product found for: ${code}` },
+                3000,
+              );
+            }
+          } catch {
+            showToastFor(
+              { status: "error", message: `Product not found: ${code}` },
+              3000,
+            );
+          }
+        }
         barcodeBuffer = "";
         return;
       }
+
       if (e.key.length === 1) barcodeBuffer += e.key;
+
       barcodeTimer = setTimeout(() => {
         barcodeBuffer = "";
       }, 100);
@@ -229,7 +334,70 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [triggerGetProductByBarcode, addScannedProductToCart, showToastFor]);
+
+  const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
+
+  const handlePaymentConfirm = async (lines: PaymentLine[]) => {
+    if (!activeOrder || !session) return;
+
+    const rawCashierId = session.activeShift?.cashierId;
+
+    const cashierId: string =
+      rawCashierId == null
+        ? ""
+        : typeof rawCashierId === "object"
+          ? (rawCashierId as any)._id ?? ""
+          : String(rawCashierId);
+
+    if (!cashierId) {
+      alert(
+        "No active cashier shift found. Please switch cashier or reopen the session.",
+      );
+      return;
+    }
+
+    if (!activeConfigId) {
+      alert("No POS config selected. Please reopen the session.");
+      return;
+    }
+
+    try {
+      const result = await createOrder({
+        cart: activeOrder.cart.map((item) => ({
+          productId: item.productId,
+          qty: item.qty,
+          price: item.price,
+          discount: item.discount ?? 0,
+          note: item.note ?? "",
+        })),
+        paymentLines: lines.map((l) => ({
+          method: l.method as "cash" | "card" | "bank",
+          amount: l.amount,
+        })),
+        cashierId,
+        configId: activeConfigId,
+        customerId: activeMeta.customer?.id ?? undefined,
+        note: activeMeta.note ?? "",
+      }).unwrap();
+
+      setReceipt({
+        order: { ...activeOrder },
+        paymentLines: lines,
+        odooOrderId: result.orderId,
+      });
+      updateCart([]);
+      setMeta({ customer: null, note: "" });
+      setShowPayment(false);
+    } catch (err: any) {
+      alert(err?.data?.message ?? "Order failed. Please try again.");
+    }
+  };
+
+  const handleNewOrderAfterReceipt = () => {
+    removeOrder(activeOrderId);
+    setReceipt(null);
+  };
 
   // ── Cashier name resolution ────────────────────────────────────────────────
   const { data: allUsers } = useGetAllUsersQuery();
@@ -253,7 +421,6 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
   // ── Close session handler ──────────────────────────────────────────────────
   const handleCloseSession = async () => {
     await closeSession(session!.session.id);
-    
     setShowCloseConfirm(false);
   };
 
@@ -330,6 +497,24 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
 
           {/* Right section */}
           <div className="flex items-center gap-4">
+            {/* Barcode scanner indicator */}
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-400" title="Barcode scanner ready">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4M21 9V5a2 2 0 00-2-2h-4M21 15v4a2 2 0 01-2 2h-4" />
+                <line x1="7" y1="12" x2="17" y2="12" />
+              </svg>
+              <span>Scanner ready</span>
+            </div>
+
             <POSSearchBar search={search} setSearch={setSearch} />
             <span className="text-[12px] text-gray-400">
               <ClockDisplay />
@@ -356,7 +541,6 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
             orderName={activeOrder?.name || ""}
             customer={activeMeta.customer}
             onOpenCustomer={() => setShowCustomer(true)}
-            // ── FIX: capture the tax-inclusive total from CartPanel's own calcTotal
             onOpenPayment={(payload) => {
               setPaymentTotal(payload.total);
               setShowPayment(true);
@@ -373,6 +557,9 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
           />
         </div>
       </div>
+
+      {/* ── Barcode Scan Toast ─────────────────────────────────────────────── */}
+      <ScanToast state={scanToast} />
 
       {/* ── Open Session Modal ─────────────────────────────────────────────── */}
       {showOpenSession && (
@@ -423,7 +610,6 @@ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
       {/* ── Payment Modal ──────────────────────────────────────────────────── */}
       {showPayment && activeOrder && (
         <PaymentModal
-          // ── FIX: use paymentTotal captured from CartPanel, not calcOrderTotals
           total={paymentTotal}
           orderName={activeOrder.name}
           customer={activeMeta.customer}

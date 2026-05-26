@@ -101,7 +101,7 @@ export const productApi = apiSlice.injectEndpoints({
     }),
     getProductByBarcode: builder.query<any, string>({
       query: (code) => ({
-        url: `product/barcode/${code}`,
+        url: `barcode/${code}`,
         method: "GET",
         credentials: "include" as const,
       }),
