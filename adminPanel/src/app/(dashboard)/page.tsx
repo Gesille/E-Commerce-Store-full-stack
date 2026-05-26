@@ -2,6 +2,7 @@ import AppAreaChart from "@/components/AppAreaChart";
 import AppBarChart from "@/components/AppBarChart";
 import AppPieChart from "@/components/AppPieChart";
 import CardList from "@/components/CardList";
+import SalesComparisonChart from "@/components/Salescomparisonchart";
 import TodoList from "@/components/TodoList";
 
 const Homepage = () => {
@@ -37,7 +38,9 @@ const Homepage = () => {
       <div className="col-span-12 lg:col-span-3 bg-primary-foreground p-3 rounded-lg">
         <CardList title="Popular Products" />
       </div>
-
+<div className="col-span-12 lg:col-span-7 bg-primary-foreground p-3 rounded-lg">
+  <SalesComparisonChart configId={1} />  
+</div>
     </div>
   );
 };
