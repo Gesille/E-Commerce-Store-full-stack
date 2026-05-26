@@ -14,12 +14,14 @@ import Return from "../models/Return.model.js";
 
 function getDateRange(range: string): { from: Date; to: Date } {
   const now = new Date();
-  switch (range) {
+  // normalise: trim + lowercase so "Week", "WEEK", " week" all match
+  const r = (range ?? "").trim().toLowerCase();
+  switch (r) {
     case "day":
       return { from: startOfDay(now), to: endOfDay(now) };
     case "month":
       return { from: startOfMonth(now), to: endOfMonth(now) };
-    default: // "week"
+    default: // "week" and anything else
       return {
         from: startOfWeek(now, { weekStartsOn: 1 }),
         to: endOfWeek(now, { weekStartsOn: 1 }),
@@ -34,21 +36,24 @@ export async function getInventory(req: Request, res: Response) {
     const range = (req.query.range as string) || "week";
     const { from, to } = getDateRange(range);
 
-    // 1. Sales: group by cart.productId (stored as ObjectId string in POSOrder)
+    // ── 1. Sales aggregation ──────────────────────────────────────────────────
+    // cart.productId may be stored as ObjectId OR as a plain string.
+    // We normalise to string in both the aggregation key and the lookup.
     const salesAgg = await POSOrder.aggregate([
       { $match: { status: "paid", createdAt: { $gte: from, $lte: to } } },
       { $unwind: "$cart" },
       {
         $group: {
-          _id: { $toString: "$cart.productId" }, // normalise to string
+          // convert ObjectId → string so Map keys are always plain strings
+          _id: { $toString: "$cart.productId" },
           sold: { $sum: "$cart.qty" },
           revenue: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
         },
       },
     ]);
 
-    // 2. Returns: items.productId is the Odoo integer id (Number)
-    //    We join on product.odooProductId later, so group by that number here.
+    // ── 2. Returns aggregation ────────────────────────────────────────────────
+    // items.productId is the Odoo integer id (Number)
     const returnsAgg = await Return.aggregate([
       { $match: { status: "completed", createdAt: { $gte: from, $lte: to } } },
       { $unwind: "$items" },
@@ -60,40 +65,46 @@ export async function getInventory(req: Request, res: Response) {
       },
     ]);
 
-    // salesMap: mongo _id string → sold qty
+    // Build lookup maps
     const salesMap = new Map<string, { sold: number; revenue: number }>(
       salesAgg.map((s) => [String(s._id), { sold: s.sold, revenue: s.revenue }])
     );
-    // returnsMap: odooProductId number → returned qty
+
     const returnsMap = new Map<number, number>(
-      returnsAgg.map((r) => [Number(r._id), r.returned])
+      returnsAgg
+        .filter((r) => r._id != null) // guard against null odoo ids
+        .map((r) => [Number(r._id), r.returned])
     );
 
-    // 3. Enrich all products
+    // ── 3. Enrich all products ────────────────────────────────────────────────
     const products = await Product.find().lean();
 
     const enriched = products.map((p) => {
       const mongoId = String(p._id);
       const salesEntry = salesMap.get(mongoId);
       const sold = salesEntry?.sold ?? 0;
-      const returned = returnsMap.get(Number(p.odooProductId)) ?? 0;
+
+      // guard: odooProductId could be null/undefined → treat as 0 returned
+      const odooId = p.odooProductId != null ? Number(p.odooProductId) : null;
+      const returned = odooId != null ? (returnsMap.get(odooId) ?? 0) : 0;
+
       return {
         _id: mongoId,
         name: p.name,
         reference: p.reference ?? "",
         barcode: p.barcode ?? "",
-        price: p.price,
-        stock: p.stock,
+        price: p.price ?? 0,
+        stock: p.stock ?? 0,
         image: p.image ?? "",
         odooProductId: p.odooProductId,
         sold,
         returned,
         netMovement: returned - sold,
-        stockValue: p.stock * p.price,
+        stockValue: (p.stock ?? 0) * (p.price ?? 0),
       };
     });
 
-    // 4. Daily chart data
+    // ── 4. Daily chart data ───────────────────────────────────────────────────
     const days = eachDayOfInterval({ start: from, end: to });
 
     const [dailySalesAgg, dailyReturnsAgg] = await Promise.all([
@@ -102,7 +113,9 @@ export async function getInventory(req: Request, res: Response) {
         { $unwind: "$cart" },
         {
           $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" } },
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" },
+            },
             sold: { $sum: "$cart.qty" },
             revenue: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
           },
@@ -113,7 +126,9 @@ export async function getInventory(req: Request, res: Response) {
         { $unwind: "$items" },
         {
           $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" } },
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" },
+            },
             returned: { $sum: "$items.qtyReturned" },
           },
         },
@@ -140,8 +155,13 @@ export async function getInventory(req: Request, res: Response) {
       };
     });
 
-    // 5. Last-4-weeks summary (always fixed — not affected by range param)
-    const weekly: { weekLabel: string; sold: number; returned: number; revenue: number }[] = [];
+    // ── 5. Last-4-weeks summary (fixed — not affected by range param) ─────────
+    const weekly: {
+      weekLabel: string;
+      sold: number;
+      returned: number;
+      revenue: number;
+    }[] = [];
 
     for (let i = 3; i >= 0; i--) {
       const wStart = startOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
@@ -155,14 +175,23 @@ export async function getInventory(req: Request, res: Response) {
             $group: {
               _id: null,
               sold: { $sum: "$cart.qty" },
-              revenue: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
+              revenue: {
+                $sum: { $multiply: ["$cart.price", "$cart.qty"] },
+              },
             },
           },
         ]),
         Return.aggregate([
-          { $match: { status: "completed", createdAt: { $gte: wStart, $lte: wEnd } } },
+          {
+            $match: {
+              status: "completed",
+              createdAt: { $gte: wStart, $lte: wEnd },
+            },
+          },
           { $unwind: "$items" },
-          { $group: { _id: null, returned: { $sum: "$items.qtyReturned" } } },
+          {
+            $group: { _id: null, returned: { $sum: "$items.qtyReturned" } },
+          },
         ]),
       ]);
 
@@ -174,10 +203,10 @@ export async function getInventory(req: Request, res: Response) {
       });
     }
 
-    res.json({ products: enriched, daily, weekly });
+    return res.json({ products: enriched, daily, weekly });
   } catch (err) {
     console.error("[Inventory] getInventory error:", err);
-    res.status(500).json({ error: "Failed to fetch inventory" });
+    return res.status(500).json({ error: "Failed to fetch inventory" });
   }
 }
 
@@ -191,27 +220,46 @@ export async function getInventorySummary(_req: Request, res: Response) {
     const [products, salesAgg, returnsAgg] = await Promise.all([
       Product.find({}, { stock: 1, price: 1 }).lean(),
       POSOrder.aggregate([
-        { $match: { status: "paid", createdAt: { $gte: todayStart, $lte: todayEnd } } },
+        {
+          $match: {
+            status: "paid",
+            createdAt: { $gte: todayStart, $lte: todayEnd },
+          },
+        },
         { $unwind: "$cart" },
         {
           $group: {
             _id: null,
             soldToday: { $sum: "$cart.qty" },
-            revenueToday: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
+            revenueToday: {
+              $sum: { $multiply: ["$cart.price", "$cart.qty"] },
+            },
           },
         },
       ]),
       Return.aggregate([
-        { $match: { status: "completed", createdAt: { $gte: todayStart, $lte: todayEnd } } },
+        {
+          $match: {
+            status: "completed",
+            createdAt: { $gte: todayStart, $lte: todayEnd },
+          },
+        },
         { $unwind: "$items" },
-        { $group: { _id: null, returnedToday: { $sum: "$items.qtyReturned" } } },
+        {
+          $group: { _id: null, returnedToday: { $sum: "$items.qtyReturned" } },
+        },
       ]),
     ]);
 
-    const totalStockValue = products.reduce((sum, p) => sum + (p.stock ?? 0) * (p.price ?? 0), 0);
-    const lowStockCount = products.filter((p) => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= 5).length;
+    const totalStockValue = products.reduce(
+      (sum, p) => sum + (p.stock ?? 0) * (p.price ?? 0),
+      0
+    );
+    const lowStockCount = products.filter(
+      (p) => (p.stock ?? 0) > 0 && (p.stock ?? 0) <= 5
+    ).length;
 
-    res.json({
+    return res.json({
       totalProducts: products.length,
       totalStockValue,
       lowStockCount,
@@ -221,7 +269,7 @@ export async function getInventorySummary(_req: Request, res: Response) {
     });
   } catch (err) {
     console.error("[Inventory] getInventorySummary error:", err);
-    res.status(500).json({ error: "Failed to fetch summary" });
+    return res.status(500).json({ error: "Failed to fetch summary" });
   }
 }
 
@@ -230,19 +278,24 @@ export async function getInventorySummary(_req: Request, res: Response) {
 export async function getInventoryMovements(req: Request, res: Response) {
   try {
     const range = (req.query.range as string) || "week";
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const limit = Math.min(
+      parseInt(req.query.limit as string) || 50,
+      200
+    );
     const { from, to } = getDateRange(range);
 
     // Fetch double the limit from each source so after merge we still have enough
+    const fetchLimit = limit * 2;
+
     const [salesDocs, returnDocs] = await Promise.all([
       POSOrder.find({ status: "paid", createdAt: { $gte: from, $lte: to } })
         .sort({ createdAt: -1 })
-        .limit(limit)
+        .limit(fetchLimit)
         .populate<{ cashierId: { name: string } | null }>("cashierId", "name")
         .lean(),
       Return.find({ status: "completed", createdAt: { $gte: from, $lte: to } })
         .sort({ createdAt: -1 })
-        .limit(limit)
+        .limit(fetchLimit)
         .lean(),
     ]);
 
@@ -270,7 +323,7 @@ export async function getInventoryMovements(req: Request, res: Response) {
       }))
     );
 
-    const returnMoves: Move[] = returnDocs.flatMap((ret: any) =>
+    const returnMoves: Move[] = (returnDocs as any[]).flatMap((ret) =>
       ret.items.map((item: any) => ({
         _id: `${ret._id}-${item.productId}`,
         type: "return" as const,
@@ -287,10 +340,10 @@ export async function getInventoryMovements(req: Request, res: Response) {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, limit);
 
-    res.json({ movements });
+    return res.json({ movements });
   } catch (err) {
     console.error("[Inventory] getInventoryMovements error:", err);
-    res.status(500).json({ error: "Failed to fetch movements" });
+    return res.status(500).json({ error: "Failed to fetch movements" });
   }
 }
 
@@ -308,14 +361,15 @@ export async function getProductMovements(req: Request, res: Response) {
 
     const oid = new mongoose.Types.ObjectId(productId);
 
-    // Look up the product first to get its odooProductId for returns
     const product = await Product.findById(oid).lean();
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
 
+    const odooId =
+      product.odooProductId != null ? Number(product.odooProductId) : null;
+
     const [salesDocs, returnDocs] = await Promise.all([
-      // POSOrder stores cart.productId as ObjectId
       POSOrder.find({
         status: "paid",
         createdAt: { $gte: from, $lte: to },
@@ -325,14 +379,16 @@ export async function getProductMovements(req: Request, res: Response) {
         .populate<{ cashierId: { name: string } | null }>("cashierId", "name")
         .lean(),
 
-      // Return stores items.productId as Odoo integer
-      Return.find({
-        status: "completed",
-        createdAt: { $gte: from, $lte: to },
-        "items.productId": Number(product.odooProductId),
-      })
-        .sort({ createdAt: -1 })
-        .lean(),
+      // Only query returns if we have a valid odoo id
+      odooId != null
+        ? Return.find({
+            status: "completed",
+            createdAt: { $gte: from, $lte: to },
+            "items.productId": odooId,
+          })
+            .sort({ createdAt: -1 })
+            .lean()
+        : Promise.resolve([]),
     ]);
 
     type Move = {
@@ -368,7 +424,7 @@ export async function getProductMovements(req: Request, res: Response) {
 
     for (const ret of returnDocs as any[]) {
       const matchingItems = ret.items.filter(
-        (i: any) => Number(i.productId) === Number(product.odooProductId)
+        (i: any) => odooId != null && Number(i.productId) === odooId
       );
       for (const item of matchingItems) {
         moves.push({
@@ -384,11 +440,13 @@ export async function getProductMovements(req: Request, res: Response) {
       }
     }
 
-    moves.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    moves.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
 
-    res.json({ movements: moves });
+    return res.json({ movements: moves });
   } catch (err) {
     console.error("[Inventory] getProductMovements error:", err);
-    res.status(500).json({ error: "Failed to fetch product movements" });
+    return res.status(500).json({ error: "Failed to fetch product movements" });
   }
 }
