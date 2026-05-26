@@ -73,7 +73,7 @@ export const posInventoryApi = apiSlice.injectEndpoints({
     // GET /api/pos/inventory?range=...
     getInventory: builder.query<InventoryResponse, { range: InventoryRange }>({
       query: ({ range }) => ({
-        url: `pos/inventory?range=${range}`,
+        url: `inventory?range=${range}`,
         method: "GET",
         credentials: "include" as const,
       }),
@@ -83,7 +83,7 @@ export const posInventoryApi = apiSlice.injectEndpoints({
     // GET /api/pos/inventory/summary
     getInventorySummary: builder.query<InventorySummary, void>({
       query: () => ({
-        url: "pos/inventory/summary",
+        url: "inventory/summary",
         method: "GET",
         credentials: "include" as const,
       }),
@@ -96,7 +96,7 @@ export const posInventoryApi = apiSlice.injectEndpoints({
       { range: InventoryRange; limit?: number }
     >({
       query: ({ range, limit = 100 }) => ({
-        url: `pos/inventory/movements?range=${range}&limit=${limit}`,
+        url: `inventory/movements?range=${range}&limit=${limit}`,
         method: "GET",
         credentials: "include" as const,
       }),
@@ -109,7 +109,7 @@ export const posInventoryApi = apiSlice.injectEndpoints({
       { productId: string; range: InventoryRange }
     >({
       query: ({ productId, range }) => ({
-        url: `pos/inventory/product/${productId}/movements?range=${range}`,
+        url: `inventory/product/${productId}/movements?range=${range}`,
         method: "GET",
         credentials: "include" as const,
       }),
