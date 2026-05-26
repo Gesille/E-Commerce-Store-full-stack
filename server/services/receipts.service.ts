@@ -171,12 +171,7 @@ export async function getReceiptByIdService(id: number) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─────────────────────────────────────────────────────────
-// Helper
-// ─────────────────────────────────────────────────────────
-function fmt(n: number) {
-  return Number(n).toFixed(2);
-}
+
 
 // ─────────────────────────────────────────────────────────
 // Send Receipt by Email
