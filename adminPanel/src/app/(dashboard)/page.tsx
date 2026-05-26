@@ -38,8 +38,8 @@ const Homepage = () => {
       <div className="col-span-12 lg:col-span-3 bg-primary-foreground p-3 rounded-lg">
         <CardList title="Popular Products" />
       </div>
-<div className="col-span-12 lg:col-span-7 bg-primary-foreground p-3 rounded-lg">
-  <SalesComparisonChart configId={1} />  
+<div className="col-span-12 bg-primary-foreground p-3 rounded-lg">
+  <SalesComparisonChart configId={1} />
 </div>
     </div>
   );

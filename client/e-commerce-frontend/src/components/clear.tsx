@@ -4,9 +4,7 @@ const clear = () => {
   return (
     <div>
       dfrvvvvfrfrghyujiko
-      <div>
-        dfgfgmjj
-      </div>
+     
     </div>
   )
 }
