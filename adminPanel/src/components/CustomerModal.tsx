@@ -7,6 +7,22 @@ import {
   useCreateCustomerMutation,
 } from "@/redux/pos/Posapi";
 
+function exportCustomersCSV(customers: Customer[]) {
+  const header = ["Name", "Email", "Phone"];
+  const rows = customers.map((c) => [
+    `"${c.name.replace(/"/g, '""')}"`,
+    `"${(c.email ?? "").replace(/"/g, '""')}"`,
+    `"${(c.phone ?? "").replace(/"/g, '""')}"`,
+  ]);
+  const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 export function CustomerModal({
   current,
   onSelect,
@@ -65,7 +81,6 @@ export function CustomerModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[580px] flex flex-col overflow-hidden">
-
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="text-[15px] font-semibold text-gray-900">
@@ -125,7 +140,10 @@ export function CustomerModal({
 
             <div className="flex gap-2 mt-1">
               <button
-                onClick={() => { setShowCreate(false); setCreateError(""); }}
+                onClick={() => {
+                  setShowCreate(false);
+                  setCreateError("");
+                }}
                 className="flex-1 h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer"
               >
                 ← Back
@@ -145,7 +163,16 @@ export function CustomerModal({
             {/* Search bar */}
             <div className="px-4 py-3 border-b border-gray-50">
               <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 h-9">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9CA3AF"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
@@ -164,7 +191,10 @@ export function CustomerModal({
               {/* Remove customer */}
               {current && (
                 <button
-                  onClick={() => { onSelect(null); onClose(); }}
+                  onClick={() => {
+                    onSelect(null);
+                    onClose();
+                  }}
                   className="w-full text-left px-5 py-3 text-xs text-red-500 hover:bg-red-50 border-b border-gray-50 cursor-pointer bg-transparent transition-colors"
                 >
                   ✕ Remove customer
@@ -179,27 +209,33 @@ export function CustomerModal({
               )}
 
               {/* Results */}
-              {!isLoading && customers.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => { onSelect(c); onClose(); }}
-                  className={`px-5 py-3 border-b border-gray-50 cursor-pointer transition-colors hover:bg-blue-50 ${
-                    current?.id === c.id ? "bg-blue-50" : ""
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-[13px] font-medium text-gray-900">
-                      {c.name}
+              {!isLoading &&
+                customers.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      onSelect(c);
+                      onClose();
+                    }}
+                    className={`px-5 py-3 border-b border-gray-50 cursor-pointer transition-colors hover:bg-blue-50 ${
+                      current?.id === c.id ? "bg-blue-50" : ""
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-[13px] font-medium text-gray-900">
+                        {c.name}
+                      </div>
+                      {current?.id === c.id && (
+                        <span className="text-blue-500 text-xs">
+                          ✓ Selected
+                        </span>
+                      )}
                     </div>
-                    {current?.id === c.id && (
-                      <span className="text-blue-500 text-xs">✓ Selected</span>
-                    )}
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      {c.email} · {c.phone}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">
-                    {c.email} · {c.phone}
-                  </div>
-                </div>
-              ))}
+                ))}
 
               {/* Empty */}
               {!isLoading && customers.length === 0 && (
@@ -210,12 +246,34 @@ export function CustomerModal({
             </div>
 
             {/* Footer — create new */}
-            <div className="px-4 py-3 border-t border-gray-100">
+            {/* Footer — create new + export */}
+            <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
               <button
                 onClick={() => setShowCreate(true)}
-                className="w-full h-9 border border-dashed border-gray-300 rounded-xl text-[13px] text-gray-500 hover:border-blue-400 hover:text-blue-600 bg-transparent cursor-pointer transition-colors"
+                className="flex-1 h-9 border border-dashed border-gray-300 rounded-xl text-[13px] text-gray-500 hover:border-blue-400 hover:text-blue-600 bg-transparent cursor-pointer transition-colors"
               >
                 + New customer
+              </button>
+              <button
+                onClick={() => exportCustomersCSV(customers)}
+                disabled={customers.length === 0}
+                title="Export to CSV"
+                className="h-9 px-3 border border-gray-200 rounded-xl text-gray-500 hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent cursor-pointer transition-colors flex items-center gap-1.5 text-[13px]"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                  />
+                </svg>
+                CSV
               </button>
             </div>
           </>
