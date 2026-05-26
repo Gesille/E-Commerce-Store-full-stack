@@ -100,18 +100,7 @@ const POSSidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* REPORTS */}
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
-            Reports
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItem("/pos/reports/sales", <BarChart2 size={16} />, "Sales Report")}
-              {navItem("/pos/reports/payments", <Wallet size={16} />, "Payments")}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+       
 
         {/* INVENTORY */}
         <SidebarGroup className="mt-2">

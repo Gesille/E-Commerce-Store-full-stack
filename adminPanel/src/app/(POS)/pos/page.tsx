@@ -1615,7 +1615,7 @@ export default function POSDashboardPage() {
             </CardPad>
           </Card>
 
-          {/* ── Row 6: Peak hours heatmap ── */}
+          {/* ── Row 6: Peak hours heatmap ──
           <Card>
             <CardPad>
               <SectionHeader
@@ -1738,7 +1738,7 @@ export default function POSDashboardPage() {
                 <EmptyHeatmap message="No heatmap data available." />
               )}
             </CardPad>
-          </Card>
+          </Card> */}
 
           {/* ── Row 7: Top products + Recent orders + Staff ── */}
           <div className="grid3">
