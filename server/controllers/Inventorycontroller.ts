@@ -10,18 +10,25 @@ import POSOrder from "../models/POSOrder.js";
 import Product from "../models/product.model.js";
 import Return from "../models/Return.model.js";
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
 function getDateRange(range: string): { from: Date; to: Date } {
   const now = new Date();
-  // normalise: trim + lowercase so "Week", "WEEK", " week" all match
-  const r = (range ?? "").trim().toLowerCase();
+  const r = (range ?? "week").trim().toLowerCase();
+
   switch (r) {
     case "day":
-      return { from: startOfDay(now), to: endOfDay(now) };
+      return {
+        from: startOfDay(now),
+        to: endOfDay(now),
+      };
+
     case "month":
-      return { from: startOfMonth(now), to: endOfMonth(now) };
-    default: // "week" and anything else
+      return {
+        from: startOfMonth(now),
+        to: endOfMonth(now),
+      };
+
+    case "week":
+    default:
       return {
         from: startOfWeek(now, { weekStartsOn: 1 }),
         to: endOfWeek(now, { weekStartsOn: 1 }),
@@ -29,133 +36,303 @@ function getDateRange(range: string): { from: Date; to: Date } {
   }
 }
 
-// ─── GET /api/pos/inventory ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// GET /api/pos/inventory
+// ─────────────────────────────────────────────────────────────
 
 export async function getInventory(req: Request, res: Response) {
   try {
-    const range = (req.query.range as string) || "week";
+    const range = String(req.query.range || "week");
+
     const { from, to } = getDateRange(range);
 
-    // ── 1. Sales aggregation ──────────────────────────────────────────────────
-    // cart.productId may be stored as ObjectId OR as a plain string.
-    // We normalise to string in both the aggregation key and the lookup.
+    console.log("━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("RANGE:", range);
+    console.log("FROM :", from);
+    console.log("TO   :", to);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━");
+
+    // ─────────────────────────────────────────────────────────
+    // Sales aggregation
+    // ─────────────────────────────────────────────────────────
+
     const salesAgg = await POSOrder.aggregate([
-      { $match: { status: "paid", createdAt: { $gte: from, $lte: to } } },
-      { $unwind: "$cart" },
+      {
+        $match: {
+          status: "paid",
+          createdAt: {
+            $gte: from,
+            $lte: to,
+          },
+        },
+      },
+
+      {
+        $unwind: "$cart",
+      },
+
       {
         $group: {
-          // convert ObjectId → string so Map keys are always plain strings
-          _id: { $toString: "$cart.productId" },
-          sold: { $sum: "$cart.qty" },
-          revenue: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
+          _id: {
+            $toString: "$cart.productId",
+          },
+
+          sold: {
+            $sum: "$cart.qty",
+          },
+
+          revenue: {
+            $sum: {
+              $multiply: ["$cart.qty", "$cart.price"],
+            },
+          },
         },
       },
     ]);
 
-    // ── 2. Returns aggregation ────────────────────────────────────────────────
-    // items.productId is the Odoo integer id (Number)
+    // ─────────────────────────────────────────────────────────
+    // Returns aggregation
+    // ─────────────────────────────────────────────────────────
+
     const returnsAgg = await Return.aggregate([
-      { $match: { status: "completed", createdAt: { $gte: from, $lte: to } } },
-      { $unwind: "$items" },
+      {
+        $match: {
+          status: "completed",
+          createdAt: {
+            $gte: from,
+            $lte: to,
+          },
+        },
+      },
+
+      {
+        $unwind: "$items",
+      },
+
       {
         $group: {
-          _id: "$items.productId", // Odoo integer
-          returned: { $sum: "$items.qtyReturned" },
+          _id: "$items.productId",
+
+          returned: {
+            $sum: "$items.qtyReturned",
+          },
         },
       },
     ]);
 
-    // Build lookup maps
-    const salesMap = new Map<string, { sold: number; revenue: number }>(
-      salesAgg.map((s) => [String(s._id), { sold: s.sold, revenue: s.revenue }])
+    // ─────────────────────────────────────────────────────────
+    // Maps
+    // ─────────────────────────────────────────────────────────
+
+    const salesMap = new Map<
+      string,
+      {
+        sold: number;
+        revenue: number;
+      }
+    >(
+      salesAgg.map((s) => [
+        String(s._id),
+        {
+          sold: s.sold,
+          revenue: s.revenue,
+        },
+      ])
     );
 
     const returnsMap = new Map<number, number>(
       returnsAgg
-        .filter((r) => r._id != null) // guard against null odoo ids
+        .filter((r) => r._id != null)
         .map((r) => [Number(r._id), r.returned])
     );
 
-    // ── 3. Enrich all products ────────────────────────────────────────────────
-    const products = await Product.find().lean();
+    // ─────────────────────────────────────────────────────────
+    // Products
+    // ─────────────────────────────────────────────────────────
+
+    const products = await Product.find(
+      {},
+      {
+        image: 0, // IMPORTANT: remove massive base64 images
+      }
+    ).lean();
 
     const enriched = products.map((p) => {
       const mongoId = String(p._id);
+
       const salesEntry = salesMap.get(mongoId);
+
       const sold = salesEntry?.sold ?? 0;
 
-      // guard: odooProductId could be null/undefined → treat as 0 returned
-      const odooId = p.odooProductId != null ? Number(p.odooProductId) : null;
-      const returned = odooId != null ? (returnsMap.get(odooId) ?? 0) : 0;
+      const odooId =
+        p.odooProductId != null
+          ? Number(p.odooProductId)
+          : null;
+
+      const returned =
+        odooId != null
+          ? returnsMap.get(odooId) ?? 0
+          : 0;
 
       return {
         _id: mongoId,
+
         name: p.name,
+
         reference: p.reference ?? "",
+
         barcode: p.barcode ?? "",
+
         price: p.price ?? 0,
+
         stock: p.stock ?? 0,
-        image: p.image ?? "",
+
+        image: null,
+
         odooProductId: p.odooProductId,
+
         sold,
+
         returned,
-        netMovement: returned - sold,
-        stockValue: (p.stock ?? 0) * (p.price ?? 0),
+
+        netMovement: sold - returned,
+
+        stockValue:
+          (p.stock ?? 0) *
+          (p.price ?? 0),
       };
     });
 
-    // ── 4. Daily chart data ───────────────────────────────────────────────────
-    const days = eachDayOfInterval({ start: from, end: to });
+    // ─────────────────────────────────────────────────────────
+    // Daily chart
+    // ─────────────────────────────────────────────────────────
 
-    const [dailySalesAgg, dailyReturnsAgg] = await Promise.all([
-      POSOrder.aggregate([
-        { $match: { status: "paid", createdAt: { $gte: from, $lte: to } } },
-        { $unwind: "$cart" },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" },
-            },
-            sold: { $sum: "$cart.qty" },
-            revenue: { $sum: { $multiply: ["$cart.price", "$cart.qty"] } },
-          },
-        },
-      ]),
-      Return.aggregate([
-        { $match: { status: "completed", createdAt: { $gte: from, $lte: to } } },
-        { $unwind: "$items" },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" },
-            },
-            returned: { $sum: "$items.qtyReturned" },
-          },
-        },
-      ]),
-    ]);
+    const days = eachDayOfInterval({
+      start: from,
+      end: to,
+    });
 
-    const dailySalesMap = new Map<string, { sold: number; revenue: number }>(
-      dailySalesAgg.map((d) => [d._id, { sold: d.sold, revenue: d.revenue }])
+    const [dailySalesAgg, dailyReturnsAgg] =
+      await Promise.all([
+        POSOrder.aggregate([
+          {
+            $match: {
+              status: "paid",
+              createdAt: {
+                $gte: from,
+                $lte: to,
+              },
+            },
+          },
+
+          {
+            $unwind: "$cart",
+          },
+
+          {
+            $group: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: "$createdAt",
+                },
+              },
+
+              sold: {
+                $sum: "$cart.qty",
+              },
+
+              revenue: {
+                $sum: {
+                  $multiply: [
+                    "$cart.qty",
+                    "$cart.price",
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+
+        Return.aggregate([
+          {
+            $match: {
+              status: "completed",
+              createdAt: {
+                $gte: from,
+                $lte: to,
+              },
+            },
+          },
+
+          {
+            $unwind: "$items",
+          },
+
+          {
+            $group: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: "$createdAt",
+                },
+              },
+
+              returned: {
+                $sum: "$items.qtyReturned",
+              },
+            },
+          },
+        ]),
+      ]);
+
+    const dailySalesMap = new Map(
+      dailySalesAgg.map((d) => [
+        d._id,
+        {
+          sold: d.sold,
+          revenue: d.revenue,
+        },
+      ])
     );
-    const dailyReturnsMap = new Map<string, number>(
-      dailyReturnsAgg.map((d) => [d._id, d.returned])
+
+    const dailyReturnsMap = new Map(
+      dailyReturnsAgg.map((d) => [
+        d._id,
+        d.returned,
+      ])
     );
 
     const daily = days.map((day) => {
       const key = format(day, "yyyy-MM-dd");
-      const s = dailySalesMap.get(key) ?? { sold: 0, revenue: 0 };
-      const ret = dailyReturnsMap.get(key) ?? 0;
+
+      const sales =
+        dailySalesMap.get(key) ?? {
+          sold: 0,
+          revenue: 0,
+        };
+
+      const returned =
+        dailyReturnsMap.get(key) ?? 0;
+
       return {
-        date: day.toISOString(),
-        sold: s.sold,
-        returned: ret,
-        netQty: s.sold - ret,
-        revenue: s.revenue,
+        date: key,
+
+        sold: sales.sold,
+
+        returned,
+
+        netQty:
+          sales.sold - returned,
+
+        revenue: sales.revenue,
       };
     });
 
-    // ── 5. Last-4-weeks summary (fixed — not affected by range param) ─────────
+    // ─────────────────────────────────────────────────────────
+    // Weekly summary
+    // ─────────────────────────────────────────────────────────
+
     const weekly: {
       weekLabel: string;
       sold: number;
@@ -164,51 +341,123 @@ export async function getInventory(req: Request, res: Response) {
     }[] = [];
 
     for (let i = 3; i >= 0; i--) {
-      const wStart = startOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
-      const wEnd = endOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
+      const wStart = startOfWeek(
+        subWeeks(new Date(), i),
+        {
+          weekStartsOn: 1,
+        }
+      );
 
-      const [wSales, wReturns] = await Promise.all([
-        POSOrder.aggregate([
-          { $match: { status: "paid", createdAt: { $gte: wStart, $lte: wEnd } } },
-          { $unwind: "$cart" },
-          {
-            $group: {
-              _id: null,
-              sold: { $sum: "$cart.qty" },
-              revenue: {
-                $sum: { $multiply: ["$cart.price", "$cart.qty"] },
+      const wEnd = endOfWeek(
+        subWeeks(new Date(), i),
+        {
+          weekStartsOn: 1,
+        }
+      );
+
+      const [wSales, wReturns] =
+        await Promise.all([
+          POSOrder.aggregate([
+            {
+              $match: {
+                status: "paid",
+
+                createdAt: {
+                  $gte: wStart,
+                  $lte: wEnd,
+                },
               },
             },
-          },
-        ]),
-        Return.aggregate([
-          {
-            $match: {
-              status: "completed",
-              createdAt: { $gte: wStart, $lte: wEnd },
+
+            {
+              $unwind: "$cart",
             },
-          },
-          { $unwind: "$items" },
-          {
-            $group: { _id: null, returned: { $sum: "$items.qtyReturned" } },
-          },
-        ]),
-      ]);
+
+            {
+              $group: {
+                _id: null,
+
+                sold: {
+                  $sum: "$cart.qty",
+                },
+
+                revenue: {
+                  $sum: {
+                    $multiply: [
+                      "$cart.qty",
+                      "$cart.price",
+                    ],
+                  },
+                },
+              },
+            },
+          ]),
+
+          Return.aggregate([
+            {
+              $match: {
+                status: "completed",
+
+                createdAt: {
+                  $gte: wStart,
+                  $lte: wEnd,
+                },
+              },
+            },
+
+            {
+              $unwind: "$items",
+            },
+
+            {
+              $group: {
+                _id: null,
+
+                returned: {
+                  $sum: "$items.qtyReturned",
+                },
+              },
+            },
+          ]),
+        ]);
 
       weekly.push({
-        weekLabel: `${format(wStart, "MMM d")} – ${format(wEnd, "MMM d")}`,
+        weekLabel: `${format(
+          wStart,
+          "MMM d"
+        )} - ${format(wEnd, "MMM d")}`,
+
         sold: wSales[0]?.sold ?? 0,
-        returned: wReturns[0]?.returned ?? 0,
-        revenue: wSales[0]?.revenue ?? 0,
+
+        returned:
+          wReturns[0]?.returned ?? 0,
+
+        revenue:
+          wSales[0]?.revenue ?? 0,
       });
     }
 
-    return res.json({ products: enriched, daily, weekly });
+    return res.json({
+      range,
+      from,
+      to,
+      products: enriched,
+      daily,
+      weekly,
+    });
   } catch (err) {
-    console.error("[Inventory] getInventory error:", err);
-    return res.status(500).json({ error: "Failed to fetch inventory" });
+    console.error(
+      "[Inventory] getInventory error:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Failed to fetch inventory",
+    });
   }
 }
+
+
 
 // ─── GET /api/pos/inventory/summary ──────────────────────────────────────────
 
