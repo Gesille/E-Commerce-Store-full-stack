@@ -5,7 +5,7 @@ const clear = () => {
     <div>
       dfrvvvvfrfrghyujiko
       <div>
-        dfgfgmjjhoff
+        dfgfgmjj
       </div>
     </div>
   )
