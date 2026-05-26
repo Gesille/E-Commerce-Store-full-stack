@@ -32,6 +32,7 @@ const formSchema = z.object({
   sizes: z.array(z.enum(sizes)),
   colors: z.array(z.enum(colors)),
   images: z.record(z.string(), z.any()).optional(),
+  barcode: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -51,6 +52,7 @@ const AddProduct = () => {
       sizes: [],
       colors: [],
       images: {},
+      barcode: "",
     },
   });
 
@@ -83,6 +85,7 @@ const AddProduct = () => {
         price: data.price,
         stock: data.quantity,
         categoryId: data.category,
+        barcode: data.barcode || undefined,
         image: imageBase64,
         attributes: {
           colors: data.colors,
@@ -132,6 +135,31 @@ const AddProduct = () => {
                 <FormMessage />
               </FormItem>
             )} />
+            {/* Add this field block after the reference field */}
+<FormField control={form.control} name="barcode" render={({ field }) => (
+  <FormItem>
+    <FormLabel className="flex items-center gap-2 text-indigo-700">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4
+                 M21 9V5a2 2 0 00-2-2h-4M21 15v4a2 2 0 01-2 2h-4" />
+        <line x1="7" y1="12" x2="17" y2="12" />
+      </svg>
+      Barcode
+    </FormLabel>
+    <FormControl>
+      <Input
+        {...field}
+        placeholder="Scan or type barcode"
+        className="bg-white border-indigo-200 rounded-lg font-mono"
+      />
+    </FormControl>
+    <FormDescription>
+      Used by the POS scanner to find this product instantly
+    </FormDescription>
+    <FormMessage />
+  </FormItem>
+)} />
 
             <FormField control={form.control} name="shortDescription" render={({ field }) => (
               <FormItem>

@@ -142,7 +142,7 @@ export const createProduct = async (req: Request, res: Response) => {
   let createdProductTemplateId: number | null = null;
 
   try {
-    const { name, price, stock, categoryId, image, attributes, reference } = req.body; // ✅ add reference
+    const { name, price, stock, categoryId, image, attributes, reference , barcode} = req.body; // ✅ add reference
 
     let base64Image = null;
     if (image) {
@@ -157,6 +157,7 @@ export const createProduct = async (req: Request, res: Response) => {
           name,
           list_price: price,
           default_code: reference || false,  // ✅ Odoo field for reference/SKU
+          barcode: barcode || false,  
           type: "consu",
           is_storable: true,
           active: true,
@@ -221,6 +222,7 @@ export const createProduct = async (req: Request, res: Response) => {
     await Product.create({
       name,
       reference: reference || "",
+      barcode: barcode || "",
       price: Number(price),
       stock: Number(stock),
       image: image || "",

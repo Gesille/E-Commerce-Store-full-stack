@@ -49,7 +49,7 @@ export const productApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
         body,
       }),
-      invalidatesTags: ["Products"], // ✅ forces refetch after update
+      invalidatesTags: ["Products"], 
     }),
 
     deleteProduct: builder.mutation({
@@ -58,12 +58,13 @@ export const productApi = apiSlice.injectEndpoints({
         method: "DELETE",
         credentials: "include" as const,
       }),
-      invalidatesTags: ["Products"], // ✅ forces refetch after delete
+      invalidatesTags: ["Products"], 
     }),
     createProduct: builder.mutation({
       query: (body: {
         name: string;
         reference: string;
+        barcode?: string;
         price: number;
         stock: number;
         categoryId: number;
