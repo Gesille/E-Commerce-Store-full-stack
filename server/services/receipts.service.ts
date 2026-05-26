@@ -1,4 +1,7 @@
 import { odooRequest } from "../odoo/odoo.client.js";
+import path from "path";
+import { fileURLToPath } from "url";
+import ejs from "ejs";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -163,79 +166,146 @@ export async function getReceiptByIdService(id: number) {
   return { order, lines, payments };
 }
 
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ─────────────────────────────────────────────────────────
+// Helper
+// ─────────────────────────────────────────────────────────
+function fmt(n: number) {
+  return Number(n).toFixed(2);
+}
+
+// ─────────────────────────────────────────────────────────
+// Send Receipt by Email
+// ─────────────────────────────────────────────────────────
 export async function sendReceiptByEmailService(
   orderId: number,
   email: string
 ): Promise<void> {
 
+  // 1️⃣ جيب بيانات الـ order
   const orders = await odooRequest(
     "pos.order",
     "search_read",
     [[["id", "=", orderId]]],
-    { fields: ["name", "amount_total"], limit: 1 }
+    {
+      fields: [
+        "name",
+        "amount_total",
+        "amount_tax",
+        "amount_paid",
+        "amount_return",
+        "date_order",
+        "user_id",
+        "partner_id",
+      ],
+      limit: 1,
+    }
   );
 
-  if (!orders || orders.length === 0) {
-    throw new Error("Order not found");
-  }
-
+  if (!orders?.length) throw new Error("Order not found");
   const order = orders[0];
 
-  // الخطوة 2: جيب PDF عبر report renderer
-  let pdfBase64: string | null = null;
+  // 2️⃣ جيب الـ lines
+  const lines = await odooRequest(
+    "pos.order.line",
+    "search_read",
+    [[["order_id", "=", orderId]]],
+    {
+      fields: [
+        "product_id",
+        "qty",
+        "price_unit",
+        "price_subtotal_incl",
+        "discount",
+      ],
+    }
+  );
 
-  try {
-    const reportResult = await odooRequest(
-      "ir.actions.report",
-      "render_qweb_pdf",
-      [["point_of_sale.report_receipt"], [orderId]],
-      {}
-    );
+  // 3️⃣ جيب طريقة الدفع
+  const payments = await odooRequest(
+    "pos.payment",
+    "search_read",
+    [[["pos_order_id", "=", orderId]]],
+    { fields: ["payment_method_id", "amount"] }
+  );
 
-    // النتيجة تكون [pdfBytes, "pdf"] — نأخذ الأول
-    pdfBase64 = Array.isArray(reportResult)
-      ? Buffer.from(reportResult[0]).toString("base64")
-      : null;
+  // 4️⃣ احسب القيم
+  const subtotal = order.amount_total - order.amount_tax;
+  const change =
+    order.amount_paid - order.amount_total > 0
+      ? order.amount_paid - order.amount_total
+      : 0;
+  const paymentMethod =
+    payments?.[0]?.payment_method_id?.[1] ?? "Cash";
 
-  } catch (reportErr) {
-    console.warn("PDF generation skipped:", reportErr);
-    // نكمل الإرسال بدون PDF
-  }
+  // 5️⃣ ابنِ الـ template data
+  const templateData = {
+    // بيانات الطلب
+    orderName: order.name,
+    dateOrder: new Date(order.date_order).toLocaleString("en-US", {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+    servedBy: order.user_id?.[1] ?? "Staff",
+    customerName: order.partner_id ? order.partner_id[1] : null,
+    orderType: "Dine In", // ← عدّل حسب مشروعك
 
-  // الخطوة 3: إنشاء الإيميل
-  const mailPayload: any = {
-    subject: `Your Receipt - ${order.name}`,
-    body_html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px;">
-        <h3 style="color: #1a1a1a;">Thank you for your purchase!</h3>
-        <p>Order: <strong>${order.name}</strong></p>
-        <p>Total: <strong>$${Number(order.amount_total).toFixed(2)}</strong></p>
-        <br/>
-        <p style="color: #666; font-size: 12px;">This is an automated receipt.</p>
-      </div>
-    `,
-    email_to: email,
-    auto_delete: true,
+    // المنتجات
+    lines: lines.map((l: any) => ({
+      qty: l.qty,
+      name: l.product_id[1],
+      priceUnit: Number(l.price_unit),
+      priceTotal: Number(l.price_subtotal_incl),
+      discount: Number(l.discount) || 0,
+    })),
+
+    // الأرقام
+    subtotal: Number(subtotal),
+    tax: Number(order.amount_tax),
+    total: Number(order.amount_total),
+    amountPaid: Number(order.amount_paid),
+    change: Number(change),
+    paymentMethod,
+
+    // بيانات المتجر — عدّلها
+    shopName: process.env.SHOP_NAME ?? "My Shop",
+    shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
+    shopAddress: process.env.SHOP_ADDRESS ?? "",
+    shopPhone: process.env.SHOP_PHONE ?? "",
+    shopEmail: process.env.SHOP_EMAIL ?? "",
+    logoUrl: process.env.SHOP_LOGO_URL ?? "",
+    ticketUrl: process.env.ODOO_TICKET_URL
+      ? `${process.env.ODOO_TICKET_URL}`
+      : null,
   };
 
-  // أضف المرفق فقط إذا نجح توليد الـ PDF
-  if (pdfBase64) {
-    mailPayload.attachment_ids = [
-      [0, 0, {
-        name: `receipt-${order.name}.pdf`,
-        datas: pdfBase64,
-        mimetype: "application/pdf",
-      }],
-    ];
-  }
+  // 6️⃣ رندر الـ EJS template
+  const templatePath = path.join(__dirname, "../templates/receiptEmail.ejs");
+  const htmlBody = await ejs.renderFile(templatePath, templateData);
 
-  // الخطوة 4: أنشئ وأرسل الإيميل
+  // 7️⃣ أنشئ الإيميل في Odoo
   const mailId = await odooRequest(
     "mail.mail",
     "create",
-    [mailPayload],
+    [
+      {
+        subject: `Your Receipt - ${order.name}`,
+        body_html: htmlBody,
+        email_to: email,
+        auto_delete: true,
+      },
+    ],
     {}
   );
 
+  // 8️⃣ أرسل
   await odooRequest("mail.mail", "send", [[mailId]], {});
 }
