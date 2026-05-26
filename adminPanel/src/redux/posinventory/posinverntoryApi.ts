@@ -93,6 +93,7 @@ export const inventoryApi = apiSlice.injectEndpoints({
         params: { range },
       }),
       providesTags: ["Inventory"],
+      keepUnusedDataFor: 0, 
     }),
 
     getInventorySummary: builder.query<GetInventorySummaryResponse, void>({
@@ -102,12 +103,10 @@ export const inventoryApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
       }),
       providesTags: ["Inventory"],
+      keepUnusedDataFor: 0,
     }),
 
-    getInventoryMovements: builder.query<
-      GetMovementsResponse,
-      GetMovementsParams
-    >({
+    getInventoryMovements: builder.query<GetMovementsResponse, GetMovementsParams>({
       query: ({ range = "week", limit = 50 } = {}) => ({
         url: "inventory/movements",
         method: "GET",
@@ -115,6 +114,7 @@ export const inventoryApi = apiSlice.injectEndpoints({
         params: { range, limit },
       }),
       providesTags: ["Inventory"],
+      keepUnusedDataFor: 0,
     }),
 
     getProductMovements: builder.query<

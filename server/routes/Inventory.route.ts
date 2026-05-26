@@ -9,7 +9,7 @@ import {
 
 const inventoryRouter = Router();
 
-// GET /inventory?range=day|week|month
+// GET /api/pos/inventory?range=day|week|month
 inventoryRouter.get(
   "/inventory",
   isAuthenticated,
@@ -17,7 +17,7 @@ inventoryRouter.get(
   getInventory
 );
 
-// GET /inventory/summary
+// GET /api/pos/inventory/summary
 inventoryRouter.get(
   "/inventory/summary",
   isAuthenticated,
@@ -25,7 +25,7 @@ inventoryRouter.get(
   getInventorySummary
 );
 
-// GET /inventory/movements?range=day|week|month&limit=50
+// GET /api/pos/inventory/movements?range=day|week|month&limit=50
 inventoryRouter.get(
   "/inventory/movements",
   isAuthenticated,
@@ -33,7 +33,7 @@ inventoryRouter.get(
   getInventoryMovements
 );
 
-// GET /inventory/product/:productId/movements?range=day|week|month
+// GET /api/pos/inventory/product/:productId/movements
 inventoryRouter.get(
   "/inventory/product/:productId/movements",
   isAuthenticated,
