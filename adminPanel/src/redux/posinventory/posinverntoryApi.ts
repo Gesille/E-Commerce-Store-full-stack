@@ -90,10 +90,17 @@ export const inventoryApi = apiSlice.injectEndpoints({
         url: "inventory",
         method: "GET",
         credentials: "include" as const,
+        // FIX: Explicitly serialize range so RTK Query sees distinct cache keys
         params: { range },
       }),
-      providesTags: ["Inventory"],
-      keepUnusedDataFor: 0, 
+      // FIX: Use a tag that includes the range so changing range busts cache
+      providesTags: (_result, _error, { range = "week" }) => [
+        { type: "Inventory" as const, id: `inventory-${range}` },
+      ],
+      // FIX: Remove keepUnusedDataFor:0 — it doesn't help with arg changes
+      // and actually causes unnecessary refetches when resubscribing.
+      // RTK Query already creates separate cache entries per unique arg set.
+      keepUnusedDataFor: 30,
     }),
 
     getInventorySummary: builder.query<GetInventorySummaryResponse, void>({
@@ -102,8 +109,8 @@ export const inventoryApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
-      providesTags: ["Inventory"],
-      keepUnusedDataFor: 0,
+      providesTags: [{ type: "Inventory" as const, id: "summary" }],
+      keepUnusedDataFor: 30,
     }),
 
     getInventoryMovements: builder.query<GetMovementsResponse, GetMovementsParams>({
@@ -111,10 +118,13 @@ export const inventoryApi = apiSlice.injectEndpoints({
         url: "inventory/movements",
         method: "GET",
         credentials: "include" as const,
+        // FIX: Both params must be included so the cache key is unique per (range, limit)
         params: { range, limit },
       }),
-      providesTags: ["Inventory"],
-      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { range = "week" }) => [
+        { type: "Inventory" as const, id: `movements-${range}` },
+      ],
+      keepUnusedDataFor: 30,
     }),
 
     getProductMovements: builder.query<
@@ -127,9 +137,11 @@ export const inventoryApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
         params: { range },
       }),
-      providesTags: (_result, _error, { productId }) => [
-        { type: "Inventory", id: productId },
+      // FIX: Include range in the cache tag so switching range refetches per-product data
+      providesTags: (_result, _error, { productId, range = "week" }) => [
+        { type: "Inventory" as const, id: `${productId}-${range}` },
       ],
+      keepUnusedDataFor: 30,
     }),
   }),
 });

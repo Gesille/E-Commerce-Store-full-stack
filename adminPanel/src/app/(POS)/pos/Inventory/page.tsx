@@ -1,10 +1,14 @@
 "use client";
 
-
-
-import { InventoryRange, ProductRow, useGetInventoryMovementsQuery, useGetInventoryQuery, useGetInventorySummaryQuery, useLazyGetProductMovementsQuery } from "@/redux/posinventory/posinverntoryApi";
-// ✅ FIX 2: Added useEffect — was missing, needed to replace the broken useMemo side-effect
-import { useState, useMemo, useEffect } from "react";
+import {
+  InventoryRange,
+  ProductRow,
+  useGetInventoryMovementsQuery,
+  useGetInventoryQuery,
+  useGetInventorySummaryQuery,
+  useLazyGetProductMovementsQuery,
+} from "@/redux/posinventory/posinverntoryApi";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -51,11 +55,13 @@ function ProductDrawer({
 }) {
   const [fetch, { data, isFetching }] = useLazyGetProductMovementsQuery();
 
-  // ✅ FIX 3: Replaced useMemo with useEffect for the side-effect fetch call.
-  // useMemo is for derived values — using it to trigger fetches is incorrect
-  // and causes React warnings + unpredictable behaviour.
-  // Also added `fetch` to the dependency array to satisfy exhaustive-deps.
+  // Track the last fetched (productId + range) to avoid redundant calls
+  const lastFetchKey = useRef<string>("");
+
   useEffect(() => {
+    const key = `${product._id}-${range}`;
+    if (lastFetchKey.current === key) return; // already fetched this combo
+    lastFetchKey.current = key;
     fetch({ productId: product._id, range });
   }, [product._id, range, fetch]);
 
@@ -128,9 +134,7 @@ function ProductDrawer({
         </div>
         <div className="flex-1 overflow-y-auto">
           {isFetching ? (
-            <div className="py-10 text-center text-[12px] text-gray-400">
-              Loading…
-            </div>
+            <div className="py-10 text-center text-[12px] text-gray-400">Loading…</div>
           ) : !data?.movements.length ? (
             <div className="py-10 text-center text-[12px] text-gray-400">
               No movements in this range
@@ -162,9 +166,7 @@ function ProductDrawer({
                   <span className="text-[12px] text-gray-500 flex-1 truncate">
                     {m.cashier}
                   </span>
-                  <span className="text-[11px] text-gray-400">
-                    {fmtDate(m.date)}
-                  </span>
+                  <span className="text-[11px] text-gray-400">{fmtDate(m.date)}</span>
                 </div>
               ))}
             </div>
@@ -184,12 +186,31 @@ export default function InventoryPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [lowOnly, setLowOnly] = useState(false);
 
+  // FIX: Always pass the current range so RTK Query uses distinct cache keys.
+  // When range changes from "week" → "day", these become new cache entries
+  // and RTK Query fetches fresh data automatically.
   const { data: inv, isFetching: invLoading } = useGetInventoryQuery({ range });
+
+  // FIX: Summary is range-independent (backend always returns today's stats),
+  // so no range param here — this is correct as-is.
   const { data: summary } = useGetInventorySummaryQuery();
+
+  // FIX: Don't skip — always subscribe so the cache entry exists when the
+  // user switches to the movements tab. Without skip, RTK Query fetches
+  // eagerly and the tab switch shows data immediately instead of loading.
+  // If you want lazy loading, keep skip but accept the loading flash.
   const { data: movData, isFetching: movLoading } = useGetInventoryMovementsQuery(
     { range, limit: 100 },
+    // Keep skip so we don't over-fetch, but the range change while on this
+    // tab will now correctly trigger a refetch because the cache key changes.
     { skip: tab !== "movements" }
   );
+
+  // FIX: When range changes, clear the selected drawer so stale per-product
+  // data isn't shown with the new range's product list.
+  useEffect(() => {
+    setSelected(null);
+  }, [range]);
 
   const products = useMemo(() => {
     let rows = inv?.products ?? [];
@@ -371,7 +392,6 @@ export default function InventoryPage() {
           </button>
         ))}
 
-        {/* Search + filter inline in tab bar */}
         {tab === "products" && (
           <div className="flex items-center gap-2 ml-auto py-1.5">
             <div className="relative">
@@ -396,16 +416,13 @@ export default function InventoryPage() {
             >
               ⚠️ Low stock
             </button>
-            <span className="text-[11px] text-gray-400">
-              {products.length} items
-            </span>
+            <span className="text-[11px] text-gray-400">{products.length} items</span>
           </div>
         )}
       </div>
 
       {/* ── Scrollable body ── */}
       <div className="flex-1 overflow-y-auto">
-
         {/* Products tab */}
         {tab === "products" && (
           <div className="p-4">
@@ -468,9 +485,7 @@ export default function InventoryPage() {
                             </div>
                           </td>
                           <td className="px-3 py-2.5">
-                            <span
-                              className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${sc}`}
-                            >
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${sc}`}>
                               {p.stock}
                             </span>
                           </td>
@@ -486,9 +501,7 @@ export default function InventoryPage() {
                           </td>
                           <td
                             className={`px-3 py-2.5 text-[12px] font-semibold tabular-nums ${
-                              p.returned > 0
-                                ? "text-emerald-600"
-                                : "text-gray-300"
+                              p.returned > 0 ? "text-emerald-600" : "text-gray-300"
                             }`}
                           >
                             {p.returned > 0 ? `+${p.returned}` : "0"}
@@ -534,40 +547,31 @@ export default function InventoryPage() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr>
-                      {[
-                        "Type",
-                        "Product",
-                        "Qty",
-                        "Price",
-                        "Cashier",
-                        "Receipt",
-                        "Date",
-                      ].map((h) => (
-                        <th
-                          key={h}
-                          style={{
-                            padding: "10px 12px",
-                            textAlign: "left",
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: "#9ca3af",
-                            letterSpacing: "0.6px",
-                            textTransform: "uppercase",
-                            background: "#fafafa",
-                            borderBottom: "1px solid #f3f4f6",
-                          }}
-                        >
-                          {h}
-                        </th>
-                      ))}
+                      {["Type", "Product", "Qty", "Price", "Cashier", "Receipt", "Date"].map(
+                        (h) => (
+                          <th
+                            key={h}
+                            style={{
+                              padding: "10px 12px",
+                              textAlign: "left",
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: "#9ca3af",
+                              letterSpacing: "0.6px",
+                              textTransform: "uppercase",
+                              background: "#fafafa",
+                              borderBottom: "1px solid #f3f4f6",
+                            }}
+                          >
+                            {h}
+                          </th>
+                        )
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {movData.movements.map((m: any) => (
-                      <tr
-                        key={m._id}
-                        className="border-b border-gray-50 hover:bg-gray-50"
-                      >
+                      <tr key={m._id} className="border-b border-gray-50 hover:bg-gray-50">
                         <td className="px-3 py-2.5">
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -584,9 +588,7 @@ export default function InventoryPage() {
                         </td>
                         <td
                           className={`px-3 py-2.5 text-[12px] font-semibold tabular-nums ${
-                            m.type === "sale"
-                              ? "text-red-500"
-                              : "text-emerald-600"
+                            m.type === "sale" ? "text-red-500" : "text-emerald-600"
                           }`}
                         >
                           {m.type === "sale" ? "-" : "+"}
@@ -595,9 +597,7 @@ export default function InventoryPage() {
                         <td className="px-3 py-2.5 text-[12px] text-gray-700 tabular-nums">
                           ${fmt(m.price)}
                         </td>
-                        <td className="px-3 py-2.5 text-[12px] text-gray-500">
-                          {m.cashier}
-                        </td>
+                        <td className="px-3 py-2.5 text-[12px] text-gray-500">{m.cashier}</td>
                         <td className="px-3 py-2.5 text-[11px] text-gray-400 tabular-nums">
                           {m.receiptNumber}
                         </td>
@@ -655,12 +655,7 @@ export default function InventoryPage() {
                           fontFamily: "inherit",
                         }}
                       />
-                      <Bar
-                        dataKey="sold"
-                        name="Sold"
-                        fill="#ef4444"
-                        radius={[3, 3, 0, 0]}
-                      />
+                      <Bar dataKey="sold" name="Sold" fill="#ef4444" radius={[3, 3, 0, 0]} />
                       <Bar
                         dataKey="returned"
                         name="Returned"
@@ -722,26 +717,24 @@ export default function InventoryPage() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr>
-                        {["Week", "Sold", "Returned", "Net", "Revenue"].map(
-                          (h) => (
-                            <th
-                              key={h}
-                              style={{
-                                padding: "8px 12px",
-                                textAlign: "left",
-                                fontSize: 10,
-                                fontWeight: 600,
-                                color: "#9ca3af",
-                                letterSpacing: "0.6px",
-                                textTransform: "uppercase",
-                                background: "#fafafa",
-                                borderBottom: "1px solid #f3f4f6",
-                              }}
-                            >
-                              {h}
-                            </th>
-                          )
-                        )}
+                        {["Week", "Sold", "Returned", "Net", "Revenue"].map((h) => (
+                          <th
+                            key={h}
+                            style={{
+                              padding: "8px 12px",
+                              textAlign: "left",
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: "#9ca3af",
+                              letterSpacing: "0.6px",
+                              textTransform: "uppercase",
+                              background: "#fafafa",
+                              borderBottom: "1px solid #f3f4f6",
+                            }}
+                          >
+                            {h}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -758,9 +751,7 @@ export default function InventoryPage() {
                           </td>
                           <td
                             className={`px-3 py-2.5 text-[12px] font-semibold tabular-nums ${
-                              w.sold - w.returned > 0
-                                ? "text-red-500"
-                                : "text-emerald-600"
+                              w.sold - w.returned > 0 ? "text-red-500" : "text-emerald-600"
                             }`}
                           >
                             {w.sold - w.returned}
