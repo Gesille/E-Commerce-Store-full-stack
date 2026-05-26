@@ -102,17 +102,7 @@ const POSSidebar = () => {
 
        
 
-        {/* INVENTORY */}
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
-            Inventory
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItem("/pos/Inventory", <Package size={16} />, "POSInventory")}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+       
 
         {/* BACK TO ADMIN */}
         <SidebarGroup className="mt-2">
