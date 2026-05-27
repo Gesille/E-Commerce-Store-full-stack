@@ -172,9 +172,7 @@ export function PrintableReceipt({
         <div className="pr-xs pr-muted pr-mt1">
           Please keep this receipt for your records.
         </div>
-        <div className="pr-barcode pr-mt2">
-          {"| ||| || | ||| | || ||| ||"}
-        </div>
+       
         <div className="pr-xs pr-muted">{receiptNo}</div>
       </div>
 
@@ -200,15 +198,26 @@ export function usePrintReceipt() {
 
     try {
       // 2. Capture to canvas at 3× scale for sharp print output
-     const canvas = await html2canvas(receipt, {
+const canvas = await html2canvas(receipt, {
   scale: 3,
   useCORS: true,
   backgroundColor: "#ffffff",
-  width: 302,
-  windowWidth: 302,
+  width: receipt.scrollWidth,      // ← use actual width, not hardcoded
+  height: receipt.scrollHeight,    // ← use actual height too
+  windowWidth: receipt.scrollWidth,
+  x: 0,                            // ← no horizontal offset
+  y: 0,
+  scrollX: 0,
+  scrollY: 0,
   logging: false,
   onclone: (clonedDoc) => {
-    // Inject the same styles the iframe uses when printing
+    const el = clonedDoc.getElementById("printable-receipt");
+    if (el) {
+      el.style.display = "block";
+      el.style.width = "302px";
+      el.style.padding = "3mm 4mm";
+      el.style.overflow = "visible";
+    }
     const style = clonedDoc.createElement("style");
     style.textContent = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -218,11 +227,13 @@ export function usePrintReceipt() {
         color: #000;
         width: 302px;
         background: #fff;
+        overflow: visible;
       }
       #printable-receipt {
         display: block !important;
         width: 302px;
         padding: 3mm 4mm;
+        overflow: visible;
       }
       .pr-header {
         text-align: center;
@@ -311,7 +322,6 @@ export function usePrintReceipt() {
     clonedDoc.head.appendChild(style);
   },
 });
-
       const imgDataUrl = canvas.toDataURL("image/png");
 
       // 3. Build a minimal iframe that prints just the image
@@ -375,12 +385,13 @@ export function usePrintReceipt() {
       };
     } finally {
       // 4. Hide receipt again
-      receipt.style.display = "";
-      receipt.style.visibility = "";
-      receipt.style.position = "";
-      receipt.style.top = "";
-      receipt.style.left = "";
-      receipt.style.width = "";
+     receipt.style.display = "block";
+receipt.style.visibility = "visible";
+receipt.style.position = "fixed";
+receipt.style.top = "-9999px";
+receipt.style.left = "0";
+receipt.style.width = "310px";   // ← slightly wider to account for padding
+receipt.style.overflow = "visible";
     }
   };
 
