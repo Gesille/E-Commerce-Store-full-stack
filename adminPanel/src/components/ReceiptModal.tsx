@@ -5,6 +5,7 @@ import {
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
 import { useState } from "react";
+import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
@@ -48,8 +49,9 @@ export function ReceiptModal({
     pdfUrl?: string;
     message?: string;
   }>({ status: "idle" });
+  const { printReceipt } = usePrintReceipt();
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => printReceipt();
 
   const handleCreateInvoice = async () => {
     if (!odooOrderId) return;
@@ -283,6 +285,13 @@ export function ReceiptModal({
           </div>
         </div>
       )}
+      <PrintableReceipt
+        cart={order.cart}
+        customer={customer}
+        paymentLines={paymentLines}
+        odooOrderId={odooOrderId}
+        receiptNo={receiptNo}
+      />
     </div>
   );
 }
