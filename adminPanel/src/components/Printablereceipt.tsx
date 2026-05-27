@@ -1,4 +1,5 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
+import "../app/(dashboard)/Printable.css";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,11 +50,11 @@ export function PrintableReceipt({
     minute: "2-digit",
   });
 
-  const shopName = "Chef's World";
+  const shopName = import.meta.env.VITE_SHOP_NAME ?? "Chef's World";
   const shopTagline =
-  "Restaurant, Bar & Kitchen Supplies";
-    const shopAddress = "123 Main St, Anytown, USA";
-    const shopPhone = "(555) 123-4567";
+    import.meta.env.VITE_SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies";
+  const shopAddress = import.meta.env.VITE_SHOP_ADDRESS ?? "";
+  const shopPhone = import.meta.env.VITE_SHOP_PHONE ?? "";
 
   return (
     /*
@@ -61,132 +62,6 @@ export function PrintableReceipt({
      * On screen it stays hidden so it doesn't break the modal layout.
      */
     <div id="printable-receipt" className="hidden print:block">
-      <style>{`
-        /* ── injected print styles ── */
-        @media print {
-          /* hide everything on the page */
-          body * { visibility: hidden !important; }
-
-          /* then show only the receipt and its children */
-          #printable-receipt,
-          #printable-receipt * { visibility: visible !important; }
-
-          /* position it at the top-left so nothing is cut off */
-          #printable-receipt {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-          }
-
-          @page {
-            size: 80mm auto;   /* thermal paper width */
-            margin: 0;
-          }
-
-          body {
-            margin: 0;
-            background: #fff;
-          }
-
-          #printable-receipt {
-            display: block !important;
-            visibility: visible !important;
-            width: 80mm;
-            max-width: 80mm;
-            margin: 0 auto;
-            padding: 6mm 5mm 10mm;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11pt;
-            color: #000;
-            background: #fff;
-          }
-
-          .pr-center   { text-align: center; }
-          .pr-right    { text-align: right; }
-          .pr-bold     { font-weight: 700; }
-          .pr-large    { font-size: 14pt; font-weight: 700; }
-          .pr-small    { font-size: 9pt; }
-          .pr-xs       { font-size: 8pt; }
-          .pr-muted    { color: #555; }
-          .pr-mt1      { margin-top: 3mm; }
-          .pr-mt2      { margin-top: 5mm; }
-          .pr-mt3      { margin-top: 8mm; }
-          .pr-mb1      { margin-bottom: 3mm; }
-
-          .pr-dash {
-            border: none;
-            border-top: 1px dashed #000;
-            margin: 3mm 0;
-          }
-
-          .pr-solid {
-            border: none;
-            border-top: 1.5px solid #000;
-            margin: 3mm 0;
-          }
-
-          .pr-double {
-            border: none;
-            border-top: 3px double #000;
-            margin: 3mm 0;
-          }
-
-          /* row: two cells left + right */
-          .pr-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            line-height: 1.6;
-          }
-
-          .pr-row .pr-name {
-            flex: 1;
-            padding-right: 4mm;
-            word-break: break-word;
-          }
-
-          .pr-row .pr-qty {
-            width: 10mm;
-            text-align: center;
-            flex-shrink: 0;
-          }
-
-          .pr-row .pr-price {
-            width: 16mm;
-            text-align: right;
-            flex-shrink: 0;
-          }
-
-          .pr-row .pr-total {
-            width: 18mm;
-            text-align: right;
-            flex-shrink: 0;
-          }
-
-          .pr-total-row {
-            display: flex;
-            justify-content: space-between;
-            line-height: 1.7;
-          }
-
-          .pr-grand {
-            font-size: 13pt;
-            font-weight: 700;
-          }
-
-          .pr-barcode {
-            font-family: 'Courier New', monospace;
-            font-size: 8pt;
-            letter-spacing: 0.1em;
-            text-align: center;
-            margin-top: 2mm;
-          }
-
-          /* suppress everything else */
-          .pr-screen-only { display: none !important; }
-        }
-      `}</style>
-
       {/* ═══ SHOP HEADER ═══ */}
       <div className="pr-center pr-bold pr-large">{shopName}</div>
       {shopTagline && (
