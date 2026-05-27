@@ -1,5 +1,6 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 import "../app/(dashboard)/Printable.css";
+import html2canvas from "html2canvas-pro";
 
 function fmt(n: number) {
   return n.toFixed(2);
@@ -182,7 +183,7 @@ export function PrintableReceipt({
 }
 
 
-import html2canvas from "html2canvas";
+
 
 export function usePrintReceipt() {
   const printReceipt = async () => {
