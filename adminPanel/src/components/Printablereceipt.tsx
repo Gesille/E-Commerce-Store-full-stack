@@ -188,7 +188,6 @@ export function usePrintReceipt() {
 
     const receiptHTML = receipt.innerHTML;
 
-    // Remove old iframe if exists
     const existing = document.getElementById('__print_frame__');
     if (existing) existing.remove();
 
@@ -220,7 +219,7 @@ export function usePrintReceipt() {
           <style>
             @page {
               size: 80mm auto;
-              margin: 2mm;
+              margin: 0;
             }
             * {
               box-sizing: border-box;
@@ -233,44 +232,55 @@ export function usePrintReceipt() {
               font-family: Arial, Helvetica, sans-serif;
               font-size: 11pt;
               color: #000;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
+
+            /* NO border on wrapper — use padding instead so nothing gets clipped */
             .receipt-wrapper {
-              width: 76mm;
-              border: 1.5px solid #000;
+              width: 80mm;
+              padding: 3mm 4mm;
             }
 
             /* HEADER */
             .pr-header {
               text-align: center;
-              padding: 4mm 3mm 3mm;
+              padding: 4mm 2mm 3mm;
               border-bottom: 2px solid #000;
+              margin-bottom: 2mm;
             }
             .pr-header .pr-large {
-              font-size: 17pt;
+              font-size: 18pt;
               font-weight: 900;
               letter-spacing: 2px;
               text-transform: uppercase;
               display: block;
+              color: #000;
             }
             .pr-header .pr-small {
               font-size: 10pt;
+              font-weight: 500;
               margin-top: 1mm;
               display: block;
+              color: #000;
             }
             .pr-header .pr-xs {
               font-size: 9.5pt;
+              font-weight: 400;
               margin-top: 0.5mm;
               display: block;
+              color: #000;
             }
 
             /* BODY */
-            .pr-body { padding: 3mm 3.5mm; }
+            .pr-body { padding: 2mm 0; }
 
             /* FOOTER */
             .pr-footer {
               border-top: 2px solid #000;
               text-align: center;
-              padding: 3mm 3mm 5mm;
+              padding: 3mm 0 4mm;
+              margin-top: 2mm;
             }
 
             /* Typography */
@@ -301,9 +311,9 @@ export function usePrintReceipt() {
               width: 100%;
               line-height: 1.6;
             }
-            .pr-row .pr-name  { flex: 1 1 auto; padding-right: 1mm; word-break: break-word; min-width: 0; }
-            .pr-row .pr-qty   { flex: 0 0 8mm;  text-align: center; }
-            .pr-row .pr-price { flex: 0 0 16mm; text-align: right; }
+            .pr-row .pr-name  { flex: 1 1 auto; padding-right: 2mm; word-break: break-word; min-width: 0; }
+            .pr-row .pr-qty   { flex: 0 0 9mm;  text-align: center; }
+            .pr-row .pr-price { flex: 0 0 17mm; text-align: right; }
             .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
 
             /* Totals */
@@ -313,21 +323,24 @@ export function usePrintReceipt() {
               width: 100%;
               line-height: 1.7;
             }
-            .pr-grand { font-size: 14pt; font-weight: 900; }
+            .pr-grand {
+              font-size: 15pt;
+              font-weight: 900;
+            }
 
             /* Column headers */
             .pr-col-header {
               display: flex;
               justify-content: space-between;
               width: 100%;
-              font-size: 9pt;
+              font-size: 9.5pt;
               font-weight: 700;
               text-transform: uppercase;
               letter-spacing: 0.5px;
             }
             .pr-col-header .pr-name  { flex: 1 1 auto; }
-            .pr-col-header .pr-qty   { flex: 0 0 8mm;  text-align: center; }
-            .pr-col-header .pr-price { flex: 0 0 16mm; text-align: right; }
+            .pr-col-header .pr-qty   { flex: 0 0 9mm;  text-align: center; }
+            .pr-col-header .pr-price { flex: 0 0 17mm; text-align: right; }
             .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
 
             /* Barcode */
@@ -338,6 +351,9 @@ export function usePrintReceipt() {
               text-align: center;
               margin-top: 2mm;
             }
+
+            /* Hide stray elements */
+            .pr-screen-only { display: none !important; }
           </style>
         </head>
         <body>
@@ -349,7 +365,6 @@ export function usePrintReceipt() {
     `);
     doc.close();
 
-    // Wait for iframe to load then print it
     iframe.onload = () => {
       setTimeout(() => {
         iframe.contentWindow?.focus();
