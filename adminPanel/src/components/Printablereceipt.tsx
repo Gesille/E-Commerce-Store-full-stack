@@ -1,5 +1,4 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
-import "../app/(dashboard)/Printable.css";
 
 function fmt(n: number) {
   return n.toFixed(2);
@@ -50,153 +49,132 @@ export function PrintableReceipt({
 
   return (
     <div id="printable-receipt" className="hidden print:block">
-
-      {/* ═══ DARK HEADER ═══ */}
       <div className="pr-header">
-        <div className="pr-large">{shopName}</div>
-        {shopTagline && <div className="pr-small pr-mt1">{shopTagline}</div>}
-        {shopAddress && <div className="pr-xs">{shopAddress}</div>}
-        {shopPhone   && <div className="pr-xs">{shopPhone}</div>}
+        <div className="pr-shop-name">{shopName}</div>
+        <div className="pr-divider-thick" />
+        {shopTagline && <div className="pr-tagline">{shopTagline}</div>}
+        {shopAddress && <div className="pr-address">{shopAddress}</div>}
+        {shopPhone   && <div className="pr-address">{shopPhone}</div>}
       </div>
 
-      {/* ═══ BODY ═══ */}
       <div className="pr-body">
-
-        {/* Order meta */}
-        <div className="pr-small pr-mt1">
-          <div className="pr-row">
-            <span className="pr-muted">Date:</span>
+        <div className="pr-meta">
+          <div className="pr-meta-row">
+            <span>Date</span>
             <span>{dateStr}</span>
           </div>
-          <div className="pr-row">
-            <span className="pr-muted">Receipt:</span>
+          <div className="pr-meta-row">
+            <span>Receipt</span>
             <span className="pr-bold">{receiptNo}</span>
           </div>
           {odooOrderId && (
-            <div className="pr-row">
-              <span className="pr-muted">Order ID:</span>
+            <div className="pr-meta-row">
+              <span>Order ID</span>
               <span>#{odooOrderId}</span>
             </div>
           )}
           {customer && (
-            <div className="pr-row">
-              <span className="pr-muted">Customer:</span>
+            <div className="pr-meta-row">
+              <span>Customer</span>
               <span>{customer.name}</span>
             </div>
           )}
         </div>
 
-        <hr className="pr-solid pr-mt2" />
+        <div className="pr-divider-dash" />
 
-        {/* Column headers */}
         <div className="pr-col-header">
-          <span className="pr-name">Item</span>
-          <span className="pr-qty">Qty</span>
-          <span className="pr-price">Price</span>
-          <span className="pr-total">Total</span>
+          <span className="pr-col-item">ITEM</span>
+          <span className="pr-col-qty">QTY</span>
+          <span className="pr-col-price">PRICE</span>
+          <span className="pr-col-total">TOTAL</span>
         </div>
 
-        <hr className="pr-dash" />
+        <div className="pr-divider-solid" />
 
-        {/* Line items */}
         {cart.map((item, idx) => {
           const lineTotal = calcLineTotal(item);
           return (
-            <div key={idx} className="pr-small">
-              <div className="pr-row">
-                <span className="pr-name pr-bold">{item.name}</span>
-                <span className="pr-qty">{item.qty}</span>
-                <span className="pr-price">${fmt(item.price)}</span>
-                <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
+            <div key={idx} className="pr-line-item">
+              <div className="pr-line-row">
+                <span className="pr-col-item pr-bold">{item.name}</span>
+                <span className="pr-col-qty">{item.qty}</span>
+                <span className="pr-col-price">${fmt(item.price)}</span>
+                <span className="pr-col-total pr-bold">${fmt(lineTotal)}</span>
               </div>
               {(item.discount ?? 0) > 0 && (
-                <div className="pr-row pr-xs pr-muted">
-                  <span className="pr-name">&nbsp;&nbsp;Discount {item.discount}%</span>
-                  <span className="pr-total">
-                    -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
-                  </span>
+                <div className="pr-discount-row">
+                  <span>Discount {item.discount}%</span>
+                  <span>-${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
                 </div>
               )}
             </div>
           );
         })}
 
-        <hr className="pr-dash" />
+        <div className="pr-divider-solid" />
 
-        {/* Subtotals */}
-        <div className="pr-small">
-          <div className="pr-total-row">
-            <span className="pr-muted">Subtotal</span>
+        <div className="pr-subtotals">
+          <div className="pr-subtotal-row">
+            <span>Subtotal</span>
             <span>${fmt(subtotal)}</span>
           </div>
-          <div className="pr-total-row">
-            <span className="pr-muted">Tax (10%)</span>
+          <div className="pr-subtotal-row">
+            <span>Tax (10%)</span>
             <span>${fmt(tax)}</span>
           </div>
         </div>
 
-        <hr className="pr-double" />
+        <div className="pr-divider-thick" />
 
-        {/* Grand total */}
-        <div className="pr-total-row pr-grand">
+        <div className="pr-grand-total">
           <span>TOTAL</span>
           <span>${fmt(total)}</span>
         </div>
 
-        <hr className="pr-dash pr-mt1" />
+        <div className="pr-divider-dash" />
 
-        {/* Payments */}
-        <div className="pr-small pr-mt1">
+        <div className="pr-payments">
           {paymentLines.map((l, idx) => (
-            <div key={idx} className="pr-total-row">
-              <span className="pr-muted" style={{ textTransform: "capitalize" }}>
-                {l.method}
-              </span>
+            <div key={idx} className="pr-subtotal-row">
+              <span style={{ textTransform: "capitalize" }}>{l.method}</span>
               <span>${fmt(l.amount)}</span>
             </div>
           ))}
           {change > 0.005 && (
-            <div className="pr-total-row pr-bold">
+            <div className="pr-subtotal-row pr-bold">
               <span>Change</span>
               <span>${fmt(change)}</span>
             </div>
           )}
         </div>
-
-      </div>{/* end pr-body */}
-
-      {/* ═══ LIGHT FOOTER ═══ */}
-      <div className="pr-footer">
-        <div className="pr-small pr-bold">Thank you for your visit!</div>
-        <div className="pr-xs pr-muted pr-mt1">
-          Please keep this receipt for your records.
-        </div>
-        <div className="pr-barcode pr-mt2">
-          {"| ||| || | ||| | || ||| ||"}
-        </div>
-        <div className="pr-xs pr-muted">{receiptNo}</div>
       </div>
 
+      <div className="pr-footer">
+        <div className="pr-divider-wave">~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~</div>
+        <div className="pr-thank-you">Thank you for your visit!</div>
+        <div className="pr-footer-note">Please keep this receipt for your records.</div>
+        <div className="pr-barcode">| ||| || | ||| | || ||| ||</div>
+        <div className="pr-receipt-no">{receiptNo}</div>
+      </div>
     </div>
   );
 }
 
 export function usePrintReceipt() {
   const printReceipt = () => {
-    const receipt = document.getElementById('printable-receipt');
+    const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
     const receiptHTML = receipt.innerHTML;
-
-    const existing = document.getElementById('__print_frame__');
+    const existing = document.getElementById("__print_frame__");
     if (existing) existing.remove();
 
-    const iframe = document.createElement('iframe');
-    iframe.id = '__print_frame__';
+    const iframe = document.createElement("iframe");
+    iframe.id = "__print_frame__";
     iframe.style.cssText = `
       position: fixed;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       width: 80mm;
       height: 100%;
       border: none;
@@ -204,7 +182,6 @@ export function usePrintReceipt() {
       pointer-events: none;
       z-index: -1;
     `;
-
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -221,139 +198,165 @@ export function usePrintReceipt() {
               size: 80mm auto;
               margin: 0;
             }
+
             * {
               box-sizing: border-box;
               margin: 0;
               padding: 0;
             }
+
             html, body {
               width: 80mm;
               background: #fff;
-              font-family: Arial, Helvetica, sans-serif;
-              font-size: 11pt;
               color: #000;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 10.5pt;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
 
-            /* NO border on wrapper — use padding instead so nothing gets clipped */
+            /* ── WRAPPER: full-width, symmetric padding so nothing clips ── */
             .receipt-wrapper {
               width: 80mm;
-              padding: 3mm 4mm;
+              padding: 0 5mm;   /* equal left & right so content is centered */
             }
 
-            /* HEADER */
+            /* ══ HEADER ══ */
             .pr-header {
               text-align: center;
-              padding: 4mm 2mm 3mm;
-              border-bottom: 2px solid #000;
-              margin-bottom: 2mm;
+              padding: 5mm 0 3mm;
             }
-            .pr-header .pr-large {
-              font-size: 18pt;
+            .pr-shop-name {
+              font-size: 20pt;
               font-weight: 900;
-              letter-spacing: 2px;
+              letter-spacing: 3px;
               text-transform: uppercase;
-              display: block;
-              color: #000;
             }
-            .pr-header .pr-small {
-              font-size: 10pt;
-              font-weight: 500;
-              margin-top: 1mm;
-              display: block;
-              color: #000;
-            }
-            .pr-header .pr-xs {
-              font-size: 9.5pt;
-              font-weight: 400;
-              margin-top: 0.5mm;
-              display: block;
-              color: #000;
-            }
-
-            /* BODY */
-            .pr-body { padding: 2mm 0; }
-
-            /* FOOTER */
-            .pr-footer {
-              border-top: 2px solid #000;
-              text-align: center;
-              padding: 3mm 0 4mm;
-              margin-top: 2mm;
-            }
-
-            /* Typography */
-            .pr-center { text-align: center; }
-            .pr-right  { text-align: right; }
-            .pr-bold   { font-weight: 700; }
-            .pr-large  { font-size: 13pt; font-weight: 700; }
-            .pr-small  { font-size: 10pt; }
-            .pr-xs     { font-size: 9.5pt; }
-            .pr-muted  { color: #000; }
-
-            /* Spacing */
-            .pr-mt1 { margin-top: 2mm; }
-            .pr-mt2 { margin-top: 4mm; }
-            .pr-mt3 { margin-top: 6mm; }
-            .pr-mb1 { margin-bottom: 2mm; }
-
-            /* Dividers */
-            .pr-dash   { border: none; border-top: 1px dashed #000; margin: 2.5mm 0; }
-            .pr-solid  { border: none; border-top: 1.5px solid #000; margin: 2.5mm 0; }
-            .pr-double { border: none; border-top: 3px double #000;  margin: 2.5mm 0; }
-
-            /* Row layout */
-            .pr-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: baseline;
-              width: 100%;
-              line-height: 1.6;
-            }
-            .pr-row .pr-name  { flex: 1 1 auto; padding-right: 2mm; word-break: break-word; min-width: 0; }
-            .pr-row .pr-qty   { flex: 0 0 9mm;  text-align: center; }
-            .pr-row .pr-price { flex: 0 0 17mm; text-align: right; }
-            .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
-
-            /* Totals */
-            .pr-total-row {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              line-height: 1.7;
-            }
-            .pr-grand {
-              font-size: 15pt;
-              font-weight: 900;
-            }
-
-            /* Column headers */
-            .pr-col-header {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              font-size: 9.5pt;
-              font-weight: 700;
-              text-transform: uppercase;
+            .pr-tagline {
+              font-size: 9pt;
+              margin-top: 1.5mm;
               letter-spacing: 0.5px;
             }
-            .pr-col-header .pr-name  { flex: 1 1 auto; }
-            .pr-col-header .pr-qty   { flex: 0 0 9mm;  text-align: center; }
-            .pr-col-header .pr-price { flex: 0 0 17mm; text-align: right; }
-            .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
-
-            /* Barcode */
-            .pr-barcode {
-              font-family: 'Courier New', monospace;
-              font-size: 10pt;
-              letter-spacing: 4px;
-              text-align: center;
-              margin-top: 2mm;
+            .pr-address {
+              font-size: 8.5pt;
+              margin-top: 0.8mm;
             }
 
-            /* Hide stray elements */
-            .pr-screen-only { display: none !important; }
+            /* ══ BODY ══ */
+            .pr-body {
+              padding: 2mm 0;
+            }
+
+            /* Meta rows (Date, Receipt, etc.) */
+            .pr-meta {
+              margin: 2mm 0;
+            }
+            .pr-meta-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 9.5pt;
+              line-height: 1.7;
+            }
+
+            /* Column header */
+            .pr-col-header {
+              display: flex;
+              font-size: 9pt;
+              font-weight: 900;
+              letter-spacing: 0.8px;
+              text-transform: uppercase;
+              margin: 1.5mm 0;
+            }
+
+            /* Line items */
+            .pr-line-item { margin-bottom: 1mm; }
+            .pr-line-row {
+              display: flex;
+              align-items: baseline;
+              font-size: 10pt;
+              line-height: 1.6;
+            }
+            .pr-discount-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 8.5pt;
+              padding-left: 3mm;
+            }
+
+            /* Shared column widths */
+            .pr-col-item  { flex: 1 1 auto; word-break: break-word; min-width: 0; padding-right: 2mm; }
+            .pr-col-qty   { flex: 0 0 8mm;  text-align: center; }
+            .pr-col-price { flex: 0 0 16mm; text-align: right; }
+            .pr-col-total { flex: 0 0 16mm; text-align: right; }
+
+            /* Subtotals */
+            .pr-subtotals { margin: 1mm 0; }
+            .pr-subtotal-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 9.5pt;
+              line-height: 1.7;
+            }
+
+            /* Grand total */
+            .pr-grand-total {
+              display: flex;
+              justify-content: space-between;
+              font-size: 16pt;
+              font-weight: 900;
+              letter-spacing: 1px;
+              margin: 1.5mm 0;
+            }
+
+            /* Payments */
+            .pr-payments { margin: 1mm 0; }
+
+            /* ══ FOOTER ══ */
+            .pr-footer {
+              text-align: center;
+              padding: 2mm 0 5mm;
+            }
+            .pr-divider-wave {
+              font-size: 9pt;
+              letter-spacing: 1px;
+              margin: 2mm 0;
+            }
+            .pr-thank-you {
+              font-size: 11pt;
+              font-weight: 900;
+              text-transform: uppercase;
+              letter-spacing: 1.5px;
+              margin-bottom: 1mm;
+            }
+            .pr-footer-note {
+              font-size: 8.5pt;
+              margin-bottom: 3mm;
+            }
+            .pr-barcode {
+              font-size: 10pt;
+              letter-spacing: 5px;
+              margin-bottom: 1mm;
+            }
+            .pr-receipt-no {
+              font-size: 8pt;
+            }
+
+            /* ══ DIVIDERS ══ */
+            .pr-divider-thick {
+              border-top: 2.5px solid #000;
+              margin: 2mm 0;
+            }
+            .pr-divider-solid {
+              border-top: 1px solid #000;
+              margin: 2mm 0;
+            }
+            .pr-divider-dash {
+              border-top: 1px dashed #000;
+              margin: 2mm 0;
+            }
+
+            /* ══ UTILS ══ */
+            .pr-bold { font-weight: 700; }
           </style>
         </head>
         <body>
