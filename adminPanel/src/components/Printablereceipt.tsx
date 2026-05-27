@@ -166,14 +166,12 @@ export function PrintableReceipt({
       </div>{/* end pr-body */}
 
       {/* ═══ LIGHT FOOTER ═══ */}
-      <div className="pr-footer">
+      <div className="pr-footer text-center">
         <div className="pr-small pr-bold">Thank you for your visit!</div>
         <div className="pr-xs pr-muted pr-mt1">
           Please keep this receipt for your records.
         </div>
-        <div className="pr-barcode pr-mt2">
-          {"| ||| || | ||| | || ||| ||"}
-        </div>
+        
         <div className="pr-xs pr-muted">{receiptNo}</div>
       </div>
 
