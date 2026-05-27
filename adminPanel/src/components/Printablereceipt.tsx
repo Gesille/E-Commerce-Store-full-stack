@@ -186,60 +186,99 @@ export function PrintableReceipt({
 
 
 export function usePrintReceipt() {
-  const printReceipt = () => {
+  const printReceipt = async () => {
     const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    // Grab all stylesheets from the current page
-    const styles = Array.from(document.styleSheets)
-      .map((sheet) => {
-        try {
-          return Array.from(sheet.cssRules)
-            .map((rule) => rule.cssText)
-            .join("\n");
-        } catch {
-          // cross-origin sheets — link them instead
-          return sheet.href
-            ? `@import url("${sheet.href}");`
-            : "";
-        }
-      })
-      .join("\n");
+    // 1. Temporarily reveal the receipt so html2canvas can read it
+    receipt.style.display = "block";
+    receipt.style.visibility = "visible";
+    receipt.style.position = "fixed";
+    receipt.style.top = "-9999px";
+    receipt.style.left = "0";
+    receipt.style.width = "302px"; // 80mm at 96dpi
 
-    const popup = window.open("", "_blank", "width=400,height=800");
-    if (!popup) return;
+    try {
+      // 2. Capture to canvas at 3× scale for sharp print output
+      const canvas = await html2canvas(receipt, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        width: 302,
+        windowWidth: 302,
+        logging: false,
+      });
 
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8"/>
-          <style>
-            ${styles}
-            @page { size: 80mm auto; margin: 0; }
-            * { box-sizing: border-box; }
-            body { width: 80mm; margin: 0; padding: 0;
-                   -webkit-print-color-adjust: exact;
-                   print-color-adjust: exact; }
-          </style>
-        </head>
-        <body>${receipt.outerHTML}</body>
-      </html>
-    `);
-    popup.document.close();
+      const imgDataUrl = canvas.toDataURL("image/png");
 
-    // Make the cloned receipt visible inside the popup
-    const clone = popup.document.getElementById("printable-receipt");
-    if (clone) {
-      clone.style.display = "block";
-      clone.style.visibility = "visible";
+      // 3. Build a minimal iframe that prints just the image
+      const existing = document.getElementById("__print_frame__");
+      if (existing) existing.remove();
+
+      const iframe = document.createElement("iframe");
+      iframe.id = "__print_frame__";
+      iframe.style.cssText = `
+        position: fixed;
+        top: 0; left: 0;
+        width: 80mm;
+        height: 1px;
+        border: none;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
+      `;
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8"/>
+            <style>
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              html, body {
+                width: 80mm;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                width: 80mm;
+                display: block;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${imgDataUrl}" />
+          </body>
+        </html>
+      `);
+      doc.close();
+
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => iframe.remove(), 2000);
+        }, 300);
+      };
+    } finally {
+      // 4. Hide receipt again
+      receipt.style.display = "";
+      receipt.style.visibility = "";
+      receipt.style.position = "";
+      receipt.style.top = "";
+      receipt.style.left = "";
+      receipt.style.width = "";
     }
-
-    popup.onload = () => {
-      popup.focus();
-      popup.print();
-      popup.close();
-    };
   };
 
   return { printReceipt };
