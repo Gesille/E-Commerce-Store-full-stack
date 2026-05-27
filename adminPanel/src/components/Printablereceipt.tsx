@@ -1,12 +1,11 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
-import html2canvas from "html2canvas-pro";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const FONT       = "Georgia, 'Times New Roman', serif";
-const FONT_SIZE  = "17px";
-const FONT_SHOP  = "26px";
-const FONT_TOTAL = "20px";
-const RECEIPT_W  = 302;      // px — 80 mm at 96 dpi
+const FONT_SIZE  = "14px";
+const FONT_SHOP  = "22px";
+const FONT_TOTAL = "17px";
+const RECEIPT_W  = "72mm";   // slightly inside 80mm to give natural margins
 
 const shopName    = "Chef's World";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
@@ -24,24 +23,6 @@ function calcOrderTotals(cart: CartItem[]) {
   const total    = subtotal + tax;
   return { subtotal, tax, total };
 }
-
-// ─── Shared style atoms ────────────────────────────────────────────────────
-const S = {
-  base: {
-    fontFamily: FONT,
-    fontSize:   FONT_SIZE,
-    color:      "#000000",
-    background: "#ffffff",
-    margin:     0,
-    padding:    0,
-    lineHeight: "1.6",
-  } as React.CSSProperties,
-  center:  { textAlign: "center"  } as React.CSSProperties,
-  bold:    { fontWeight: "bold"   } as React.CSSProperties,
-  small:   { fontSize: "13px"     } as React.CSSProperties,
-  row:     { display: "flex", justifyContent: "space-between", alignItems: "baseline" } as React.CSSProperties,
-  grid:    { display: "grid", gridTemplateColumns: "1fr 32px 60px 64px", gap: "0 4px", alignItems: "baseline" } as React.CSSProperties,
-};
 
 // ─── Component ─────────────────────────────────────────────────────────────
 interface PrintableReceiptProps {
@@ -64,203 +45,270 @@ export function PrintableReceipt({
     hour: "2-digit", minute: "2-digit",
   });
 
-  return (
-    // Outer wrapper — hidden by default, shown during capture
-    <div id="printable-receipt" style={{ display: "none" }}>
-      {/* Inner receipt — this is what gets captured */}
-      <div
-        id="printable-receipt-inner"
-        style={{
-          ...S.base,
-          width:      `${RECEIPT_W}px`,
-          background: "#ffffff",
-          boxSizing:  "border-box",
-        }}
-      >
-        {/* ── HEADER ── */}
-        <div style={{
-          ...S.center,
-          padding:      "14px 24px 10px",
-          borderBottom: "2px solid #000000",
-          background:   "#ffffff",
-          boxSizing:    "border-box",
-        }}>
-          <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
-            {shopName.toUpperCase()}
-          </div>
-          <div style={{ ...S.small, marginTop: "4px", color: "#000000" }}>{shopTagline}</div>
-          <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
-          <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
-        </div>
+  // Not rendered on screen at all — built dynamically in the hook
+  return null;
+}
 
-        {/* ── META ── */}
-        <div style={{ ...S.center, padding: "8px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-          <div style={{ ...S.small, color: "#000000" }}>{dateStr}</div>
-          <div style={{ ...S.bold, color: "#000000" }}>Receipt: {receiptNo}</div>
-          {odooOrderId && <div style={{ ...S.small, color: "#000000" }}>Order ID: #{odooOrderId}</div>}
-          {customer    && <div style={{ ...S.small, color: "#000000" }}>Customer: {customer.name}</div>}
-        </div>
+// ─── Build receipt HTML string ─────────────────────────────────────────────
+function buildReceiptHTML(
+  cart: CartItem[],
+  customer: Customer | null,
+  paymentLines: PaymentLine[],
+  odooOrderId: number | undefined,
+  receiptNo: string,
+): string {
+  const { subtotal, tax, total } = calcOrderTotals(cart);
+  const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
+  const change = paid - total;
 
-        {/* ── COLUMN HEADERS ── */}
-        <div style={{ ...S.grid, ...S.bold, ...S.small, padding: "5px 24px", borderBottom: "1px solid #000000", background: "#ffffff", boxSizing: "border-box" }}>
-          <span style={{ color: "#000000" }}>Item</span>
-          <span style={{ textAlign: "center", color: "#000000" }}>Qty</span>
-          <span style={{ textAlign: "right",  color: "#000000" }}>Price</span>
-          <span style={{ textAlign: "right",  color: "#000000" }}>Total</span>
-        </div>
+  const dateStr = new Date().toLocaleString("en-US", {
+    month: "short", day: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 
-        {/* ── LINE ITEMS ── */}
-        <div style={{ padding: "6px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-          {cart.map((item, idx) => {
-            const lineTotal = calcLineTotal(item);
-            return (
-              <div key={idx} style={{ marginBottom: "4px" }}>
-                <div style={{ ...S.grid }}>
-                  <span style={{ ...S.bold, color: "#000000" }}>{item.name}</span>
-                  <span style={{ textAlign: "center", color: "#000000" }}>{item.qty}</span>
-                  <span style={{ textAlign: "right",  color: "#000000" }}>${fmt(item.price)}</span>
-                  <span style={{ ...S.bold, textAlign: "right", color: "#000000" }}>${fmt(lineTotal)}</span>
-                </div>
-                {(item.discount ?? 0) > 0 && (
-                  <div style={{ ...S.row, ...S.small, paddingLeft: "10px", color: "#555555" }}>
-                    <span>Discount {item.discount}%</span>
-                    <span>-${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+  const lineItems = cart.map(item => {
+    const lineTotal = calcLineTotal(item);
+    const discount  = (item.discount ?? 0) > 0
+      ? `<div class="row small gray">
+           <span>Discount ${item.discount}%</span>
+           <span>-$${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
+         </div>`
+      : "";
+    return `
+      <div class="line-item">
+        <div class="grid">
+          <span class="bold">${item.name}</span>
+          <span class="center">${item.qty}</span>
+          <span class="right">$${fmt(item.price)}</span>
+          <span class="bold right">$${fmt(lineTotal)}</span>
         </div>
+        ${discount}
+      </div>`;
+  }).join("");
 
-        {/* ── SUBTOTALS ── */}
-        <div style={{ padding: "6px 24px", background: "#ffffff", boxSizing: "border-box" }}>
-          <div style={{ ...S.row, color: "#000000" }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-          <div style={{ ...S.row, color: "#000000" }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
-        </div>
+  const paymentRows = paymentLines.map(l =>
+    `<div class="row"><span class="capitalize">${l.method}</span><span>$${fmt(l.amount)}</span></div>`
+  ).join("");
 
-        {/* ── TOTAL ── */}
-        <div style={{
-          ...S.row, ...S.bold,
-          fontSize:     FONT_TOTAL,
-          borderTop:    "2px solid #000000",
-          borderBottom: "2px solid #000000",
-          padding:      "5px 24px",
-          margin:       "2px 0 6px",
-          color:        "#000000",
-          background:   "#ffffff",
-          boxSizing:    "border-box",
-        }}>
-          <span>TOTAL</span>
-          <span>${fmt(total)}</span>
-        </div>
+  const changeRow = change > 0.005
+    ? `<div class="row bold"><span>Change</span><span>$${fmt(change)}</span></div>`
+    : "";
 
-        {/* ── PAYMENTS ── */}
-        <div style={{ padding: "4px 24px 8px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-          {paymentLines.map((l, idx) => (
-            <div key={idx} style={{ ...S.row, color: "#000000" }}>
-              <span style={{ textTransform: "capitalize" }}>{l.method}</span>
-              <span>${fmt(l.amount)}</span>
-            </div>
-          ))}
-          {change > 0.005 && (
-            <div style={{ ...S.row, ...S.bold, color: "#000000" }}>
-              <span>Change</span>
-              <span>${fmt(change)}</span>
-            </div>
-          )}
-        </div>
+  const orderIdRow  = odooOrderId ? `<div class="small">Order ID: #${odooOrderId}</div>` : "";
+  const customerRow = customer    ? `<div class="small">Customer: ${customer.name}</div>` : "";
 
-        {/* ── FOOTER ── */}
-        <div style={{ ...S.center, padding: "10px 24px 14px", background: "#ffffff", boxSizing: "border-box" }}>
-          <div style={{ ...S.bold, fontSize: "15px", color: "#000000" }}>Thank you for your visit!</div>
-          <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>Please keep this receipt for your records.</div>
-          <div style={{ ...S.small, marginTop: "6px", letterSpacing: "2px", color: "#000000" }}>{receiptNo}</div>
-        </div>
-      </div>
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    @page {
+      size: 80mm auto;
+      margin: 0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    html, body {
+      width: 80mm;
+      background: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12pt;
+      color: #000;
+      line-height: 1.5;
+    }
+
+    .receipt {
+      width: 80mm;
+      padding: 0 5mm;
+      box-sizing: border-box;
+    }
+
+    /* ── typography helpers ── */
+    .bold      { font-weight: bold; }
+    .small     { font-size: 9pt; }
+    .center    { text-align: center; }
+    .right     { text-align: right; }
+    .gray      { color: #555; }
+    .capitalize{ text-transform: capitalize; }
+
+    /* ── layout helpers ── */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    /* 4-col grid: name | qty | price | total */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 22pt 46pt 50pt;
+      gap: 0 3pt;
+      align-items: baseline;
+    }
+
+    /* ── sections ── */
+    .header {
+      text-align: center;
+      padding: 10pt 0 8pt;
+      border-bottom: 1.5pt solid #000;
+    }
+    .shop-name {
+      font-size: 18pt;
+      font-weight: bold;
+      letter-spacing: 2pt;
+    }
+
+    .meta {
+      text-align: center;
+      padding: 6pt 0;
+      border-bottom: 1pt dashed #000;
+    }
+
+    .col-headers {
+      display: grid;
+      grid-template-columns: 1fr 22pt 46pt 50pt;
+      gap: 0 3pt;
+      font-weight: bold;
+      font-size: 9pt;
+      padding: 4pt 0;
+      border-bottom: 1pt solid #000;
+    }
+
+    .line-items {
+      padding: 5pt 0;
+      border-bottom: 1pt dashed #000;
+    }
+    .line-item { margin-bottom: 3pt; }
+
+    .subtotals {
+      padding: 5pt 0;
+    }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-weight: bold;
+      font-size: 14pt;
+      border-top: 1.5pt solid #000;
+      border-bottom: 1.5pt solid #000;
+      padding: 4pt 0;
+      margin: 3pt 0 5pt;
+    }
+
+    .payments {
+      padding: 3pt 0 6pt;
+      border-bottom: 1pt dashed #000;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 8pt 0 10pt;
+    }
+    .footer .thank-you {
+      font-weight: bold;
+      font-size: 11pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt">
+
+    <div class="header">
+      <div class="shop-name">${shopName.toUpperCase()}</div>
+      <div class="small" style="margin-top:3pt">${shopTagline}</div>
+      <div class="small">${shopAddress}</div>
+      <div class="small">${shopPhone}</div>
     </div>
-  );
+
+    <div class="meta">
+      <div class="small">${dateStr}</div>
+      <div class="bold">Receipt: ${receiptNo}</div>
+      ${orderIdRow}
+      ${customerRow}
+    </div>
+
+    <div class="col-headers">
+      <span>Item</span>
+      <span class="center">Qty</span>
+      <span class="right">Price</span>
+      <span class="right">Total</span>
+    </div>
+
+    <div class="line-items">
+      ${lineItems}
+    </div>
+
+    <div class="subtotals">
+      <div class="row"><span>Subtotal</span><span>$${fmt(subtotal)}</span></div>
+      <div class="row"><span>Tax (10%)</span><span>$${fmt(tax)}</span></div>
+    </div>
+
+    <div class="total-row">
+      <span>TOTAL</span>
+      <span>$${fmt(total)}</span>
+    </div>
+
+    <div class="payments">
+      ${paymentRows}
+      ${changeRow}
+    </div>
+
+    <div class="footer">
+      <div class="thank-you">Thank you for your visit!</div>
+      <div class="small" style="margin-top:2pt">Please keep this receipt for your records.</div>
+      <div class="small" style="margin-top:5pt;letter-spacing:2pt">${receiptNo}</div>
+    </div>
+
+  </div>
+</body>
+</html>`;
 }
 
 // ─── Print hook ────────────────────────────────────────────────────────────
-export function usePrintReceipt() {
+interface UsePrintReceiptOptions {
+  cart:         CartItem[];
+  customer:     Customer | null;
+  paymentLines: PaymentLine[];
+  odooOrderId?: number;
+  receiptNo:    string;
+}
+
+export function usePrintReceipt(options: UsePrintReceiptOptions) {
   const printReceipt = async () => {
-    const wrapper = document.getElementById("printable-receipt");
-    const inner   = document.getElementById("printable-receipt-inner");
-    if (!wrapper || !inner) return;
+    const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
 
-    // Show wrapper so inner becomes part of the layout
-    wrapper.style.cssText = `
-      display: block !important;
-      position: fixed !important;
-      top: -9999px !important;
-      left: 0 !important;
-      width: 100vw !important;
-      background: transparent !important;
-      z-index: 9999 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    `;
+    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
-    // Inner sits at natural position inside wrapper — no left offset issues
-    inner.style.cssText = `
-      display: block !important;
-      width: ${RECEIPT_W}px !important;
-      background: #ffffff !important;
-      box-sizing: border-box !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    `;
+    document.getElementById("__print_frame__")?.remove();
 
-    // Wait for paint
-    await new Promise(r => setTimeout(r, 300));
+    const iframe = document.createElement("iframe");
+    iframe.id = "__print_frame__";
+    iframe.style.cssText =
+      "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    document.body.appendChild(iframe);
 
-    try {
-      // Capture the INNER element directly — not the wrapper
-      const canvas = await html2canvas(inner, {
-        scale:           3,
-        useCORS:         true,
-        backgroundColor: "#ffffff",
-        logging:         false,
-        removeContainer: false,
-      });
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) return;
 
-      const imgDataUrl = canvas.toDataURL("image/png");
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-      document.getElementById("__print_frame__")?.remove();
-
-      const iframe = document.createElement("iframe");
-      iframe.id = "__print_frame__";
-      iframe.style.cssText =
-        "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-      if (!doc) return;
-
-      doc.open();
-      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<style>
-  @page { size: 80mm auto; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 80mm; background: #fff; }
-  img { width: 80mm; display: block; }
-</style></head>
-<body><img src="${imgDataUrl}" /></body></html>`);
-      doc.close();
-
-      iframe.onload = () => {
-        setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          setTimeout(() => iframe.remove(), 2000);
-        }, 300);
-      };
-
-    } finally {
-      // Hide everything again
-      wrapper.style.cssText = "display: none;";
-      inner.style.cssText   = "";
-    }
+    iframe.onload = () => {
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => iframe.remove(), 3000);
+      }, 400);
+    };
   };
 
   return { printReceipt };
