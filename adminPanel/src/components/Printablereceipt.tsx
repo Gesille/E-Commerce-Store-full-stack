@@ -217,10 +217,7 @@ export function usePrintReceipt() {
         <head>
           <meta charset="utf-8"/>
           <style>
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
+           @page { size: 80mm auto; margin: 0 4mm; }
             * {
               box-sizing: border-box;
               margin: 0;
@@ -237,10 +234,7 @@ export function usePrintReceipt() {
             }
 
             /* NO border on wrapper — use padding instead so nothing gets clipped */
-            .receipt-wrapper {
-              width: 80mm;
-              padding: 3mm 4mm;
-            }
+            .receipt-wrapper { width: 100%; padding: 3mm 0; }
 
             /* HEADER */
             .pr-header {
