@@ -1,8 +1,6 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 import "../app/(dashboard)/Printable.css";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function fmt(n: number) {
   return n.toFixed(2);
 }
@@ -18,19 +16,14 @@ function calcOrderTotals(cart: CartItem[]) {
   return { subtotal, tax, total };
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface PrintableReceiptProps {
   cart: CartItem[];
   customer: Customer | null;
   paymentLines: PaymentLine[];
   odooOrderId?: number;
   receiptNo: string;
-  /** Call this to open the browser print dialog */
   onPrint?: () => void;
 }
-
-// ─── The hidden receipt that gets printed ─────────────────────────────────────
 
 export function PrintableReceipt({
   cart,
@@ -50,197 +43,161 @@ export function PrintableReceipt({
     minute: "2-digit",
   });
 
-  const shopName ="Chef's World";
-  const shopTagline =
-  "Restaurant, Bar & Kitchen Supplies";
-    const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
-    const shopPhone = "(555) 123-4567";
+  const shopName    = "Chef's World";
+  const shopTagline = "Restaurant, Bar & Kitchen Supplies";
+  const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
+  const shopPhone   = "(555) 123-4567";
 
   return (
-    /*
-     * This div is ONLY visible during printing.
-     * On screen it stays hidden so it doesn't break the modal layout.
-     */
     <div id="printable-receipt" className="hidden print:block">
-      {/* ═══ SHOP HEADER ═══ */}
-      <div className="pr-center pr-bold pr-large">{shopName}</div>
-      {shopTagline && (
-        <div className="pr-center pr-small pr-muted pr-mt1">{shopTagline}</div>
-      )}
-      {shopAddress && (
-        <div className="pr-center pr-xs pr-muted">{shopAddress}</div>
-      )}
-      {shopPhone && (
-        <div className="pr-center pr-xs pr-muted">{shopPhone}</div>
-      )}
 
-      <hr className="pr-solid pr-mt2" />
-
-      {/* ═══ ORDER INFO ═══ */}
-      <div className="pr-small">
-        <div className="pr-row">
-          <span className="pr-muted">Date:</span>
-          <span>{dateStr}</span>
-        </div>
-        <div className="pr-row">
-          <span className="pr-muted">Receipt:</span>
-          <span className="pr-bold">{receiptNo}</span>
-        </div>
-        {odooOrderId && (
-          <div className="pr-row">
-            <span className="pr-muted">Order ID:</span>
-            <span>#{odooOrderId}</span>
-          </div>
-        )}
-        {customer && (
-          <div className="pr-row">
-            <span className="pr-muted">Customer:</span>
-            <span>{customer.name}</span>
-          </div>
-        )}
+      {/* ═══ DARK HEADER ═══ */}
+      <div className="pr-header">
+        <div className="pr-large">{shopName}</div>
+        {shopTagline && <div className="pr-small pr-mt1">{shopTagline}</div>}
+        {shopAddress && <div className="pr-xs">{shopAddress}</div>}
+        {shopPhone   && <div className="pr-xs">{shopPhone}</div>}
       </div>
 
-      <hr className="pr-dash" />
+      {/* ═══ BODY ═══ */}
+      <div className="pr-body">
 
-      {/* ═══ COLUMN HEADERS ═══ */}
-      <div className="pr-row pr-xs pr-muted pr-bold">
-        <span className="pr-name">ITEM</span>
-        <span className="pr-qty">QTY</span>
-        <span className="pr-price">PRICE</span>
-        <span className="pr-total">TOTAL</span>
-      </div>
-
-      <hr className="pr-dash" />
-
-      {/* ═══ LINE ITEMS ═══ */}
-      {cart.map((item, idx) => {
-        const lineTotal = calcLineTotal(item);
-        return (
-          <div key={idx} className="pr-small">
+        {/* Order meta */}
+        <div className="pr-small pr-mt1">
+          <div className="pr-row">
+            <span className="pr-muted">Date:</span>
+            <span>{dateStr}</span>
+          </div>
+          <div className="pr-row">
+            <span className="pr-muted">Receipt:</span>
+            <span className="pr-bold">{receiptNo}</span>
+          </div>
+          {odooOrderId && (
             <div className="pr-row">
-              <span className="pr-name pr-bold">{item.name}</span>
-              <span className="pr-qty">{item.qty}</span>
-              <span className="pr-price">${fmt(item.price)}</span>
-              <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
+              <span className="pr-muted">Order ID:</span>
+              <span>#{odooOrderId}</span>
             </div>
-            {(item.discount ?? 0) > 0 && (
-              <div className="pr-row pr-xs pr-muted">
-                <span className="pr-name">  Discount {item.discount}%</span>
-                <span className="pr-total">
-                  -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
-                </span>
+          )}
+          {customer && (
+            <div className="pr-row">
+              <span className="pr-muted">Customer:</span>
+              <span>{customer.name}</span>
+            </div>
+          )}
+        </div>
+
+        <hr className="pr-solid pr-mt2" />
+
+        {/* Column headers */}
+        <div className="pr-col-header">
+          <span className="pr-name">Item</span>
+          <span className="pr-qty">Qty</span>
+          <span className="pr-price">Price</span>
+          <span className="pr-total">Total</span>
+        </div>
+
+        <hr className="pr-dash" />
+
+        {/* Line items */}
+        {cart.map((item, idx) => {
+          const lineTotal = calcLineTotal(item);
+          return (
+            <div key={idx} className="pr-small">
+              <div className="pr-row">
+                <span className="pr-name pr-bold">{item.name}</span>
+                <span className="pr-qty">{item.qty}</span>
+                <span className="pr-price">${fmt(item.price)}</span>
+                <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
               </div>
-            )}
+              {(item.discount ?? 0) > 0 && (
+                <div className="pr-row pr-xs pr-muted">
+                  <span className="pr-name">&nbsp;&nbsp;Discount {item.discount}%</span>
+                  <span className="pr-total">
+                    -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <hr className="pr-dash" />
+
+        {/* Subtotals */}
+        <div className="pr-small">
+          <div className="pr-total-row">
+            <span className="pr-muted">Subtotal</span>
+            <span>${fmt(subtotal)}</span>
           </div>
-        );
-      })}
-
-      <hr className="pr-dash" />
-
-      {/* ═══ TOTALS ═══ */}
-      <div className="pr-small">
-        <div className="pr-total-row">
-          <span className="pr-muted">Subtotal</span>
-          <span>${fmt(subtotal)}</span>
+          <div className="pr-total-row">
+            <span className="pr-muted">Tax (10%)</span>
+            <span>${fmt(tax)}</span>
+          </div>
         </div>
-        <div className="pr-total-row">
-          <span className="pr-muted">Tax (10%)</span>
-          <span>${fmt(tax)}</span>
+
+        <hr className="pr-double" />
+
+        {/* Grand total */}
+        <div className="pr-total-row pr-grand">
+          <span>TOTAL</span>
+          <span>${fmt(total)}</span>
         </div>
+
+        <hr className="pr-dash pr-mt1" />
+
+        {/* Payments */}
+        <div className="pr-small pr-mt1">
+          {paymentLines.map((l, idx) => (
+            <div key={idx} className="pr-total-row">
+              <span className="pr-muted" style={{ textTransform: "capitalize" }}>
+                {l.method}
+              </span>
+              <span>${fmt(l.amount)}</span>
+            </div>
+          ))}
+          {change > 0.005 && (
+            <div className="pr-total-row pr-bold">
+              <span>Change</span>
+              <span>${fmt(change)}</span>
+            </div>
+          )}
+        </div>
+
+      </div>{/* end pr-body */}
+
+      {/* ═══ LIGHT FOOTER ═══ */}
+      <div className="pr-footer">
+        <div className="pr-small pr-bold">Thank you for your visit!</div>
+        <div className="pr-xs pr-muted pr-mt1">
+          Please keep this receipt for your records.
+        </div>
+        <div className="pr-barcode pr-mt2">
+          {"| ||| || | ||| | || ||| ||"}
+        </div>
+        <div className="pr-xs pr-muted">{receiptNo}</div>
       </div>
 
-      <hr className="pr-double" />
-
-      <div className="pr-total-row pr-grand">
-        <span>TOTAL</span>
-        <span>${fmt(total)}</span>
-      </div>
-
-      <hr className="pr-dash pr-mt1" />
-
-      {/* ═══ PAYMENTS ═══ */}
-      <div className="pr-small pr-mt1">
-        {paymentLines.map((l, idx) => (
-          <div key={idx} className="pr-total-row">
-            <span className="pr-muted" style={{ textTransform: "capitalize" }}>
-              {l.method}
-            </span>
-            <span>${fmt(l.amount)}</span>
-          </div>
-        ))}
-        {change > 0.005 && (
-          <div className="pr-total-row pr-bold">
-            <span>Change</span>
-            <span>${fmt(change)}</span>
-          </div>
-        )}
-      </div>
-
-      <hr className="pr-solid pr-mt2" />
-
-      {/* ═══ FOOTER ═══ */}
-      <div className="pr-center pr-small pr-mt2">
-        Thank you for your visit!
-      </div>
-      <div className="pr-center pr-xs pr-muted pr-mt1">
-        Please keep this receipt for your records.
-      </div>
-
-      {/* Barcode-style receipt number */}
-      <div className="pr-barcode pr-mt2">
-        {"| ||| || | ||| | || ||| ||".split("").join("")}
-        <br />
-        {receiptNo}
-      </div>
     </div>
   );
 }
 
-// ─── Hook: trigger print ──────────────────────────────────────────────────────
-
-/**
- * usePrintReceipt
- *
- * Opens the browser print dialog with the page pre-configured for
- * 80mm thermal receipt paper. The user still needs to:
- *   1. Select their receipt printer
- *   2. Confirm the paper size is "80mm x Roll" (or custom 80mm wide)
- *
- * We inject a temporary <style> that forces margins to 0 and sets
- * the @page size, then remove it after the dialog closes.
- */
 export function usePrintReceipt() {
   const printReceipt = () => {
-    // Inject print-time overrides
     const style = document.createElement("style");
     style.id = "__receipt_print_override__";
     style.innerHTML = `
-      @page {
-        size: 80mm auto !important;
-        margin: 0 !important;
-      }
+      @page { size: 80mm auto !important; margin: 3mm !important; }
       @media print {
-        html, body {
-          width: 80mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
+        html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
       }
     `;
     document.head.appendChild(style);
-
-    // Small delay so the style is parsed before the dialog opens
     setTimeout(() => {
       window.print();
-
-      // Clean up after dialog closes (fires immediately in most browsers,
-      // but the print job is already spooled by then)
       setTimeout(() => {
-        const el = document.getElementById("__receipt_print_override__");
-        if (el) el.remove();
+        document.getElementById("__receipt_print_override__")?.remove();
       }, 1000);
     }, 100);
   };
-
   return { printReceipt };
 }
