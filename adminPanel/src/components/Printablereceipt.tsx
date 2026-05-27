@@ -188,27 +188,45 @@ export function usePrintReceipt() {
 
     const receiptHTML = receipt.innerHTML;
 
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (!printWindow) return;
+    // Remove old iframe if exists
+    const existing = document.getElementById('__print_frame__');
+    if (existing) existing.remove();
 
-    printWindow.document.write(`
+    const iframe = document.createElement('iframe');
+    iframe.id = '__print_frame__';
+    iframe.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 80mm;
+      height: 100%;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    `;
+
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8"/>
-          <title>Receipt</title>
           <style>
             @page {
               size: 80mm auto;
               margin: 2mm;
             }
-
             * {
               box-sizing: border-box;
               margin: 0;
               padding: 0;
             }
-
             html, body {
               width: 80mm;
               background: #fff;
@@ -216,7 +234,6 @@ export function usePrintReceipt() {
               font-size: 11pt;
               color: #000;
             }
-
             .receipt-wrapper {
               width: 76mm;
               border: 1.5px solid #000;
@@ -247,9 +264,7 @@ export function usePrintReceipt() {
             }
 
             /* BODY */
-            .pr-body {
-              padding: 3mm 3.5mm;
-            }
+            .pr-body { padding: 3mm 3.5mm; }
 
             /* FOOTER */
             .pr-footer {
@@ -329,19 +344,19 @@ export function usePrintReceipt() {
           <div class="receipt-wrapper">
             ${receiptHTML}
           </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              window.onafterprint = function() {
-                window.close();
-              };
-            };
-          </script>
         </body>
       </html>
     `);
+    doc.close();
 
-    printWindow.document.close();
+    // Wait for iframe to load then print it
+    iframe.onload = () => {
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => iframe.remove(), 2000);
+      }, 300);
+    };
   };
 
   return { printReceipt };
