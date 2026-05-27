@@ -1,3 +1,5 @@
 #printable-receipt {
-  display: none;
+  width: 272px;
+  background: white;
+  color: black;
 }

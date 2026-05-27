@@ -1,5 +1,6 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 import "../app/(dashboard)/Printable.css";
+import html2canvas from "html2canvas-pro";
 
 function fmt(n: number) {
   return n.toFixed(2);
@@ -13,7 +14,6 @@ function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
-
   return { subtotal, tax, total };
 }
 
@@ -23,6 +23,7 @@ interface PrintableReceiptProps {
   paymentLines: PaymentLine[];
   odooOrderId?: number;
   receiptNo: string;
+  onPrint?: () => void;
 }
 
 export function PrintableReceipt({
@@ -33,11 +34,8 @@ export function PrintableReceipt({
   receiptNo,
 }: PrintableReceiptProps) {
   const { subtotal, tax, total } = calcOrderTotals(cart);
-
   const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
-
   const change = paid - total;
-
   const dateStr = new Date().toLocaleString("en-US", {
     month: "short",
     day: "2-digit",
@@ -46,178 +44,150 @@ export function PrintableReceipt({
     minute: "2-digit",
   });
 
-  const shopName = "Chef's World";
+  const shopName    = "Chef's World";
   const shopTagline = "Restaurant, Bar & Kitchen Supplies";
   const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
-  const shopPhone = "(555) 123-4567";
+  const shopPhone   = "(555) 123-4567";
 
   return (
     <div id="printable-receipt">
 
-      {/* HEADER */}
+      {/* ═══ DARK HEADER ═══ */}
       <div className="pr-header">
-        <div className="pr-title">{shopName}</div>
-
-        <div className="pr-subtitle">{shopTagline}</div>
-
-        <div className="pr-meta-center">{shopAddress}</div>
-
-        <div className="pr-meta-center">{shopPhone}</div>
+        <div className="pr-large">{shopName}</div>
+        {shopTagline && <div className="pr-small pr-mt1">{shopTagline}</div>}
+        {shopAddress && <div className="pr-xs">{shopAddress}</div>}
+        {shopPhone   && <div className="pr-xs">{shopPhone}</div>}
       </div>
 
-      {/* ORDER INFO */}
-      <div className="pr-section">
+      {/* ═══ BODY ═══ */}
+      <div className="pr-body">
 
-        <div className="pr-row">
-          <span>Date:</span>
-          <span>{dateStr}</span>
-        </div>
-
-        <div className="pr-row">
-          <span>Receipt:</span>
-          <span>{receiptNo}</span>
-        </div>
-
-        {odooOrderId && (
+        {/* Order meta */}
+        <div className="pr-small pr-mt1">
           <div className="pr-row">
-            <span>Order ID:</span>
-            <span>#{odooOrderId}</span>
+            <span className="pr-muted">Date:</span>
+            <span>{dateStr}</span>
           </div>
-        )}
-
-        {customer && (
           <div className="pr-row">
-            <span>Customer:</span>
-            <span>{customer.name}</span>
+            <span className="pr-muted">Receipt:</span>
+            <span className="pr-bold">{receiptNo}</span>
           </div>
-        )}
-      </div>
-
-      <div className="pr-divider" />
-
-      {/* TABLE HEADER */}
-      <div className="pr-table-header">
-        <span className="pr-col-name">Item</span>
-        <span className="pr-col-qty">Qty</span>
-        <span className="pr-col-price">Price</span>
-        <span className="pr-col-total">Total</span>
-      </div>
-
-      <div className="pr-divider-dashed" />
-
-      {/* ITEMS */}
-      {cart.map((item, idx) => {
-        const lineTotal = calcLineTotal(item);
-
-        return (
-          <div key={idx} className="pr-item">
-
-            <div className="pr-table-row">
-              <span className="pr-col-name pr-bold">
-                {item.name}
-              </span>
-
-              <span className="pr-col-qty">
-                {item.qty}
-              </span>
-
-              <span className="pr-col-price">
-                ${fmt(item.price)}
-              </span>
-
-              <span className="pr-col-total pr-bold">
-                ${fmt(lineTotal)}
-              </span>
+          {odooOrderId && (
+            <div className="pr-row">
+              <span className="pr-muted">Order ID:</span>
+              <span>#{odooOrderId}</span>
             </div>
+          )}
+          {customer && (
+            <div className="pr-row">
+              <span className="pr-muted">Customer:</span>
+              <span>{customer.name}</span>
+            </div>
+          )}
+        </div>
 
-            {(item.discount ?? 0) > 0 && (
-              <div className="pr-discount">
-                Discount {item.discount}%:
-                -$
-                {fmt(
-                  item.price *
-                    item.qty *
-                    ((item.discount ?? 0) / 100)
-                )}
+        <hr className="pr-solid pr-mt2" />
+
+        {/* Column headers */}
+        <div className="pr-col-header">
+          <span className="pr-name">Item</span>
+          <span className="pr-qty">Qty</span>
+          <span className="pr-price">Price</span>
+          <span className="pr-total">Total</span>
+        </div>
+
+        <hr className="pr-dash" />
+
+        {/* Line items */}
+        {cart.map((item, idx) => {
+          const lineTotal = calcLineTotal(item);
+          return (
+            <div key={idx} className="pr-small">
+              <div className="pr-row">
+                <span className="pr-name pr-bold">{item.name}</span>
+                <span className="pr-qty">{item.qty}</span>
+                <span className="pr-price">${fmt(item.price)}</span>
+                <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
               </div>
-            )}
+              {(item.discount ?? 0) > 0 && (
+                <div className="pr-row pr-xs pr-muted">
+                  <span className="pr-name">&nbsp;&nbsp;Discount {item.discount}%</span>
+                  <span className="pr-total">
+                    -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <hr className="pr-dash" />
+
+        {/* Subtotals */}
+        <div className="pr-small">
+          <div className="pr-total-row">
+            <span className="pr-muted">Subtotal</span>
+            <span>${fmt(subtotal)}</span>
           </div>
-        );
-      })}
-
-      <div className="pr-divider-dashed" />
-
-      {/* TOTALS */}
-      <div className="pr-row">
-        <span>Subtotal</span>
-        <span>${fmt(subtotal)}</span>
-      </div>
-
-      <div className="pr-row">
-        <span>Tax (10%)</span>
-        <span>${fmt(tax)}</span>
-      </div>
-
-      <div className="pr-divider-double" />
-
-      <div className="pr-grand-total">
-        <span>TOTAL</span>
-        <span>${fmt(total)}</span>
-      </div>
-
-      <div className="pr-divider-dashed" />
-
-      {/* PAYMENTS */}
-      {paymentLines.map((l, idx) => (
-        <div key={idx} className="pr-row">
-          <span style={{ textTransform: "capitalize" }}>
-            {l.method}
-          </span>
-
-          <span>${fmt(l.amount)}</span>
+          <div className="pr-total-row">
+            <span className="pr-muted">Tax (10%)</span>
+            <span>${fmt(tax)}</span>
+          </div>
         </div>
-      ))}
 
-      {change > 0.005 && (
-        <div className="pr-row pr-bold">
-          <span>Change</span>
-          <span>${fmt(change)}</span>
+        <hr className="pr-double" />
+
+        {/* Grand total */}
+        <div className="pr-total-row pr-grand">
+          <span>TOTAL</span>
+          <span>${fmt(total)}</span>
         </div>
-      )}
 
-      {/* FOOTER */}
+        <hr className="pr-dash pr-mt1" />
+
+        {/* Payments */}
+        <div className="pr-small pr-mt1">
+          {paymentLines.map((l, idx) => (
+            <div key={idx} className="pr-total-row">
+              <span className="pr-muted" style={{ textTransform: "capitalize" }}>
+                {l.method}
+              </span>
+              <span>${fmt(l.amount)}</span>
+            </div>
+          ))}
+          {change > 0.005 && (
+            <div className="pr-total-row pr-bold">
+              <span>Change</span>
+              <span>${fmt(change)}</span>
+            </div>
+          )}
+        </div>
+
+      </div>{/* end pr-body */}
+
+      {/* ═══ LIGHT FOOTER ═══ */}
       <div className="pr-footer">
-
-        <div className="pr-thanks">
-          Thank you for your visit!
-        </div>
-
-        <div className="pr-footer-text">
+        <div className="pr-small pr-bold">Thank you for your visit!</div>
+        <div className="pr-xs pr-muted pr-mt1">
           Please keep this receipt for your records.
         </div>
-
-       
-
-        <div className="pr-footer-id">
-          {receiptNo}
+        <div className="pr-barcode pr-mt2">
+          {"| ||| || | ||| | || ||| ||"}
         </div>
-
+        <div className="pr-xs pr-muted">{receiptNo}</div>
       </div>
 
     </div>
   );
 }
 
-/* =========================================================
-   PRINT HOOK
-========================================================= */
+
+
 
 export function usePrintReceipt() {
-
-  const printReceipt = async () => {
-
-    const receipt =
-      document.getElementById("printable-receipt");
+  const printReceipt = () => {
+    const receipt = document.getElementById("printable-receipt");
 
     if (!receipt) return;
 
@@ -239,8 +209,6 @@ export function usePrintReceipt() {
 
             * {
               box-sizing: border-box;
-              margin: 0;
-              padding: 0;
             }
 
             @page {
@@ -251,9 +219,11 @@ export function usePrintReceipt() {
             html,
             body {
               width: 80mm;
-              background: white;
-              font-family: Arial, Helvetica, sans-serif;
-              color: black;
+              margin: 0;
+              padding: 0;
+              background: #fff;
+              font-family: Arial, sans-serif;
+              color: #000;
             }
 
             body {
@@ -269,137 +239,89 @@ export function usePrintReceipt() {
               margin-bottom: 10px;
             }
 
-            .pr-title {
+            .pr-large {
               font-size: 22px;
               font-weight: 900;
-              letter-spacing: 1px;
               text-transform: uppercase;
             }
 
-            .pr-subtitle {
+            .pr-small {
               font-size: 11px;
-              margin-top: 4px;
             }
 
-            .pr-meta-center {
+            .pr-xs {
               font-size: 10px;
-              margin-top: 2px;
             }
 
-            .pr-section {
-              margin-top: 10px;
-            }
-
-            .pr-row {
+            .pr-row,
+            .pr-total-row,
+            .pr-col-header {
               display: flex;
+              width: 100%;
               justify-content: space-between;
               align-items: flex-start;
-              gap: 8px;
-              margin-bottom: 4px;
-              font-size: 11px;
-              line-height: 1.4;
+              gap: 4px;
             }
 
-            .pr-table-header {
-              display: flex;
-              font-size: 11px;
-              font-weight: 700;
-              text-transform: uppercase;
-              margin-bottom: 4px;
-            }
-
-            .pr-table-row {
-              display: flex;
-              font-size: 11px;
-              margin-bottom: 3px;
-              align-items: flex-start;
-            }
-
-            .pr-col-name {
+            .pr-name {
               width: 110px;
               word-break: break-word;
             }
 
-            .pr-col-qty {
-              width: 30px;
+            .pr-qty {
+              width: 28px;
               text-align: center;
             }
 
-            .pr-col-price {
+            .pr-price {
               width: 55px;
               text-align: right;
             }
 
-            .pr-col-total {
+            .pr-total {
               width: 60px;
               text-align: right;
             }
 
-            .pr-divider {
-              border-top: 1px solid black;
+            .pr-dash {
+              border: none;
+              border-top: 1px dashed #000;
               margin: 8px 0;
             }
 
-            .pr-divider-dashed {
-              border-top: 1px dashed black;
+            .pr-solid {
+              border: none;
+              border-top: 1px solid #000;
               margin: 8px 0;
             }
 
-            .pr-divider-double {
-              border-top: 3px double black;
+            .pr-double {
+              border: none;
+              border-top: 3px double #000;
               margin: 8px 0;
             }
 
-            .pr-grand-total {
-              display: flex;
-              justify-content: space-between;
+            .pr-grand {
               font-size: 18px;
               font-weight: 900;
-              margin: 8px 0;
-            }
-
-            .pr-bold {
-              font-weight: 700;
-            }
-
-            .pr-discount {
-              font-size: 10px;
-              margin-left: 6px;
-              margin-bottom: 6px;
             }
 
             .pr-footer {
-              margin-top: 14px;
               text-align: center;
-            }
-
-            .pr-thanks {
-              font-size: 13px;
-              font-weight: 700;
-            }
-
-            .pr-footer-text {
-              font-size: 10px;
-              margin-top: 4px;
+              margin-top: 16px;
             }
 
             .pr-barcode {
-              margin-top: 10px;
               font-family: monospace;
               letter-spacing: 2px;
-              font-size: 12px;
-            }
-
-            .pr-footer-id {
-              font-size: 10px;
-              margin-top: 6px;
+              margin-top: 8px;
             }
 
           </style>
         </head>
 
         <body>
-          ${receipt.innerHTML}
+          ${receipt.outerHTML}
         </body>
       </html>
     `);
@@ -408,6 +330,7 @@ export function usePrintReceipt() {
 
     setTimeout(() => {
       printWindow.focus();
+
       printWindow.print();
 
       setTimeout(() => {
