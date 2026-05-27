@@ -50,7 +50,7 @@ export function PrintableReceipt({
   const shopPhone   = "(555) 123-4567";
 
   return (
-    <div id="printable-receipt">
+    <div id="printable-receipt" className="hidden print:block">
 
       {/* ═══ DARK HEADER ═══ */}
       <div className="pr-header">
@@ -186,157 +186,99 @@ export function PrintableReceipt({
 
 
 export function usePrintReceipt() {
-  const printReceipt = () => {
+  const printReceipt = async () => {
     const receipt = document.getElementById("printable-receipt");
-
     if (!receipt) return;
 
-    const printWindow = window.open(
-      "",
-      "_blank",
-      "width=400,height=800"
-    );
+    // 1. Temporarily reveal the receipt so html2canvas can read it
+    receipt.style.display = "block";
+    receipt.style.visibility = "visible";
+    receipt.style.position = "fixed";
+    receipt.style.top = "-9999px";
+    receipt.style.left = "0";
+    receipt.style.width = "302px"; // 80mm at 96dpi
 
-    if (!printWindow) return;
+    try {
+      // 2. Capture to canvas at 3× scale for sharp print output
+      const canvas = await html2canvas(receipt, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        width: 302,
+        windowWidth: 302,
+        logging: false,
+      });
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Receipt</title>
+      const imgDataUrl = canvas.toDataURL("image/png");
 
-          <style>
+      // 3. Build a minimal iframe that prints just the image
+      const existing = document.getElementById("__print_frame__");
+      if (existing) existing.remove();
 
-            * {
-              box-sizing: border-box;
-            }
+      const iframe = document.createElement("iframe");
+      iframe.id = "__print_frame__";
+      iframe.style.cssText = `
+        position: fixed;
+        top: 0; left: 0;
+        width: 80mm;
+        height: 1px;
+        border: none;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
+      `;
+      document.body.appendChild(iframe);
 
-            @page {
-              size: 80mm auto;
-              margin: 0;
-            }
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
 
-            html,
-            body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              font-family: Arial, sans-serif;
-              color: #000;
-            }
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8"/>
+            <style>
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              html, body {
+                width: 80mm;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                width: 80mm;
+                display: block;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${imgDataUrl}" />
+          </body>
+        </html>
+      `);
+      doc.close();
 
-            body {
-              padding: 4mm;
-            }
-
-            #printable-receipt {
-              width: 272px;
-            }
-
-            .pr-header {
-              text-align: center;
-              margin-bottom: 10px;
-            }
-
-            .pr-large {
-              font-size: 22px;
-              font-weight: 900;
-              text-transform: uppercase;
-            }
-
-            .pr-small {
-              font-size: 11px;
-            }
-
-            .pr-xs {
-              font-size: 10px;
-            }
-
-            .pr-row,
-            .pr-total-row,
-            .pr-col-header {
-              display: flex;
-              width: 100%;
-              justify-content: space-between;
-              align-items: flex-start;
-              gap: 4px;
-            }
-
-            .pr-name {
-              width: 110px;
-              word-break: break-word;
-            }
-
-            .pr-qty {
-              width: 28px;
-              text-align: center;
-            }
-
-            .pr-price {
-              width: 55px;
-              text-align: right;
-            }
-
-            .pr-total {
-              width: 60px;
-              text-align: right;
-            }
-
-            .pr-dash {
-              border: none;
-              border-top: 1px dashed #000;
-              margin: 8px 0;
-            }
-
-            .pr-solid {
-              border: none;
-              border-top: 1px solid #000;
-              margin: 8px 0;
-            }
-
-            .pr-double {
-              border: none;
-              border-top: 3px double #000;
-              margin: 8px 0;
-            }
-
-            .pr-grand {
-              font-size: 18px;
-              font-weight: 900;
-            }
-
-            .pr-footer {
-              text-align: center;
-              margin-top: 16px;
-            }
-
-            .pr-barcode {
-              font-family: monospace;
-              letter-spacing: 2px;
-              margin-top: 8px;
-            }
-
-          </style>
-        </head>
-
-        <body>
-          ${receipt.outerHTML}
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-
-    setTimeout(() => {
-      printWindow.focus();
-
-      printWindow.print();
-
-      setTimeout(() => {
-        printWindow.close();
-      }, 500);
-    }, 500);
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => iframe.remove(), 2000);
+        }, 300);
+      };
+    } finally {
+      // 4. Hide receipt again
+      receipt.style.display = "";
+      receipt.style.visibility = "";
+      receipt.style.position = "";
+      receipt.style.top = "";
+      receipt.style.left = "";
+      receipt.style.width = "";
+    }
   };
 
   return { printReceipt };
