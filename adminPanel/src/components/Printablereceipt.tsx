@@ -50,9 +50,10 @@ export function PrintableReceipt({
   });
 
   const shopName = "Chef's World";
-  const shopTagline = "Restaurant, Bar & Kitchen Supplies";
-  const shopAddress = "123 Main St, Anytown, USA";
-  const shopPhone = "(555) 123-4567";
+  const shopTagline =
+  "Restaurant, Bar & Kitchen Supplies";
+    const shopAddress = "123 Main St, Anytown, USA";
+    const shopPhone = "(555) 123-4567";
 
   return (
     /*
@@ -63,9 +64,19 @@ export function PrintableReceipt({
       <style>{`
         /* ── injected print styles ── */
         @media print {
-          /* hide everything except the receipt */
-          body > *:not(#print-root) { display: none !important; }
-          #print-root * { visibility: visible; }
+          /* hide everything on the page */
+          body * { visibility: hidden !important; }
+
+          /* then show only the receipt and its children */
+          #printable-receipt,
+          #printable-receipt * { visibility: visible !important; }
+
+          /* position it at the top-left so nothing is cut off */
+          #printable-receipt {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+          }
 
           @page {
             size: 80mm auto;   /* thermal paper width */
@@ -79,6 +90,7 @@ export function PrintableReceipt({
 
           #printable-receipt {
             display: block !important;
+            visibility: visible !important;
             width: 80mm;
             max-width: 80mm;
             margin: 0 auto;
@@ -183,7 +195,9 @@ export function PrintableReceipt({
       {shopAddress && (
         <div className="pr-center pr-xs pr-muted">{shopAddress}</div>
       )}
-      {shopPhone && <div className="pr-center pr-xs pr-muted">{shopPhone}</div>}
+      {shopPhone && (
+        <div className="pr-center pr-xs pr-muted">{shopPhone}</div>
+      )}
 
       <hr className="pr-solid pr-mt2" />
 
@@ -236,7 +250,7 @@ export function PrintableReceipt({
             </div>
             {(item.discount ?? 0) > 0 && (
               <div className="pr-row pr-xs pr-muted">
-                <span className="pr-name"> Discount {item.discount}%</span>
+                <span className="pr-name">  Discount {item.discount}%</span>
                 <span className="pr-total">
                   -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
                 </span>
@@ -290,7 +304,9 @@ export function PrintableReceipt({
       <hr className="pr-solid pr-mt2" />
 
       {/* ═══ FOOTER ═══ */}
-      <div className="pr-center pr-small pr-mt2">Thank you for your visit!</div>
+      <div className="pr-center pr-small pr-mt2">
+        Thank you for your visit!
+      </div>
       <div className="pr-center pr-xs pr-muted pr-mt1">
         Please keep this receipt for your records.
       </div>
