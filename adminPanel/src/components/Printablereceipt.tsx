@@ -65,115 +65,117 @@ export function PrintableReceipt({
   });
 
   return (
-    <div
-      id="printable-receipt"
-      style={{
-        ...S.base,
-        display:    "none",
-        width:      `${RECEIPT_W}px`,
-        background: "#ffffff",
-        boxSizing:  "border-box",
-        overflow:   "hidden",
-      }}
-    >
-      {/* ── HEADER ── */}
-      <div style={{
-        ...S.center,
-        padding:      "14px 24px 10px",
-        borderBottom: "2px solid #000000",
-        background:   "#ffffff",
-        boxSizing:    "border-box",
-      }}>
-        <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
-          {shopName.toUpperCase()}
+    // Outer wrapper — hidden by default, shown during capture
+    <div id="printable-receipt" style={{ display: "none" }}>
+      {/* Inner receipt — this is what gets captured */}
+      <div
+        id="printable-receipt-inner"
+        style={{
+          ...S.base,
+          width:      `${RECEIPT_W}px`,
+          background: "#ffffff",
+          boxSizing:  "border-box",
+        }}
+      >
+        {/* ── HEADER ── */}
+        <div style={{
+          ...S.center,
+          padding:      "14px 24px 10px",
+          borderBottom: "2px solid #000000",
+          background:   "#ffffff",
+          boxSizing:    "border-box",
+        }}>
+          <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
+            {shopName.toUpperCase()}
+          </div>
+          <div style={{ ...S.small, marginTop: "4px", color: "#000000" }}>{shopTagline}</div>
+          <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
+          <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
         </div>
-        <div style={{ ...S.small, marginTop: "4px", color: "#000000" }}>{shopTagline}</div>
-        <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
-        <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
-      </div>
 
-      {/* ── META ── */}
-      <div style={{ ...S.center, padding: "8px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-        <div style={{ ...S.small, color: "#000000" }}>{dateStr}</div>
-        <div style={{ ...S.bold, color: "#000000" }}>Receipt: {receiptNo}</div>
-        {odooOrderId && <div style={{ ...S.small, color: "#000000" }}>Order ID: #{odooOrderId}</div>}
-        {customer    && <div style={{ ...S.small, color: "#000000" }}>Customer: {customer.name}</div>}
-      </div>
+        {/* ── META ── */}
+        <div style={{ ...S.center, padding: "8px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+          <div style={{ ...S.small, color: "#000000" }}>{dateStr}</div>
+          <div style={{ ...S.bold, color: "#000000" }}>Receipt: {receiptNo}</div>
+          {odooOrderId && <div style={{ ...S.small, color: "#000000" }}>Order ID: #{odooOrderId}</div>}
+          {customer    && <div style={{ ...S.small, color: "#000000" }}>Customer: {customer.name}</div>}
+        </div>
 
-      {/* ── COLUMN HEADERS ── */}
-      <div style={{ ...S.grid, ...S.bold, ...S.small, padding: "5px 24px", borderBottom: "1px solid #000000", background: "#ffffff", boxSizing: "border-box" }}>
-        <span style={{ color: "#000000" }}>Item</span>
-        <span style={{ textAlign: "center", color: "#000000" }}>Qty</span>
-        <span style={{ textAlign: "right",  color: "#000000" }}>Price</span>
-        <span style={{ textAlign: "right",  color: "#000000" }}>Total</span>
-      </div>
+        {/* ── COLUMN HEADERS ── */}
+        <div style={{ ...S.grid, ...S.bold, ...S.small, padding: "5px 24px", borderBottom: "1px solid #000000", background: "#ffffff", boxSizing: "border-box" }}>
+          <span style={{ color: "#000000" }}>Item</span>
+          <span style={{ textAlign: "center", color: "#000000" }}>Qty</span>
+          <span style={{ textAlign: "right",  color: "#000000" }}>Price</span>
+          <span style={{ textAlign: "right",  color: "#000000" }}>Total</span>
+        </div>
 
-      {/* ── LINE ITEMS ── */}
-      <div style={{ padding: "6px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-        {cart.map((item, idx) => {
-          const lineTotal = calcLineTotal(item);
-          return (
-            <div key={idx} style={{ marginBottom: "4px" }}>
-              <div style={{ ...S.grid }}>
-                <span style={{ ...S.bold, color: "#000000" }}>{item.name}</span>
-                <span style={{ textAlign: "center", color: "#000000" }}>{item.qty}</span>
-                <span style={{ textAlign: "right",  color: "#000000" }}>${fmt(item.price)}</span>
-                <span style={{ ...S.bold, textAlign: "right", color: "#000000" }}>${fmt(lineTotal)}</span>
-              </div>
-              {(item.discount ?? 0) > 0 && (
-                <div style={{ ...S.row, ...S.small, paddingLeft: "10px", color: "#555555" }}>
-                  <span>Discount {item.discount}%</span>
-                  <span>-${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
+        {/* ── LINE ITEMS ── */}
+        <div style={{ padding: "6px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+          {cart.map((item, idx) => {
+            const lineTotal = calcLineTotal(item);
+            return (
+              <div key={idx} style={{ marginBottom: "4px" }}>
+                <div style={{ ...S.grid }}>
+                  <span style={{ ...S.bold, color: "#000000" }}>{item.name}</span>
+                  <span style={{ textAlign: "center", color: "#000000" }}>{item.qty}</span>
+                  <span style={{ textAlign: "right",  color: "#000000" }}>${fmt(item.price)}</span>
+                  <span style={{ ...S.bold, textAlign: "right", color: "#000000" }}>${fmt(lineTotal)}</span>
                 </div>
-              )}
+                {(item.discount ?? 0) > 0 && (
+                  <div style={{ ...S.row, ...S.small, paddingLeft: "10px", color: "#555555" }}>
+                    <span>Discount {item.discount}%</span>
+                    <span>-${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── SUBTOTALS ── */}
+        <div style={{ padding: "6px 24px", background: "#ffffff", boxSizing: "border-box" }}>
+          <div style={{ ...S.row, color: "#000000" }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+          <div style={{ ...S.row, color: "#000000" }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
+        </div>
+
+        {/* ── TOTAL ── */}
+        <div style={{
+          ...S.row, ...S.bold,
+          fontSize:     FONT_TOTAL,
+          borderTop:    "2px solid #000000",
+          borderBottom: "2px solid #000000",
+          padding:      "5px 24px",
+          margin:       "2px 0 6px",
+          color:        "#000000",
+          background:   "#ffffff",
+          boxSizing:    "border-box",
+        }}>
+          <span>TOTAL</span>
+          <span>${fmt(total)}</span>
+        </div>
+
+        {/* ── PAYMENTS ── */}
+        <div style={{ padding: "4px 24px 8px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+          {paymentLines.map((l, idx) => (
+            <div key={idx} style={{ ...S.row, color: "#000000" }}>
+              <span style={{ textTransform: "capitalize" }}>{l.method}</span>
+              <span>${fmt(l.amount)}</span>
             </div>
-          );
-        })}
-      </div>
+          ))}
+          {change > 0.005 && (
+            <div style={{ ...S.row, ...S.bold, color: "#000000" }}>
+              <span>Change</span>
+              <span>${fmt(change)}</span>
+            </div>
+          )}
+        </div>
 
-      {/* ── SUBTOTALS ── */}
-      <div style={{ padding: "6px 24px", background: "#ffffff", boxSizing: "border-box" }}>
-        <div style={{ ...S.row, color: "#000000" }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-        <div style={{ ...S.row, color: "#000000" }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
-      </div>
-
-      {/* ── TOTAL ── */}
-      <div style={{
-        ...S.row, ...S.bold,
-        fontSize:     FONT_TOTAL,
-        borderTop:    "2px solid #000000",
-        borderBottom: "2px solid #000000",
-        padding:      "5px 24px",
-        margin:       "2px 0 6px",
-        color:        "#000000",
-        background:   "#ffffff",
-        boxSizing:    "border-box",
-      }}>
-        <span>TOTAL</span>
-        <span>${fmt(total)}</span>
-      </div>
-
-      {/* ── PAYMENTS ── */}
-      <div style={{ padding: "4px 24px 8px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
-        {paymentLines.map((l, idx) => (
-          <div key={idx} style={{ ...S.row, color: "#000000" }}>
-            <span style={{ textTransform: "capitalize" }}>{l.method}</span>
-            <span>${fmt(l.amount)}</span>
-          </div>
-        ))}
-        {change > 0.005 && (
-          <div style={{ ...S.row, ...S.bold, color: "#000000" }}>
-            <span>Change</span>
-            <span>${fmt(change)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ── FOOTER ── */}
-      <div style={{ ...S.center, padding: "10px 24px 14px", background: "#ffffff", boxSizing: "border-box" }}>
-        <div style={{ ...S.bold, fontSize: "15px", color: "#000000" }}>Thank you for your visit!</div>
-        <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>Please keep this receipt for your records.</div>
-        <div style={{ ...S.small, marginTop: "6px", letterSpacing: "2px", color: "#000000" }}>{receiptNo}</div>
+        {/* ── FOOTER ── */}
+        <div style={{ ...S.center, padding: "10px 24px 14px", background: "#ffffff", boxSizing: "border-box" }}>
+          <div style={{ ...S.bold, fontSize: "15px", color: "#000000" }}>Thank you for your visit!</div>
+          <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>Please keep this receipt for your records.</div>
+          <div style={{ ...S.small, marginTop: "6px", letterSpacing: "2px", color: "#000000" }}>{receiptNo}</div>
+        </div>
       </div>
     </div>
   );
@@ -182,39 +184,44 @@ export function PrintableReceipt({
 // ─── Print hook ────────────────────────────────────────────────────────────
 export function usePrintReceipt() {
   const printReceipt = async () => {
-    const receipt = document.getElementById("printable-receipt");
-    if (!receipt) return;
+    const wrapper = document.getElementById("printable-receipt");
+    const inner   = document.getElementById("printable-receipt-inner");
+    if (!wrapper || !inner) return;
 
-    // Render off-screen with a left offset so it's never at x=0 edge
-    receipt.style.cssText = `
+    // Show wrapper so inner becomes part of the layout
+    wrapper.style.cssText = `
       display: block !important;
-      visibility: visible !important;
       position: fixed !important;
       top: -9999px !important;
-      left: 50px !important;
-      width: ${RECEIPT_W}px !important;
-      background: #ffffff !important;
+      left: 0 !important;
+      width: 100vw !important;
+      background: transparent !important;
       z-index: 9999 !important;
-      box-sizing: border-box !important;
-      overflow: hidden !important;
+      padding: 0 !important;
+      margin: 0 !important;
     `;
 
-    // Longer delay to ensure full paint before capture
+    // Inner sits at natural position inside wrapper — no left offset issues
+    inner.style.cssText = `
+      display: block !important;
+      width: ${RECEIPT_W}px !important;
+      background: #ffffff !important;
+      box-sizing: border-box !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    `;
+
+    // Wait for paint
     await new Promise(r => setTimeout(r, 300));
 
     try {
-      const canvas = await html2canvas(receipt, {
+      // Capture the INNER element directly — not the wrapper
+      const canvas = await html2canvas(inner, {
         scale:           3,
         useCORS:         true,
         backgroundColor: "#ffffff",
-        width:           RECEIPT_W,
-        windowWidth:     1200,       // wide enough to avoid reflow clipping
         logging:         false,
         removeContainer: false,
-        x:               0,
-        y:               0,
-        scrollX:         -50,        // compensate for left: 50px offset
-        scrollY:         0,
       });
 
       const imgDataUrl = canvas.toDataURL("image/png");
@@ -250,7 +257,9 @@ export function usePrintReceipt() {
       };
 
     } finally {
-      receipt.style.cssText = "display: none;";
+      // Hide everything again
+      wrapper.style.cssText = "display: none;";
+      inner.style.cssText   = "";
     }
   };
 
