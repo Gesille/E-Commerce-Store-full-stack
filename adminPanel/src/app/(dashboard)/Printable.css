@@ -34,19 +34,21 @@
     margin: 0 !important;
     padding: 0 !important;
     box-sizing: border-box;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 9pt;
+
+    /* Cleaner, sharper font for receipts */
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
+    font-size: 10pt;
     color: #000;
     background: #fff;
     border: 1.5px solid #000;
 
     /* Sharp text rendering */
-    -webkit-font-smoothing: none;
-    font-smooth: never;
-    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
-  /* ── HEADER (no background, just borders) ── */
+  /* ── HEADER ── */
   .pr-header {
     text-align: center;
     padding: 4mm 3mm 3mm;
@@ -54,21 +56,21 @@
   }
 
   .pr-header .pr-large {
-    font-size: 14pt;
-    font-weight: 700;
+    font-size: 16pt;
+    font-weight: 900;
     letter-spacing: 3px;
     text-transform: uppercase;
     color: #000;
   }
 
   .pr-header .pr-small {
-    font-size: 8pt;
+    font-size: 9.5pt;
     color: #000;
     margin-top: 1mm;
   }
 
   .pr-header .pr-xs {
-    font-size: 7.5pt;
+    font-size: 9pt;
     color: #000;
     margin-top: 0.5mm;
   }
@@ -78,7 +80,7 @@
     padding: 3mm 3.5mm;
   }
 
-  /* ── FOOTER (no background, top border only) ── */
+  /* ── FOOTER ── */
   .pr-footer {
     border-top: 2px solid #000;
     text-align: center;
@@ -89,10 +91,10 @@
   .pr-center { text-align: center; }
   .pr-right  { text-align: right; }
   .pr-bold   { font-weight: 700; }
-  .pr-large  { font-size: 12pt; font-weight: 700; }
-  .pr-small  { font-size: 8pt; }
-  .pr-xs     { font-size: 7.5pt; }
-  .pr-muted  { color: #000; } /* keep black, no gray on BW printers */
+  .pr-large  { font-size: 13pt; font-weight: 700; }
+  .pr-small  { font-size: 9.5pt; }
+  .pr-xs     { font-size: 9pt; }
+  .pr-muted  { color: #000; }
 
   /* Spacing */
   .pr-mt1 { margin-top: 2mm; }
@@ -123,30 +125,30 @@
     justify-content: space-between;
     align-items: baseline;
     width: 100%;
-    line-height: 1.5;
+    line-height: 1.6;
     box-sizing: border-box;
   }
   .pr-row .pr-name  { flex: 1 1 auto; padding-right: 1mm; word-break: break-word; min-width: 0; }
-  .pr-row .pr-qty   { flex: 0 0 7mm;  text-align: center; }
-  .pr-row .pr-price { flex: 0 0 13mm; text-align: right; }
-  .pr-row .pr-total { flex: 0 0 14mm; text-align: right; }
+  .pr-row .pr-qty   { flex: 0 0 8mm;  text-align: center; }
+  .pr-row .pr-price { flex: 0 0 15mm; text-align: right; }
+  .pr-row .pr-total { flex: 0 0 16mm; text-align: right; }
 
   /* Totals */
   .pr-total-row {
     display: flex;
     justify-content: space-between;
     width: 100%;
-    line-height: 1.6;
+    line-height: 1.7;
     box-sizing: border-box;
   }
-  .pr-grand { font-size: 11pt; font-weight: 700; }
+  .pr-grand { font-size: 13pt; font-weight: 900; }
 
   /* Column header row */
   .pr-col-header {
     display: flex;
     justify-content: space-between;
     width: 100%;
-    font-size: 7.5pt;
+    font-size: 8.5pt;
     font-weight: 700;
     color: #000;
     text-transform: uppercase;
@@ -154,14 +156,14 @@
     box-sizing: border-box;
   }
   .pr-col-header .pr-name  { flex: 1 1 auto; }
-  .pr-col-header .pr-qty   { flex: 0 0 7mm;  text-align: center; }
-  .pr-col-header .pr-price { flex: 0 0 13mm; text-align: right; }
-  .pr-col-header .pr-total { flex: 0 0 14mm; text-align: right; }
+  .pr-col-header .pr-qty   { flex: 0 0 8mm;  text-align: center; }
+  .pr-col-header .pr-price { flex: 0 0 15mm; text-align: right; }
+  .pr-col-header .pr-total { flex: 0 0 16mm; text-align: right; }
 
   /* Barcode */
   .pr-barcode {
     font-family: 'Courier New', monospace;
-    font-size: 9pt;
+    font-size: 10pt;
     letter-spacing: 4px;
     text-align: center;
     margin-top: 2mm;
