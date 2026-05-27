@@ -1,6 +1,7 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
-import "../app/(dashboard)/Printable.css";
 import html2canvas from "html2canvas-pro";
+
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
   return n.toFixed(2);
@@ -16,6 +17,117 @@ function calcOrderTotals(cart: CartItem[]) {
   const total = subtotal + tax;
   return { subtotal, tax, total };
 }
+
+// ─── inline style objects ───────────────────────────────────────────────────
+
+const S = {
+  root: {
+    display: "none",
+    width: "302px",
+    boxSizing: "border-box" as const,
+    fontFamily: "'Courier New', Courier, monospace",
+    fontSize: "12px",
+    color: "#111",
+    backgroundColor: "#fff",
+    margin: 0,
+    padding: 0,
+  },
+  header: {
+    backgroundColor: "#111",
+    color: "#fff",
+    textAlign: "center" as const,
+    padding: "10px 8px 12px",
+    boxSizing: "border-box" as const,
+    width: "100%",
+  },
+  headerTitle: {
+    fontSize: "18px",
+    fontWeight: "bold" as const,
+    letterSpacing: "2px",
+    textTransform: "uppercase" as const,
+  },
+  headerSub: {
+    fontSize: "10px",
+    marginTop: "3px",
+    color: "#ccc",
+  },
+  headerXs: {
+    fontSize: "9px",
+    color: "#aaa",
+    marginTop: "1px",
+  },
+  body: {
+    padding: "8px 8px 0",
+    boxSizing: "border-box" as const,
+    width: "100%",
+  },
+  row: {
+    display: "flex" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "baseline" as const,
+    fontSize: "11px",
+    marginBottom: "1px",
+  },
+  muted: {
+    color: "#666",
+  },
+  bold: {
+    fontWeight: "bold" as const,
+  },
+  hr: {
+    border: "none",
+    borderTop: "1px solid #ccc",
+    margin: "6px 0",
+  },
+  hrDash: {
+    border: "none",
+    borderTop: "1px dashed #bbb",
+    margin: "4px 0",
+  },
+  hrDouble: {
+    borderTop: "3px double #333",
+    margin: "6px 0",
+  },
+  colHeader: {
+    display: "flex" as const,
+    fontSize: "10px",
+    fontWeight: "bold" as const,
+    color: "#555",
+    textTransform: "uppercase" as const,
+    marginBottom: "2px",
+  },
+  // column widths — must sum to 286px (302 - 8 - 8 padding)
+  colName:  { flex: "1 1 auto", overflow: "hidden" as const, whiteSpace: "nowrap" as const },
+  colQty:   { width: "24px", textAlign: "center" as const, flexShrink: 0 },
+  colPrice: { width: "52px", textAlign: "right" as const, flexShrink: 0 },
+  colTotal: { width: "52px", textAlign: "right" as const, flexShrink: 0 },
+  grandRow: {
+    display: "flex" as const,
+    justifyContent: "space-between" as const,
+    fontSize: "15px",
+    fontWeight: "bold" as const,
+    letterSpacing: "0.5px",
+    marginBottom: "2px",
+  },
+  footer: {
+    backgroundColor: "#f5f5f5",
+    borderTop: "1px solid #ddd",
+    textAlign: "center" as const,
+    padding: "10px 8px 12px",
+    boxSizing: "border-box" as const,
+    width: "100%",
+    marginTop: "8px",
+  },
+  barcode: {
+    fontFamily: "monospace",
+    fontSize: "14px",
+    letterSpacing: "3px",
+    marginTop: "8px",
+    color: "#333",
+  },
+};
+
+// ─── component ───────────────────────────────────────────────────────────────
 
 interface PrintableReceiptProps {
   cart: CartItem[];
@@ -50,70 +162,72 @@ export function PrintableReceipt({
   const shopPhone   = "(555) 123-4567";
 
   return (
-    <div id="printable-receipt" className="hidden print:block">
+    <div id="printable-receipt" style={S.root}>
 
-      {/* ═══ DARK HEADER ═══ */}
-      <div className="pr-header">
-        <div className="pr-large">{shopName}</div>
-        {shopTagline && <div className="pr-small pr-mt1">{shopTagline}</div>}
-        {shopAddress && <div className="pr-xs">{shopAddress}</div>}
-        {shopPhone   && <div className="pr-xs">{shopPhone}</div>}
+      {/* ── HEADER ── */}
+      <div style={S.header}>
+        <div style={S.headerTitle}>{shopName}</div>
+        {shopTagline && <div style={S.headerSub}>{shopTagline}</div>}
+        {shopAddress && <div style={S.headerXs}>{shopAddress}</div>}
+        {shopPhone   && <div style={S.headerXs}>{shopPhone}</div>}
       </div>
 
-      {/* ═══ BODY ═══ */}
-      <div className="pr-body">
+      {/* ── BODY ── */}
+      <div style={S.body}>
 
         {/* Order meta */}
-        <div className="pr-small pr-mt1">
-          <div className="pr-row">
-            <span className="pr-muted">Date:</span>
+        <div style={{ marginTop: "6px" }}>
+          <div style={S.row}>
+            <span style={S.muted}>Date:</span>
             <span>{dateStr}</span>
           </div>
-          <div className="pr-row">
-            <span className="pr-muted">Receipt:</span>
-            <span className="pr-bold">{receiptNo}</span>
+          <div style={S.row}>
+            <span style={S.muted}>Receipt:</span>
+            <span style={S.bold}>{receiptNo}</span>
           </div>
           {odooOrderId && (
-            <div className="pr-row">
-              <span className="pr-muted">Order ID:</span>
+            <div style={S.row}>
+              <span style={S.muted}>Order ID:</span>
               <span>#{odooOrderId}</span>
             </div>
           )}
           {customer && (
-            <div className="pr-row">
-              <span className="pr-muted">Customer:</span>
+            <div style={S.row}>
+              <span style={S.muted}>Customer:</span>
               <span>{customer.name}</span>
             </div>
           )}
         </div>
 
-        <hr className="pr-solid pr-mt2" />
+        <hr style={S.hr} />
 
         {/* Column headers */}
-        <div className="pr-col-header">
-          <span className="pr-name">Item</span>
-          <span className="pr-qty">Qty</span>
-          <span className="pr-price">Price</span>
-          <span className="pr-total">Total</span>
+        <div style={S.colHeader}>
+          <span style={S.colName}>Item</span>
+          <span style={S.colQty}>Qty</span>
+          <span style={S.colPrice}>Price</span>
+          <span style={S.colTotal}>Total</span>
         </div>
 
-        <hr className="pr-dash" />
+        <hr style={S.hrDash} />
 
         {/* Line items */}
         {cart.map((item, idx) => {
           const lineTotal = calcLineTotal(item);
           return (
-            <div key={idx} className="pr-small">
-              <div className="pr-row">
-                <span className="pr-name pr-bold">{item.name}</span>
-                <span className="pr-qty">{item.qty}</span>
-                <span className="pr-price">${fmt(item.price)}</span>
-                <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
+            <div key={idx} style={{ marginBottom: "3px" }}>
+              <div style={{ display: "flex", alignItems: "baseline", fontSize: "11px" }}>
+                <span style={{ ...S.colName, fontWeight: "bold" }}>{item.name}</span>
+                <span style={S.colQty}>{item.qty}</span>
+                <span style={S.colPrice}>${fmt(item.price)}</span>
+                <span style={{ ...S.colTotal, fontWeight: "bold" }}>${fmt(lineTotal)}</span>
               </div>
               {(item.discount ?? 0) > 0 && (
-                <div className="pr-row pr-xs pr-muted">
-                  <span className="pr-name">&nbsp;&nbsp;Discount {item.discount}%</span>
-                  <span className="pr-total">
+                <div style={{ display: "flex", fontSize: "10px", color: "#666" }}>
+                  <span style={{ ...S.colName, paddingLeft: "8px" }}>
+                    Discount {item.discount}%
+                  </span>
+                  <span style={{ ...S.colTotal }}>
                     -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
                   </span>
                 </div>
@@ -122,96 +236,96 @@ export function PrintableReceipt({
           );
         })}
 
-        <hr className="pr-dash" />
+        <hr style={S.hrDash} />
 
         {/* Subtotals */}
-        <div className="pr-small">
-          <div className="pr-total-row">
-            <span className="pr-muted">Subtotal</span>
+        <div style={{ fontSize: "11px" }}>
+          <div style={S.row}>
+            <span style={S.muted}>Subtotal</span>
             <span>${fmt(subtotal)}</span>
           </div>
-          <div className="pr-total-row">
-            <span className="pr-muted">Tax (10%)</span>
+          <div style={S.row}>
+            <span style={S.muted}>Tax (10%)</span>
             <span>${fmt(tax)}</span>
           </div>
         </div>
 
-        <hr className="pr-double" />
+        <hr style={S.hrDouble} />
 
         {/* Grand total */}
-        <div className="pr-total-row pr-grand">
+        <div style={S.grandRow}>
           <span>TOTAL</span>
           <span>${fmt(total)}</span>
         </div>
 
-        <hr className="pr-dash pr-mt1" />
+        <hr style={{ ...S.hrDash, marginTop: "4px" }} />
 
         {/* Payments */}
-        <div className="pr-small pr-mt1">
+        <div style={{ fontSize: "11px", marginTop: "4px" }}>
           {paymentLines.map((l, idx) => (
-            <div key={idx} className="pr-total-row">
-              <span className="pr-muted" style={{ textTransform: "capitalize" }}>
-                {l.method}
-              </span>
+            <div key={idx} style={S.row}>
+              <span style={{ ...S.muted, textTransform: "capitalize" }}>{l.method}</span>
               <span>${fmt(l.amount)}</span>
             </div>
           ))}
           {change > 0.005 && (
-            <div className="pr-total-row pr-bold">
+            <div style={{ ...S.row, fontWeight: "bold" }}>
               <span>Change</span>
               <span>${fmt(change)}</span>
             </div>
           )}
         </div>
 
-      </div>{/* end pr-body */}
+      </div>{/* end body */}
 
-      {/* ═══ LIGHT FOOTER ═══ */}
-      <div className="pr-footer">
-        <div className="pr-small pr-bold">Thank you for your visit!</div>
-        <div className="pr-xs pr-muted pr-mt1">
+      {/* ── FOOTER ── */}
+      <div style={S.footer}>
+        <div style={{ fontSize: "11px", fontWeight: "bold" }}>Thank you for your visit!</div>
+        <div style={{ fontSize: "9px", color: "#888", marginTop: "3px" }}>
           Please keep this receipt for your records.
         </div>
-        <div className="pr-barcode pr-mt2">
-          {"| ||| || | ||| | || ||| ||"}
-        </div>
-        <div className="pr-xs pr-muted">{receiptNo}</div>
+        <div style={S.barcode}>{"| ||| || | ||| | || ||| ||"}</div>
+        <div style={{ fontSize: "9px", color: "#888", marginTop: "2px" }}>{receiptNo}</div>
       </div>
 
     </div>
   );
 }
 
-
-
+// ─── print hook ──────────────────────────────────────────────────────────────
 
 export function usePrintReceipt() {
   const printReceipt = async () => {
     const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    // 1. Temporarily reveal the receipt so html2canvas can read it
+    // 1. Reveal offscreen — exact 302px, no overflow
     receipt.style.display = "block";
     receipt.style.visibility = "visible";
     receipt.style.position = "fixed";
     receipt.style.top = "-9999px";
     receipt.style.left = "0";
-    receipt.style.width = "302px"; // 80mm at 96dpi
+    receipt.style.width = "302px";
+    receipt.style.overflow = "visible";
 
     try {
-      // 2. Capture to canvas at 3× scale for sharp print output
+      // 2. Capture at 3× — match windowWidth to element width exactly
       const canvas = await html2canvas(receipt, {
         scale: 3,
         useCORS: true,
         backgroundColor: "#ffffff",
         width: 302,
         windowWidth: 302,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
         logging: false,
       });
 
       const imgDataUrl = canvas.toDataURL("image/png");
 
-      // 3. Build a minimal iframe that prints just the image
+      // 3. Build print iframe
       const existing = document.getElementById("__print_frame__");
       if (existing) existing.remove();
 
@@ -271,13 +385,14 @@ export function usePrintReceipt() {
         }, 300);
       };
     } finally {
-      // 4. Hide receipt again
+      // 4. Hide again
       receipt.style.display = "";
       receipt.style.visibility = "";
       receipt.style.position = "";
       receipt.style.top = "";
       receipt.style.left = "";
       receipt.style.width = "";
+      receipt.style.overflow = "";
     }
   };
 
