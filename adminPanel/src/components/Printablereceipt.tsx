@@ -198,26 +198,15 @@ export function usePrintReceipt() {
 
     try {
       // 2. Capture to canvas at 3× scale for sharp print output
-const canvas = await html2canvas(receipt, {
+     const canvas = await html2canvas(receipt, {
   scale: 3,
   useCORS: true,
   backgroundColor: "#ffffff",
-  width: receipt.scrollWidth,      // ← use actual width, not hardcoded
-  height: receipt.scrollHeight,    // ← use actual height too
-  windowWidth: receipt.scrollWidth,
-  x: 0,                            // ← no horizontal offset
-  y: 0,
-  scrollX: 0,
-  scrollY: 0,
+  width: 302,
+  windowWidth: 302,
   logging: false,
   onclone: (clonedDoc) => {
-    const el = clonedDoc.getElementById("printable-receipt");
-    if (el) {
-      el.style.display = "block";
-      el.style.width = "302px";
-      el.style.padding = "3mm 4mm";
-      el.style.overflow = "visible";
-    }
+    // Inject the same styles the iframe uses when printing
     const style = clonedDoc.createElement("style");
     style.textContent = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -227,13 +216,11 @@ const canvas = await html2canvas(receipt, {
         color: #000;
         width: 302px;
         background: #fff;
-        overflow: visible;
       }
       #printable-receipt {
         display: block !important;
         width: 302px;
         padding: 3mm 4mm;
-        overflow: visible;
       }
       .pr-header {
         text-align: center;
@@ -322,6 +309,7 @@ const canvas = await html2canvas(receipt, {
     clonedDoc.head.appendChild(style);
   },
 });
+
       const imgDataUrl = canvas.toDataURL("image/png");
 
       // 3. Build a minimal iframe that prints just the image
@@ -385,13 +373,12 @@ const canvas = await html2canvas(receipt, {
       };
     } finally {
       // 4. Hide receipt again
-     receipt.style.display = "block";
-receipt.style.visibility = "visible";
-receipt.style.position = "fixed";
-receipt.style.top = "-9999px";
-receipt.style.left = "0";
-receipt.style.width = "310px";   // ← slightly wider to account for padding
-receipt.style.overflow = "visible";
+      receipt.style.display = "";
+      receipt.style.visibility = "";
+      receipt.style.position = "";
+      receipt.style.top = "";
+      receipt.style.left = "";
+      receipt.style.width = "";
     }
   };
 
