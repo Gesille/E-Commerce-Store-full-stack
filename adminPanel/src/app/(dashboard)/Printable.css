@@ -38,36 +38,38 @@
     font-size: 9pt;
     color: #000;
     background: #fff;
-    border: 1.5px solid #111;
+    border: 1.5px solid #000;
+
+    /* Sharp text rendering */
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    text-rendering: geometricPrecision;
   }
 
-  /* ── HEADER (dark band) ── */
+  /* ── HEADER (no background, just borders) ── */
   .pr-header {
-    background: #111 !important;
-    color: #fff !important;
     text-align: center;
     padding: 4mm 3mm 3mm;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    border-bottom: 2px solid #000;
   }
 
   .pr-header .pr-large {
-    font-size: 13pt;
+    font-size: 14pt;
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
     text-transform: uppercase;
-    color: #fff !important;
+    color: #000;
   }
 
   .pr-header .pr-small {
     font-size: 8pt;
-    color: #bbb !important;
+    color: #000;
     margin-top: 1mm;
   }
 
   .pr-header .pr-xs {
     font-size: 7.5pt;
-    color: #999 !important;
+    color: #000;
     margin-top: 0.5mm;
   }
 
@@ -76,14 +78,11 @@
     padding: 3mm 3.5mm;
   }
 
-  /* ── FOOTER (light band) ── */
+  /* ── FOOTER (no background, top border only) ── */
   .pr-footer {
-    background: #f4f4f4 !important;
-    border-top: 1.5px solid #111;
+    border-top: 2px solid #000;
     text-align: center;
     padding: 3mm 3mm 5mm;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
 
   /* Typography */
@@ -93,7 +92,7 @@
   .pr-large  { font-size: 12pt; font-weight: 700; }
   .pr-small  { font-size: 8pt; }
   .pr-xs     { font-size: 7.5pt; }
-  .pr-muted  { color: #555; }
+  .pr-muted  { color: #000; } /* keep black, no gray on BW printers */
 
   /* Spacing */
   .pr-mt1 { margin-top: 2mm; }
@@ -104,17 +103,17 @@
   /* Dividers */
   .pr-dash {
     border: none;
-    border-top: 1px dashed #aaa;
+    border-top: 1px dashed #000;
     margin: 2mm 0;
   }
   .pr-solid {
     border: none;
-    border-top: 1.5px solid #111;
+    border-top: 1.5px solid #000;
     margin: 2mm 0;
   }
   .pr-double {
     border: none;
-    border-top: 3px double #111;
+    border-top: 3px double #000;
     margin: 2mm 0;
   }
 
@@ -149,7 +148,7 @@
     width: 100%;
     font-size: 7.5pt;
     font-weight: 700;
-    color: #444;
+    color: #000;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     box-sizing: border-box;
@@ -162,11 +161,11 @@
   /* Barcode */
   .pr-barcode {
     font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 3px;
+    font-size: 9pt;
+    letter-spacing: 4px;
     text-align: center;
     margin-top: 2mm;
-    color: #333;
+    color: #000;
   }
 
   .pr-screen-only { display: none !important; }
