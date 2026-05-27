@@ -4,23 +4,16 @@
 }
 
 @media print {
-
-  /* Hide everything except the receipt */
-  body > *:not(#printable-receipt) {
-    display: none !important;
-  }
-
-  /* Reset body */
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-    width: 80mm !important;
-  }
-
   @page {
     size: 80mm auto;
     margin: 2mm;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 80mm !important;
+    background: #fff !important;
   }
 
   #printable-receipt {

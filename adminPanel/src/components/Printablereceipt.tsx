@@ -183,24 +183,36 @@ export function PrintableReceipt({
 
 export function usePrintReceipt() {
   const printReceipt = () => {
-    // Temporarily hide everything except the receipt
-    const allChildren = Array.from(document.body.children) as HTMLElement[];
     const receipt = document.getElementById('printable-receipt');
+    if (!receipt) return;
 
-    allChildren.forEach(el => {
-      if (el !== receipt) {
-        el.dataset.printHidden = el.style.display;
-        el.style.display = 'none';
-      }
-    });
-
-    if (receipt) receipt.style.display = 'block';
+    // Make receipt visible before print
+    receipt.style.display = 'block';
+    receipt.style.position = 'static';
 
     const style = document.createElement('style');
     style.id = '__receipt_print_override__';
     style.innerHTML = `
       @page { size: 80mm auto !important; margin: 2mm !important; }
-      html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
+      @media print {
+        html, body {
+          width: 80mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        body > *:not(#printable-receipt) {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        #printable-receipt {
+          display: block !important;
+          visibility: visible !important;
+          position: static !important;
+        }
+        #printable-receipt * {
+          visibility: visible !important;
+        }
+      }
     `;
     document.head.appendChild(style);
 
@@ -208,17 +220,11 @@ export function usePrintReceipt() {
       window.print();
 
       setTimeout(() => {
-        // Restore everything
-        allChildren.forEach(el => {
-          if (el.dataset.printHidden !== undefined) {
-            el.style.display = el.dataset.printHidden || '';
-            delete el.dataset.printHidden;
-          }
-        });
-        if (receipt) receipt.style.display = 'none';
+        receipt.style.display = 'none';
+        receipt.style.position = '';
         document.getElementById('__receipt_print_override__')?.remove();
       }, 1000);
-    }, 150);
+    }, 200);
   };
 
   return { printReceipt };
