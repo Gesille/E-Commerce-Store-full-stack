@@ -198,9 +198,49 @@ export function PrintableReceipt({
 
 // ─── Hook: trigger print ──────────────────────────────────────────────────────
 
+/**
+ * usePrintReceipt
+ *
+ * Opens the browser print dialog with the page pre-configured for
+ * 80mm thermal receipt paper. The user still needs to:
+ *   1. Select their receipt printer
+ *   2. Confirm the paper size is "80mm x Roll" (or custom 80mm wide)
+ *
+ * We inject a temporary <style> that forces margins to 0 and sets
+ * the @page size, then remove it after the dialog closes.
+ */
 export function usePrintReceipt() {
   const printReceipt = () => {
-    window.print();
+    // Inject print-time overrides
+    const style = document.createElement("style");
+    style.id = "__receipt_print_override__";
+    style.innerHTML = `
+      @page {
+        size: 80mm auto !important;
+        margin: 0 !important;
+      }
+      @media print {
+        html, body {
+          width: 80mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Small delay so the style is parsed before the dialog opens
+    setTimeout(() => {
+      window.print();
+
+      // Clean up after dialog closes (fires immediately in most browsers,
+      // but the print job is already spooled by then)
+      setTimeout(() => {
+        const el = document.getElementById("__receipt_print_override__");
+        if (el) el.remove();
+      }, 1000);
+    }, 100);
   };
+
   return { printReceipt };
 }

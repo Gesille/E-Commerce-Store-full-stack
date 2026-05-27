@@ -1,24 +1,23 @@
-/* ── Screen: hide the printable receipt entirely ── */
+/* ── Screen: hide the printable receipt ── */
 #printable-receipt {
   display: none;
 }
 
 @media print {
-  /* ── Hide everything on the page ── */
+  /* Hide everything */
   body * {
     visibility: hidden !important;
   }
 
-  /* ── Show only the receipt ── */
+  /* Show only the receipt */
   #printable-receipt,
   #printable-receipt * {
     visibility: visible !important;
   }
 
-  /* ── Page setup: 80mm thermal roll, no margins ── */
   @page {
     size: 80mm auto;
-    margin: 4mm;
+    margin: 0;
   }
 
   body {
@@ -27,114 +26,86 @@
     background: #fff;
   }
 
-  /* ── Receipt container fills the full paper width ── */
   #printable-receipt {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
     display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0;
-    margin: 0;
+    width: 72mm !important;        /* 80mm paper - 4mm margin each side */
+    max-width: 72mm !important;
+    padding: 3mm 4mm 8mm 4mm;
+    margin: 0 !important;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 10pt;
+    font-size: 9pt;
     color: #000;
     background: #fff;
     box-sizing: border-box;
   }
 
-  /* ── Typography ── */
+  /* Typography */
   .pr-center { text-align: center; }
   .pr-right  { text-align: right; }
   .pr-bold   { font-weight: 700; }
-  .pr-large  { font-size: 13pt; font-weight: 700; letter-spacing: 0.03em; }
-  .pr-small  { font-size: 9pt; }
-  .pr-xs     { font-size: 8pt; }
+  .pr-large  { font-size: 12pt; font-weight: 700; }
+  .pr-small  { font-size: 8pt; }
+  .pr-xs     { font-size: 7.5pt; }
   .pr-muted  { color: #444; }
 
-  /* ── Spacing ── */
+  /* Spacing */
   .pr-mt1 { margin-top: 2mm; }
   .pr-mt2 { margin-top: 4mm; }
-  .pr-mt3 { margin-top: 7mm; }
+  .pr-mt3 { margin-top: 6mm; }
   .pr-mb1 { margin-bottom: 2mm; }
 
-  /* ── Dividers ── */
+  /* Dividers */
   .pr-dash {
     border: none;
     border-top: 1px dashed #000;
-    margin: 2.5mm 0;
+    margin: 2mm 0;
   }
-
   .pr-solid {
     border: none;
-    border-top: 1.5px solid #000;
-    margin: 2.5mm 0;
+    border-top: 1px solid #000;
+    margin: 2mm 0;
   }
-
   .pr-double {
     border: none;
     border-top: 3px double #000;
-    margin: 2.5mm 0;
+    margin: 2mm 0;
   }
 
-  /* ── Line item row: ITEM | QTY | PRICE | TOTAL ── */
+  /* Line item row */
   .pr-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     width: 100%;
-    line-height: 1.6;
+    line-height: 1.5;
     box-sizing: border-box;
   }
+  .pr-row .pr-name  { flex: 1 1 auto; padding-right: 1mm; word-break: break-word; min-width: 0; }
+  .pr-row .pr-qty   { flex: 0 0 7mm;  text-align: center; }
+  .pr-row .pr-price { flex: 0 0 13mm; text-align: right; }
+  .pr-row .pr-total { flex: 0 0 14mm; text-align: right; }
 
-  .pr-row .pr-name {
-    flex: 1 1 auto;
-    padding-right: 2mm;
-    word-break: break-word;
-    min-width: 0;
-  }
-
-  .pr-row .pr-qty {
-    flex: 0 0 8mm;
-    text-align: center;
-  }
-
-  .pr-row .pr-price {
-    flex: 0 0 15mm;
-    text-align: right;
-  }
-
-  .pr-row .pr-total {
-    flex: 0 0 16mm;
-    text-align: right;
-  }
-
-  /* ── Totals row ── */
+  /* Totals */
   .pr-total-row {
     display: flex;
     justify-content: space-between;
     width: 100%;
-    line-height: 1.7;
+    line-height: 1.6;
     box-sizing: border-box;
   }
+  .pr-grand { font-size: 11pt; font-weight: 700; }
 
-  .pr-grand {
-    font-size: 12pt;
-    font-weight: 700;
-  }
-
-  /* ── Barcode footer ── */
+  /* Barcode */
   .pr-barcode {
     font-family: 'Courier New', monospace;
-    font-size: 8pt;
-    letter-spacing: 0.15em;
+    font-size: 7.5pt;
+    letter-spacing: 0.1em;
     text-align: center;
     margin-top: 3mm;
   }
 
-  /* ── Hide anything marked screen-only ── */
-  .pr-screen-only {
-    display: none !important;
-  }
+  .pr-screen-only { display: none !important; }
 }
