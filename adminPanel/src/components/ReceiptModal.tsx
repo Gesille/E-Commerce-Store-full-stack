@@ -49,7 +49,13 @@ export function ReceiptModal({
     pdfUrl?: string;
     message?: string;
   }>({ status: "idle" });
-  const { printReceipt } = usePrintReceipt();
+const { printReceipt } = usePrintReceipt({
+  cart: order.cart,
+  customer,
+  paymentLines,
+  odooOrderId,
+  receiptNo,
+});
 
   const handlePrint = () => printReceipt();
 
