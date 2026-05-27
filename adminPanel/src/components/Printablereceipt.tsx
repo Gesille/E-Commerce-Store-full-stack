@@ -186,45 +186,162 @@ export function usePrintReceipt() {
     const receipt = document.getElementById('printable-receipt');
     if (!receipt) return;
 
-    // Make receipt visible before print
-    receipt.style.display = 'block';
-    receipt.style.position = 'static';
+    const receiptHTML = receipt.innerHTML;
 
-    const style = document.createElement('style');
-    style.id = '__receipt_print_override__';
-    style.innerHTML = `
-      @page { size: 80mm auto !important; margin: 2mm !important; }
-      @media print {
-        html, body {
-          width: 80mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        body > *:not(#printable-receipt) {
-          display: none !important;
-          visibility: hidden !important;
-        }
-        #printable-receipt {
-          display: block !important;
-          visibility: visible !important;
-          position: static !important;
-        }
-        #printable-receipt * {
-          visibility: visible !important;
-        }
-      }
-    `;
-    document.head.appendChild(style);
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) return;
 
-    setTimeout(() => {
-      window.print();
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8"/>
+          <title>Receipt</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 2mm;
+            }
 
-      setTimeout(() => {
-        receipt.style.display = 'none';
-        receipt.style.position = '';
-        document.getElementById('__receipt_print_override__')?.remove();
-      }, 1000);
-    }, 200);
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+
+            html, body {
+              width: 80mm;
+              background: #fff;
+              font-family: Arial, Helvetica, sans-serif;
+              font-size: 11pt;
+              color: #000;
+            }
+
+            .receipt-wrapper {
+              width: 76mm;
+              border: 1.5px solid #000;
+            }
+
+            /* HEADER */
+            .pr-header {
+              text-align: center;
+              padding: 4mm 3mm 3mm;
+              border-bottom: 2px solid #000;
+            }
+            .pr-header .pr-large {
+              font-size: 17pt;
+              font-weight: 900;
+              letter-spacing: 2px;
+              text-transform: uppercase;
+              display: block;
+            }
+            .pr-header .pr-small {
+              font-size: 10pt;
+              margin-top: 1mm;
+              display: block;
+            }
+            .pr-header .pr-xs {
+              font-size: 9.5pt;
+              margin-top: 0.5mm;
+              display: block;
+            }
+
+            /* BODY */
+            .pr-body {
+              padding: 3mm 3.5mm;
+            }
+
+            /* FOOTER */
+            .pr-footer {
+              border-top: 2px solid #000;
+              text-align: center;
+              padding: 3mm 3mm 5mm;
+            }
+
+            /* Typography */
+            .pr-center { text-align: center; }
+            .pr-right  { text-align: right; }
+            .pr-bold   { font-weight: 700; }
+            .pr-large  { font-size: 13pt; font-weight: 700; }
+            .pr-small  { font-size: 10pt; }
+            .pr-xs     { font-size: 9.5pt; }
+            .pr-muted  { color: #000; }
+
+            /* Spacing */
+            .pr-mt1 { margin-top: 2mm; }
+            .pr-mt2 { margin-top: 4mm; }
+            .pr-mt3 { margin-top: 6mm; }
+            .pr-mb1 { margin-bottom: 2mm; }
+
+            /* Dividers */
+            .pr-dash   { border: none; border-top: 1px dashed #000; margin: 2.5mm 0; }
+            .pr-solid  { border: none; border-top: 1.5px solid #000; margin: 2.5mm 0; }
+            .pr-double { border: none; border-top: 3px double #000;  margin: 2.5mm 0; }
+
+            /* Row layout */
+            .pr-row {
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+              width: 100%;
+              line-height: 1.6;
+            }
+            .pr-row .pr-name  { flex: 1 1 auto; padding-right: 1mm; word-break: break-word; min-width: 0; }
+            .pr-row .pr-qty   { flex: 0 0 8mm;  text-align: center; }
+            .pr-row .pr-price { flex: 0 0 16mm; text-align: right; }
+            .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
+
+            /* Totals */
+            .pr-total-row {
+              display: flex;
+              justify-content: space-between;
+              width: 100%;
+              line-height: 1.7;
+            }
+            .pr-grand { font-size: 14pt; font-weight: 900; }
+
+            /* Column headers */
+            .pr-col-header {
+              display: flex;
+              justify-content: space-between;
+              width: 100%;
+              font-size: 9pt;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .pr-col-header .pr-name  { flex: 1 1 auto; }
+            .pr-col-header .pr-qty   { flex: 0 0 8mm;  text-align: center; }
+            .pr-col-header .pr-price { flex: 0 0 16mm; text-align: right; }
+            .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
+
+            /* Barcode */
+            .pr-barcode {
+              font-family: 'Courier New', monospace;
+              font-size: 10pt;
+              letter-spacing: 4px;
+              text-align: center;
+              margin-top: 2mm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-wrapper">
+            ${receiptHTML}
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              window.onafterprint = function() {
+                window.close();
+              };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
   };
 
   return { printReceipt };
