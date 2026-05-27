@@ -64,9 +64,6 @@ export function PrintableReceipt({
     hour: "2-digit", minute: "2-digit",
   });
 
-  // Shared horizontal padding for all sections
-  const H_PAD = "0 20px";
-
   return (
     <div
       id="printable-receipt"
@@ -76,12 +73,13 @@ export function PrintableReceipt({
         width:      `${RECEIPT_W}px`,
         background: "#ffffff",
         boxSizing:  "border-box",
+        overflow:   "hidden",
       }}
     >
       {/* ── HEADER ── */}
       <div style={{
         ...S.center,
-        padding:      `14px 20px 10px`,
+        padding:      "14px 24px 10px",
         borderBottom: "2px solid #000000",
         background:   "#ffffff",
         boxSizing:    "border-box",
@@ -89,14 +87,13 @@ export function PrintableReceipt({
         <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
           {shopName.toUpperCase()}
         </div>
-        {/* Each piece of info on its own line */}
         <div style={{ ...S.small, marginTop: "4px", color: "#000000" }}>{shopTagline}</div>
         <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
         <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
       </div>
 
       {/* ── META ── */}
-      <div style={{ ...S.center, padding: `8px 20px`, borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ ...S.center, padding: "8px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
         <div style={{ ...S.small, color: "#000000" }}>{dateStr}</div>
         <div style={{ ...S.bold, color: "#000000" }}>Receipt: {receiptNo}</div>
         {odooOrderId && <div style={{ ...S.small, color: "#000000" }}>Order ID: #{odooOrderId}</div>}
@@ -104,7 +101,7 @@ export function PrintableReceipt({
       </div>
 
       {/* ── COLUMN HEADERS ── */}
-      <div style={{ ...S.grid, ...S.bold, ...S.small, padding: `5px 20px`, borderBottom: "1px solid #000000", background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ ...S.grid, ...S.bold, ...S.small, padding: "5px 24px", borderBottom: "1px solid #000000", background: "#ffffff", boxSizing: "border-box" }}>
         <span style={{ color: "#000000" }}>Item</span>
         <span style={{ textAlign: "center", color: "#000000" }}>Qty</span>
         <span style={{ textAlign: "right",  color: "#000000" }}>Price</span>
@@ -112,7 +109,7 @@ export function PrintableReceipt({
       </div>
 
       {/* ── LINE ITEMS ── */}
-      <div style={{ padding: `6px 20px`, borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ padding: "6px 24px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
         {cart.map((item, idx) => {
           const lineTotal = calcLineTotal(item);
           return (
@@ -135,7 +132,7 @@ export function PrintableReceipt({
       </div>
 
       {/* ── SUBTOTALS ── */}
-      <div style={{ padding: `6px 20px`, background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ padding: "6px 24px", background: "#ffffff", boxSizing: "border-box" }}>
         <div style={{ ...S.row, color: "#000000" }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
         <div style={{ ...S.row, color: "#000000" }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
       </div>
@@ -146,7 +143,7 @@ export function PrintableReceipt({
         fontSize:     FONT_TOTAL,
         borderTop:    "2px solid #000000",
         borderBottom: "2px solid #000000",
-        padding:      `5px 20px`,
+        padding:      "5px 24px",
         margin:       "2px 0 6px",
         color:        "#000000",
         background:   "#ffffff",
@@ -157,7 +154,7 @@ export function PrintableReceipt({
       </div>
 
       {/* ── PAYMENTS ── */}
-      <div style={{ padding: `4px 20px 8px`, borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ padding: "4px 24px 8px", borderBottom: "1px dashed #000000", background: "#ffffff", boxSizing: "border-box" }}>
         {paymentLines.map((l, idx) => (
           <div key={idx} style={{ ...S.row, color: "#000000" }}>
             <span style={{ textTransform: "capitalize" }}>{l.method}</span>
@@ -173,7 +170,7 @@ export function PrintableReceipt({
       </div>
 
       {/* ── FOOTER ── */}
-      <div style={{ ...S.center, padding: `10px 20px 14px`, background: "#ffffff", boxSizing: "border-box" }}>
+      <div style={{ ...S.center, padding: "10px 24px 14px", background: "#ffffff", boxSizing: "border-box" }}>
         <div style={{ ...S.bold, fontSize: "15px", color: "#000000" }}>Thank you for your visit!</div>
         <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>Please keep this receipt for your records.</div>
         <div style={{ ...S.small, marginTop: "6px", letterSpacing: "2px", color: "#000000" }}>{receiptNo}</div>
@@ -188,21 +185,22 @@ export function usePrintReceipt() {
     const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    // 1. Move off-screen and make fully visible
+    // Render off-screen with a left offset so it's never at x=0 edge
     receipt.style.cssText = `
       display: block !important;
       visibility: visible !important;
       position: fixed !important;
       top: -9999px !important;
-      left: 0 !important;
+      left: 50px !important;
       width: ${RECEIPT_W}px !important;
       background: #ffffff !important;
-      z-index: -1 !important;
+      z-index: 9999 !important;
       box-sizing: border-box !important;
+      overflow: hidden !important;
     `;
 
-    // Small delay so browser paints the layout before capture
-    await new Promise(r => setTimeout(r, 150));
+    // Longer delay to ensure full paint before capture
+    await new Promise(r => setTimeout(r, 300));
 
     try {
       const canvas = await html2canvas(receipt, {
@@ -210,12 +208,12 @@ export function usePrintReceipt() {
         useCORS:         true,
         backgroundColor: "#ffffff",
         width:           RECEIPT_W,
-        windowWidth:     RECEIPT_W,
+        windowWidth:     1200,       // wide enough to avoid reflow clipping
         logging:         false,
         removeContainer: false,
         x:               0,
         y:               0,
-        scrollX:         0,
+        scrollX:         -50,        // compensate for left: 50px offset
         scrollY:         0,
       });
 
@@ -252,7 +250,6 @@ export function usePrintReceipt() {
       };
 
     } finally {
-      // Restore hidden
       receipt.style.cssText = "display: none;";
     }
   };
