@@ -49,11 +49,10 @@ export function PrintableReceipt({
     minute: "2-digit",
   });
 
-  const shopName = import.meta.env.VITE_SHOP_NAME ?? "Chef's World";
-  const shopTagline =
-    import.meta.env.VITE_SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies";
-  const shopAddress = import.meta.env.VITE_SHOP_ADDRESS ?? "";
-  const shopPhone = import.meta.env.VITE_SHOP_PHONE ?? "";
+  const shopName = "Chef's World";
+  const shopTagline = "Restaurant, Bar & Kitchen Supplies";
+  const shopAddress = "123 Main St, Anytown, USA";
+  const shopPhone = "(555) 123-4567";
 
   return (
     /*
@@ -184,9 +183,7 @@ export function PrintableReceipt({
       {shopAddress && (
         <div className="pr-center pr-xs pr-muted">{shopAddress}</div>
       )}
-      {shopPhone && (
-        <div className="pr-center pr-xs pr-muted">{shopPhone}</div>
-      )}
+      {shopPhone && <div className="pr-center pr-xs pr-muted">{shopPhone}</div>}
 
       <hr className="pr-solid pr-mt2" />
 
@@ -239,7 +236,7 @@ export function PrintableReceipt({
             </div>
             {(item.discount ?? 0) > 0 && (
               <div className="pr-row pr-xs pr-muted">
-                <span className="pr-name">  Discount {item.discount}%</span>
+                <span className="pr-name"> Discount {item.discount}%</span>
                 <span className="pr-total">
                   -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
                 </span>
@@ -293,9 +290,7 @@ export function PrintableReceipt({
       <hr className="pr-solid pr-mt2" />
 
       {/* ═══ FOOTER ═══ */}
-      <div className="pr-center pr-small pr-mt2">
-        Thank you for your visit!
-      </div>
+      <div className="pr-center pr-small pr-mt2">Thank you for your visit!</div>
       <div className="pr-center pr-xs pr-muted pr-mt1">
         Please keep this receipt for your records.
       </div>
