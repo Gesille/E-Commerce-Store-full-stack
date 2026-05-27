@@ -188,159 +188,145 @@ export function usePrintReceipt() {
     const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    // Build a self-contained clone with all styles inlined
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = `
-      position: fixed;
-      top: -9999px;
-      left: 0;
-      width: 302px;
-      background: #fff;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 11pt;
-      color: #000;
-      padding: 8px 10px;
-      box-sizing: border-box;
-    `;
-
-    wrapper.innerHTML = receipt.innerHTML;
-
-    // Apply inline styles to all cloned elements
-    const applyStyles = (el: HTMLElement) => {
-      const cls = el.className || "";
-
-      // Reset
-      el.style.margin = "0";
-      el.style.padding = "0";
-      el.style.boxSizing = "border-box";
-
-      if (cls.includes("pr-header")) {
-        el.style.cssText = `
-          text-align: center;
-          padding: 8px 4px 6px;
-          border-bottom: 2px solid #000;
-          margin-bottom: 4px;
-          box-sizing: border-box;
-        `;
-      }
-      if (cls.includes("pr-large") && el.closest?.(".pr-header")) {
-        el.style.cssText = `
-          font-size: 20pt;
-          font-weight: 900;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          display: block;
-          color: #000;
-        `;
-      }
-      if (cls.includes("pr-body")) {
-        el.style.cssText = `padding: 4px 0; box-sizing: border-box;`;
-      }
-      if (cls.includes("pr-footer")) {
-        el.style.cssText = `
-          border-top: 2px solid #000;
-          text-align: center;
-          padding: 6px 0 8px;
-          margin-top: 4px;
-          box-sizing: border-box;
-        `;
-      }
-      if (cls.includes("pr-row")) {
-        el.style.cssText = `
-          display: flex;
-          justify-content: space-between;
-          align-items: baseline;
-          width: 100%;
-          line-height: 1.6;
-          box-sizing: border-box;
-        `;
-      }
-      if (cls.includes("pr-total-row")) {
-        el.style.cssText = `
-          display: flex;
-          justify-content: space-between;
-          width: 100%;
-          line-height: 1.7;
-          box-sizing: border-box;
-        `;
-      }
-      if (cls.includes("pr-col-header")) {
-        el.style.cssText = `
-          display: flex;
-          justify-content: space-between;
-          width: 100%;
-          font-size: 9pt;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          box-sizing: border-box;
-        `;
-      }
-      if (cls.includes("pr-grand")) {
-        el.style.fontSize = "15pt";
-        el.style.fontWeight = "900";
-      }
-      if (cls.includes("pr-bold")) el.style.fontWeight = "700";
-      if (cls.includes("pr-small")) el.style.fontSize = "10pt";
-      if (cls.includes("pr-xs"))    el.style.fontSize  = "9pt";
-      if (cls.includes("pr-muted")) el.style.color     = "#555";
-      if (cls.includes("pr-mt1"))   el.style.marginTop = "4px";
-      if (cls.includes("pr-mt2"))   el.style.marginTop = "8px";
-
-      // Column widths
-      if (cls.includes("pr-name"))  { el.style.flex = "1 1 auto"; el.style.paddingRight = "4px"; el.style.wordBreak = "break-word"; el.style.minWidth = "0"; }
-      if (cls.includes("pr-qty"))   { el.style.flex = "0 0 28px"; el.style.textAlign = "center"; }
-      if (cls.includes("pr-price")) { el.style.flex = "0 0 54px"; el.style.textAlign = "right"; }
-      if (cls.includes("pr-total")) { el.style.flex = "0 0 54px"; el.style.textAlign = "right"; }
-
-      // Dividers
-      const tag = el.tagName?.toLowerCase();
-      if (tag === "hr") {
-        el.style.border = "none";
-        el.style.margin = "5px 0";
-        if (cls.includes("pr-dash"))   el.style.borderTop = "1px dashed #000";
-        if (cls.includes("pr-solid"))  el.style.borderTop = "1.5px solid #000";
-        if (cls.includes("pr-double")) el.style.borderTop = "3px double #000";
-      }
-
-      if (cls.includes("pr-barcode")) {
-        el.style.fontFamily = "Courier New, monospace";
-        el.style.fontSize   = "10pt";
-        el.style.letterSpacing = "4px";
-        el.style.textAlign  = "center";
-        el.style.marginTop  = "4px";
-      }
-
-      // Recurse
-      Array.from(el.children).forEach(child => applyStyles(child as HTMLElement));
-    };
-
-    Array.from(wrapper.children).forEach(child => applyStyles(child as HTMLElement));
-    document.body.appendChild(wrapper);
+    // 1. Temporarily reveal the receipt so html2canvas can read it
+    receipt.style.display = "block";
+    receipt.style.visibility = "visible";
+    receipt.style.position = "fixed";
+    receipt.style.top = "-9999px";
+    receipt.style.left = "0";
+    receipt.style.width = "320px"; // 80mm at 96dpi
 
     try {
-      const canvas = await html2canvas(wrapper, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        width: 302,
-        height: wrapper.scrollHeight,
-        windowWidth: 302,
-        logging: false,
-      });
+      // 2. Capture to canvas at 3× scale for sharp print output
+     const canvas = await html2canvas(receipt, {
+  scale: 3,
+  useCORS: true,
+  backgroundColor: "#ffffff",
+  width: 320,
+  windowWidth: 320,
+  logging: false,
+  onclone: (clonedDoc) => {
+    // Inject the same styles the iframe uses when printing
+    const style = clonedDoc.createElement("style");
+    style.textContent = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11pt;
+        color: #000;
+        width: 302px;
+        background: #fff;
+      }
+      #printable-receipt {
+        display: block !important;
+        width: 302px;
+        padding: 3mm 4mm;
+      }
+      .pr-header {
+        text-align: center;
+        padding: 4mm 2mm 3mm;
+        border-bottom: 2px solid #000;
+        margin-bottom: 2mm;
+      }
+      .pr-header .pr-large {
+        font-size: 18pt;
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        display: block;
+        color: #000;
+      }
+      .pr-header .pr-small {
+        font-size: 10pt;
+        font-weight: 500;
+        margin-top: 1mm;
+        display: block;
+        color: #000;
+      }
+      .pr-header .pr-xs {
+        font-size: 9.5pt;
+        font-weight: 400;
+        margin-top: 0.5mm;
+        display: block;
+        color: #000;
+      }
+      .pr-body { padding: 2mm 0; }
+      .pr-footer {
+        border-top: 2px solid #000;
+        text-align: center;
+        padding: 3mm 0 4mm;
+        margin-top: 2mm;
+      }
+      .pr-bold   { font-weight: 700; }
+      .pr-large  { font-size: 13pt; font-weight: 700; }
+      .pr-small  { font-size: 10pt; }
+      .pr-xs     { font-size: 9.5pt; }
+      .pr-muted  { color: #555; }
+      .pr-mt1 { margin-top: 2mm; }
+      .pr-mt2 { margin-top: 4mm; }
+      .pr-dash   { border: none; border-top: 1px dashed #000; margin: 2.5mm 0; }
+      .pr-solid  { border: none; border-top: 1.5px solid #000; margin: 2.5mm 0; }
+      .pr-double { border: none; border-top: 3px double #000; margin: 2.5mm 0; }
+      .pr-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        width: 100%;
+        line-height: 1.6;
+      }
+      .pr-row .pr-name  { flex: 1 1 auto; padding-right: 2mm; word-break: break-word; min-width: 0; }
+      .pr-row .pr-qty   { flex: 0 0 9mm; text-align: center; }
+      .pr-row .pr-price { flex: 0 0 17mm; text-align: right; }
+      .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
+      .pr-total-row {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        line-height: 1.7;
+      }
+      .pr-grand { font-size: 15pt; font-weight: 900; }
+      .pr-col-header {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        font-size: 9.5pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .pr-col-header .pr-name  { flex: 1 1 auto; }
+      .pr-col-header .pr-qty   { flex: 0 0 9mm; text-align: center; }
+      .pr-col-header .pr-price { flex: 0 0 17mm; text-align: right; }
+      .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
+      .pr-barcode {
+        font-family: 'Courier New', monospace;
+        font-size: 10pt;
+        letter-spacing: 4px;
+        text-align: center;
+        margin-top: 2mm;
+      }
+    `;
+    clonedDoc.head.appendChild(style);
+  },
+});
 
       const imgDataUrl = canvas.toDataURL("image/png");
 
+      // 3. Build a minimal iframe that prints just the image
       const existing = document.getElementById("__print_frame__");
       if (existing) existing.remove();
 
       const iframe = document.createElement("iframe");
       iframe.id = "__print_frame__";
       iframe.style.cssText = `
-        position: fixed; top: 0; left: 0;
-        width: 80mm; height: 1px;
-        border: none; opacity: 0;
-        pointer-events: none; z-index: -1;
+        position: fixed;
+        top: 0; left: 0;
+        width: 80mm;
+        height: 1px;
+        border: none;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
       `;
       document.body.appendChild(iframe);
 
@@ -348,14 +334,34 @@ export function usePrintReceipt() {
       if (!doc) return;
 
       doc.open();
-      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-        <style>
-          @page { size: 80mm auto; margin: 0; }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { width: 80mm; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          img { width: 80mm; display: block; }
-        </style>
-      </head><body><img src="${imgDataUrl}"/></body></html>`);
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8"/>
+            <style>
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              html, body {
+                width: 80mm;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                width: 80mm;
+                display: block;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${imgDataUrl}" />
+          </body>
+        </html>
+      `);
       doc.close();
 
       iframe.onload = () => {
@@ -366,7 +372,13 @@ export function usePrintReceipt() {
         }, 300);
       };
     } finally {
-      document.body.removeChild(wrapper);
+      // 4. Hide receipt again
+      receipt.style.display = "";
+      receipt.style.visibility = "";
+      receipt.style.position = "";
+      receipt.style.top = "";
+      receipt.style.left = "";
+      receipt.style.width = "";
     }
   };
 
