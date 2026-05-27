@@ -200,14 +200,117 @@ export function usePrintReceipt() {
 
     try {
       // 2. Capture to canvas at 3× scale for sharp print output
-      const canvas = await html2canvas(receipt, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        width: 302,
-        windowWidth: 302,
-        logging: false,
-      });
+     const canvas = await html2canvas(receipt, {
+  scale: 3,
+  useCORS: true,
+  backgroundColor: "#ffffff",
+  width: 302,
+  windowWidth: 302,
+  logging: false,
+  onclone: (clonedDoc) => {
+    // Inject the same styles the iframe uses when printing
+    const style = clonedDoc.createElement("style");
+    style.textContent = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11pt;
+        color: #000;
+        width: 302px;
+        background: #fff;
+      }
+      #printable-receipt {
+        display: block !important;
+        width: 302px;
+        padding: 3mm 4mm;
+      }
+      .pr-header {
+        text-align: center;
+        padding: 4mm 2mm 3mm;
+        border-bottom: 2px solid #000;
+        margin-bottom: 2mm;
+      }
+      .pr-header .pr-large {
+        font-size: 18pt;
+        font-weight: 900;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        display: block;
+        color: #000;
+      }
+      .pr-header .pr-small {
+        font-size: 10pt;
+        font-weight: 500;
+        margin-top: 1mm;
+        display: block;
+        color: #000;
+      }
+      .pr-header .pr-xs {
+        font-size: 9.5pt;
+        font-weight: 400;
+        margin-top: 0.5mm;
+        display: block;
+        color: #000;
+      }
+      .pr-body { padding: 2mm 0; }
+      .pr-footer {
+        border-top: 2px solid #000;
+        text-align: center;
+        padding: 3mm 0 4mm;
+        margin-top: 2mm;
+      }
+      .pr-bold   { font-weight: 700; }
+      .pr-large  { font-size: 13pt; font-weight: 700; }
+      .pr-small  { font-size: 10pt; }
+      .pr-xs     { font-size: 9.5pt; }
+      .pr-muted  { color: #555; }
+      .pr-mt1 { margin-top: 2mm; }
+      .pr-mt2 { margin-top: 4mm; }
+      .pr-dash   { border: none; border-top: 1px dashed #000; margin: 2.5mm 0; }
+      .pr-solid  { border: none; border-top: 1.5px solid #000; margin: 2.5mm 0; }
+      .pr-double { border: none; border-top: 3px double #000; margin: 2.5mm 0; }
+      .pr-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        width: 100%;
+        line-height: 1.6;
+      }
+      .pr-row .pr-name  { flex: 1 1 auto; padding-right: 2mm; word-break: break-word; min-width: 0; }
+      .pr-row .pr-qty   { flex: 0 0 9mm; text-align: center; }
+      .pr-row .pr-price { flex: 0 0 17mm; text-align: right; }
+      .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
+      .pr-total-row {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        line-height: 1.7;
+      }
+      .pr-grand { font-size: 15pt; font-weight: 900; }
+      .pr-col-header {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        font-size: 9.5pt;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .pr-col-header .pr-name  { flex: 1 1 auto; }
+      .pr-col-header .pr-qty   { flex: 0 0 9mm; text-align: center; }
+      .pr-col-header .pr-price { flex: 0 0 17mm; text-align: right; }
+      .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
+      .pr-barcode {
+        font-family: 'Courier New', monospace;
+        font-size: 10pt;
+        letter-spacing: 4px;
+        text-align: center;
+        margin-top: 2mm;
+      }
+    `;
+    clonedDoc.head.appendChild(style);
+  },
+});
 
       const imgDataUrl = canvas.toDataURL("image/png");
 
