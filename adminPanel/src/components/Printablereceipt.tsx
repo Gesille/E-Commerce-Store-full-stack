@@ -181,191 +181,103 @@ export function PrintableReceipt({
   );
 }
 
+
+import html2canvas from "html2canvas";
+
 export function usePrintReceipt() {
-  const printReceipt = () => {
-    const receipt = document.getElementById('printable-receipt');
+  const printReceipt = async () => {
+    const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    const receiptHTML = receipt.innerHTML;
+    // 1. Temporarily reveal the receipt so html2canvas can read it
+    receipt.style.display = "block";
+    receipt.style.visibility = "visible";
+    receipt.style.position = "fixed";
+    receipt.style.top = "-9999px";
+    receipt.style.left = "0";
+    receipt.style.width = "302px"; // 80mm at 96dpi
 
-    const existing = document.getElementById('__print_frame__');
-    if (existing) existing.remove();
+    try {
+      // 2. Capture to canvas at 3× scale for sharp print output
+      const canvas = await html2canvas(receipt, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        width: 302,
+        windowWidth: 302,
+        logging: false,
+      });
 
-    const iframe = document.createElement('iframe');
-    iframe.id = '__print_frame__';
-    iframe.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 80mm;
-      height: 100%;
-      border: none;
-      opacity: 0;
-      pointer-events: none;
-      z-index: -1;
-    `;
+      const imgDataUrl = canvas.toDataURL("image/png");
 
-    document.body.appendChild(iframe);
+      // 3. Build a minimal iframe that prints just the image
+      const existing = document.getElementById("__print_frame__");
+      if (existing) existing.remove();
 
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
+      const iframe = document.createElement("iframe");
+      iframe.id = "__print_frame__";
+      iframe.style.cssText = `
+        position: fixed;
+        top: 0; left: 0;
+        width: 80mm;
+        height: 1px;
+        border: none;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
+      `;
+      document.body.appendChild(iframe);
 
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8"/>
-          <style>
-           @page { size: 80mm auto; margin: 0 4mm; }
-            * {
-              box-sizing: border-box;
-              margin: 0;
-              padding: 0;
-            }
-            html, body {
-              width: 80mm;
-              background: #fff;
-              font-family: Arial, Helvetica, sans-serif;
-              font-size: 11pt;
-              color: #000;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
 
-            /* NO border on wrapper — use padding instead so nothing gets clipped */
-            .receipt-wrapper { width: 100%; padding: 3mm 0; }
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8"/>
+            <style>
+              @page {
+                size: 80mm auto;
+                margin: 0;
+              }
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              html, body {
+                width: 80mm;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                width: 80mm;
+                display: block;
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${imgDataUrl}" />
+          </body>
+        </html>
+      `);
+      doc.close();
 
-            /* HEADER */
-            .pr-header {
-              text-align: center;
-              padding: 4mm 2mm 3mm;
-              border-bottom: 2px solid #000;
-              margin-bottom: 2mm;
-            }
-            .pr-header .pr-large {
-              font-size: 18pt;
-              font-weight: 900;
-              letter-spacing: 2px;
-              text-transform: uppercase;
-              display: block;
-              color: #000;
-            }
-            .pr-header .pr-small {
-              font-size: 10pt;
-              font-weight: 500;
-              margin-top: 1mm;
-              display: block;
-              color: #000;
-            }
-            .pr-header .pr-xs {
-              font-size: 9.5pt;
-              font-weight: 400;
-              margin-top: 0.5mm;
-              display: block;
-              color: #000;
-            }
-
-            /* BODY */
-            .pr-body { padding: 2mm 0; }
-
-            /* FOOTER */
-            .pr-footer {
-              border-top: 2px solid #000;
-              text-align: center;
-              padding: 3mm 0 4mm;
-              margin-top: 2mm;
-            }
-
-            /* Typography */
-            .pr-center { text-align: center; }
-            .pr-right  { text-align: right; }
-            .pr-bold   { font-weight: 700; }
-            .pr-large  { font-size: 13pt; font-weight: 700; }
-            .pr-small  { font-size: 10pt; }
-            .pr-xs     { font-size: 9.5pt; }
-            .pr-muted  { color: #000; }
-
-            /* Spacing */
-            .pr-mt1 { margin-top: 2mm; }
-            .pr-mt2 { margin-top: 4mm; }
-            .pr-mt3 { margin-top: 6mm; }
-            .pr-mb1 { margin-bottom: 2mm; }
-
-            /* Dividers */
-            .pr-dash   { border: none; border-top: 1px dashed #000; margin: 2.5mm 0; }
-            .pr-solid  { border: none; border-top: 1.5px solid #000; margin: 2.5mm 0; }
-            .pr-double { border: none; border-top: 3px double #000;  margin: 2.5mm 0; }
-
-            /* Row layout */
-            .pr-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: baseline;
-              width: 100%;
-              line-height: 1.6;
-            }
-            .pr-row .pr-name  { flex: 1 1 auto; padding-right: 2mm; word-break: break-word; min-width: 0; }
-            .pr-row .pr-qty   { flex: 0 0 9mm;  text-align: center; }
-            .pr-row .pr-price { flex: 0 0 17mm; text-align: right; }
-            .pr-row .pr-total { flex: 0 0 17mm; text-align: right; }
-
-            /* Totals */
-            .pr-total-row {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              line-height: 1.7;
-            }
-            .pr-grand {
-              font-size: 15pt;
-              font-weight: 900;
-            }
-
-            /* Column headers */
-            .pr-col-header {
-              display: flex;
-              justify-content: space-between;
-              width: 100%;
-              font-size: 9.5pt;
-              font-weight: 700;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            .pr-col-header .pr-name  { flex: 1 1 auto; }
-            .pr-col-header .pr-qty   { flex: 0 0 9mm;  text-align: center; }
-            .pr-col-header .pr-price { flex: 0 0 17mm; text-align: right; }
-            .pr-col-header .pr-total { flex: 0 0 17mm; text-align: right; }
-
-            /* Barcode */
-            .pr-barcode {
-              font-family: 'Courier New', monospace;
-              font-size: 10pt;
-              letter-spacing: 4px;
-              text-align: center;
-              margin-top: 2mm;
-            }
-
-            /* Hide stray elements */
-            .pr-screen-only { display: none !important; }
-          </style>
-        </head>
-        <body>
-          <div class="receipt-wrapper">
-            ${receiptHTML}
-          </div>
-        </body>
-      </html>
-    `);
-    doc.close();
-
-    iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-        setTimeout(() => iframe.remove(), 2000);
-      }, 300);
-    };
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => iframe.remove(), 2000);
+        }, 300);
+      };
+    } finally {
+      // 4. Hide receipt again
+      receipt.style.display = "";
+      receipt.style.visibility = "";
+      receipt.style.position = "";
+      receipt.style.top = "";
+      receipt.style.left = "";
+      receipt.style.width = "";
+    }
   };
 
   return { printReceipt };
