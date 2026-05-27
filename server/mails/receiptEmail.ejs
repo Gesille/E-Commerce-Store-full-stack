@@ -2,320 +2,421 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Welcome to Chef's World</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Receipt – <%= orderName %></title>
+  <!--[if mso]>
+  <noscript>
+    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  </noscript>
+  <![endif]-->
   <style>
+    /* ── Reset ───────────────────────────────────────── */
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f0f4ff;
-      padding: 40px 20px;
+    body, html {
+      background-color: #f4f1ec;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      color: #1a1a1a;
+      -webkit-text-size-adjust: 100%;
     }
 
+    /* ── Wrapper ─────────────────────────────────────── */
     .wrapper {
-      max-width: 580px;
+      width: 100%;
+      background-color: #f4f1ec;
+      padding: 40px 16px;
+    }
+    .container {
+      max-width: 560px;
       margin: 0 auto;
-    }
-
-    .card {
-      background: #ffffff;
-      border-radius: 16px;
+      background: #fffdf8;
+      border: 1px solid #e0d9ce;
+      border-radius: 2px;
       overflow: hidden;
-      box-shadow: 0 4px 24px rgba(99, 102, 241, 0.12);
     }
 
-    /* Header */
+    /* ── Header ──────────────────────────────────────── */
     .header {
-      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #2563eb 100%);
-      padding: 40px 32px;
+      background-color: #1a1a1a;
+      color: #f4f1ec;
+      padding: 36px 40px 28px;
       text-align: center;
+      position: relative;
     }
-
-    .header .logo {
-      font-size: 28px;
-      font-weight: 800;
-      color: #ffffff;
-      letter-spacing: -0.5px;
+    .header::after {
+      content: '';
+      display: block;
+      height: 3px;
+      background: repeating-linear-gradient(
+        90deg,
+        #c9a96e 0px, #c9a96e 8px,
+        transparent 8px, transparent 14px
+      );
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
     }
-
-    .header .logo span {
-      color: #a5b4fc;
+    .logo-img {
+      max-height: 52px;
+      max-width: 160px;
+      display: block;
+      margin: 0 auto 14px;
+      object-fit: contain;
+      filter: brightness(0) invert(1);
     }
-
-    .header .tagline {
-      color: #c7d2fe;
-      font-size: 13px;
+    .logo-text {
+      font-size: 22px;
+      font-weight: normal;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #f4f1ec;
+    }
+    .tagline {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #c9a96e;
       margin-top: 6px;
     }
 
-    /* Welcome banner */
-    .banner {
-      background: linear-gradient(135deg, #eef2ff, #f5f3ff);
-      padding: 32px;
+    /* ── Receipt Banner ──────────────────────────────── */
+    .receipt-banner {
+      background: #c9a96e;
+      color: #1a1a1a;
       text-align: center;
-      border-bottom: 1px solid #e0e7ff;
-    }
-
-    .banner .icon {
-      width: 64px;
-      height: 64px;
-      background: linear-gradient(135deg, #4f46e5, #7c3aed);
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      margin-bottom: 16px;
-    }
-
-    .banner h1 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #1e1b4b;
-      margin-bottom: 8px;
-    }
-
-    .banner p {
-      font-size: 14px;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    /* Body */
-    .body {
-      padding: 32px;
-    }
-
-    .body .intro {
-      font-size: 14px;
-      color: #374151;
-      line-height: 1.7;
-      margin-bottom: 24px;
-    }
-
-    /* Credentials box */
-    .credentials {
-      background: #f8faff;
-      border: 1px solid #e0e7ff;
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 24px;
-    }
-
-    .credentials .cred-header {
-      background: linear-gradient(135deg, #4f46e5, #7c3aed);
-      padding: 12px 20px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #ffffff;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .credentials .cred-row {
-      display: flex;
-      align-items: center;
-      padding: 14px 20px;
-      border-bottom: 1px solid #e0e7ff;
-      gap: 12px;
-    }
-
-    .credentials .cred-row:last-child {
-      border-bottom: none;
-    }
-
-    .credentials .cred-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      flex-shrink: 0;
-    }
-
-    .cred-icon.email-icon { background: #ede9fe; }
-    .cred-icon.pass-icon  { background: #fce7f3; }
-
-    .credentials .cred-label {
+      padding: 10px 40px;
       font-size: 11px;
-      color: #9ca3af;
+      letter-spacing: 0.2em;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 2px;
+      font-family: 'Georgia', serif;
     }
 
-    .credentials .cred-value {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1f2937;
-      word-break: break-all;
+    /* ── Body ────────────────────────────────────────── */
+    .body {
+      padding: 32px 40px;
     }
 
-    /* Warning box */
-    .warning {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-left: 4px solid #f59e0b;
-      border-radius: 8px;
-      padding: 14px 16px;
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
+    /* ── Meta grid ───────────────────────────────────── */
+    .meta-grid {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
       margin-bottom: 28px;
+      border: 1px solid #e0d9ce;
     }
-
-    .warning .warn-icon { font-size: 18px; flex-shrink: 0; }
-
-    .warning p {
-      font-size: 13px;
-      color: #92400e;
+    .meta-grid tr { border-bottom: 1px solid #e0d9ce; }
+    .meta-grid tr:last-child { border-bottom: none; }
+    .meta-grid td {
+      padding: 9px 14px;
+      font-size: 12.5px;
       line-height: 1.5;
+      vertical-align: top;
+    }
+    .meta-label {
+      color: #888;
+      font-size: 10.5px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      width: 38%;
+      border-right: 1px solid #e0d9ce;
+    }
+    .meta-value {
+      color: #1a1a1a;
+      font-size: 12.5px;
     }
 
-    /* CTA Button */
-    .cta {
-      text-align: center;
-      margin-bottom: 28px;
+    /* ── Section heading ─────────────────────────────── */
+    .section-heading {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #888;
+      border-bottom: 1px solid #e0d9ce;
+      padding-bottom: 8px;
+      margin-bottom: 0;
     }
 
-    .cta a {
+    /* ── Items table ─────────────────────────────────── */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4px;
+    }
+    .items-table th {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #888;
+      padding: 10px 6px;
+      text-align: left;
+      border-bottom: 1px solid #e0d9ce;
+      font-weight: normal;
+    }
+    .items-table th:last-child,
+    .items-table td:last-child { text-align: right; }
+    .items-table th.center,
+    .items-table td.center { text-align: center; }
+    .items-table td {
+      font-size: 13px;
+      padding: 11px 6px;
+      border-bottom: 1px solid #f0ebe0;
+      color: #1a1a1a;
+      vertical-align: top;
+    }
+    .items-table tr:last-child td { border-bottom: none; }
+    .item-name { font-size: 13px; }
+    .item-discount {
+      font-size: 10.5px;
+      color: #c9a96e;
+      margin-top: 2px;
+    }
+
+    /* ── Totals ──────────────────────────────────────── */
+    .totals-block {
+      border-top: 1px solid #e0d9ce;
+      padding-top: 14px;
+      margin-top: 8px;
+    }
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 5px 0;
+      font-size: 13px;
+      color: #444;
+    }
+    .totals-row.grand-total {
+      border-top: 2px solid #1a1a1a;
+      margin-top: 8px;
+      padding-top: 10px;
+      font-size: 16px;
+      color: #1a1a1a;
+      letter-spacing: 0.03em;
+    }
+    .totals-row.grand-total .t-label {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 11px;
+    }
+    .totals-row.grand-total .t-value {
+      font-size: 18px;
+    }
+    .totals-row.change-row { color: #c9a96e; }
+    .t-label { color: #888; font-size: 12px; }
+
+    /* ── Payment badge ───────────────────────────────── */
+    .payment-badge {
       display: inline-block;
-      background: linear-gradient(135deg, #4f46e5, #7c3aed);
-      color: #ffffff;
-      text-decoration: none;
-      font-size: 15px;
-      font-weight: 600;
-      padding: 14px 40px;
-      border-radius: 10px;
-      letter-spacing: 0.3px;
-      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+      background: #1a1a1a;
+      color: #c9a96e;
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 2px;
+      margin-top: 14px;
     }
 
-    /* Divider */
+    /* ── CTA Button ──────────────────────────────────── */
+    .cta-wrapper {
+      text-align: center;
+      margin: 28px 0 8px;
+    }
+    .cta-button {
+      display: inline-block;
+      background: #1a1a1a;
+      color: #f4f1ec !important;
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding: 13px 28px;
+      border-radius: 2px;
+    }
+
+    /* ── Divider ─────────────────────────────────────── */
     .divider {
       border: none;
-      border-top: 1px solid #e5e7eb;
-      margin: 0 0 24px;
+      border-top: 1px dashed #d0c9bc;
+      margin: 24px 0;
     }
 
-    /* Help section */
-    .help {
-      text-align: center;
-      font-size: 13px;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    .help a {
-      color: #4f46e5;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    /* Footer */
+    /* ── Footer ──────────────────────────────────────── */
     .footer {
-      background: #f9fafb;
-      border-top: 1px solid #e5e7eb;
-      padding: 24px 32px;
+      background: #f4f1ec;
+      border-top: 1px solid #e0d9ce;
+      padding: 24px 40px;
       text-align: center;
     }
-
-    .footer p {
-      font-size: 12px;
-      color: #9ca3af;
-      line-height: 1.6;
+    .footer-shop {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+    .footer-contact {
+      font-size: 11.5px;
+      color: #777;
+      line-height: 1.8;
+    }
+    .footer-contact a { color: #777; text-decoration: none; }
+    .footer-legal {
+      margin-top: 16px;
+      font-size: 10.5px;
+      color: #aaa;
+      line-height: 1.7;
     }
 
-    .footer .social {
-      margin-top: 12px;
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-    }
-
-    .footer .social a {
-      width: 32px;
-      height: 32px;
-      background: #e0e7ff;
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      text-decoration: none;
+    /* ── Responsive ──────────────────────────────────── */
+    @media (max-width: 480px) {
+      .body { padding: 24px 20px; }
+      .header { padding: 28px 20px 24px; }
+      .footer { padding: 20px; }
+      .logo-text { font-size: 18px; }
     }
   </style>
 </head>
 <body>
-  <div class="wrapper">
-    <div class="card">
+<div class="wrapper">
+  <div class="container">
 
-    <!-- Header -->
-<div class="header">
-  <% if (logoUrl) { %>
-    <img 
-      src="<%= logoUrl %>" 
-      alt="<%= shopName %>" 
-      style="max-height: 70px; max-width: 200px; object-fit: contain; margin-bottom: 8px;"
-    />
-  <% } else { %>
-    <div class="logo">Chef's<span> World</span></div>
-  <% } %>
-  <div class="tagline">Your trusted equipment marketplace</div>
-</div>
-
-      <!-- Banner -->
-      <div class="banner">
-        <div class="icon">👋</div>
-    
-        <p>Your account has been set up and is ready to use.<br/>Here are your login credentials.</p>
-      </div>
-
-      <!-- Body -->
-      <div class="body">
-        <p class="intro">
-          Hi, our team has created an account for you on Chef's World.
-          You can now browse our full catalog and place orders. Use the credentials below to log in.
-        </p>
-
-      
-
-        <!-- Warning -->
-        <div class="warning">
-          <div class="warn-icon">⚠️</div>
-          <p>For your security, please <strong>change your password</strong> immediately after your first login. Do not share these credentials with anyone.</p>
-        </div>
-
-        <!-- CTA -->
-        <div class="cta">
-          <a href="<%= process.env.FRONTEND_URL %>">Log In to Your Account →</a>
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Help -->
-        <div class="help">
-          Need help? Contact our support team at
-          <a href="mailto:<%= process.env.SUPPORT_EMAIL %>"><%= process.env.SUPPORT_EMAIL %></a>
-          <br/>or reply directly to this email.
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="footer">
-        <p>© <%= new Date().getFullYear() %> Chef's World. All rights reserved.<br/>
-        You received this email because an account was created for you.</p>
-        <div class="social">
-          <a href="#">🐦</a>
-          <a href="#">💼</a>
-          <a href="#">📘</a>
-        </div>
-      </div>
-
+    <!-- ═══════════ HEADER ═══════════ -->
+    <div class="header">
+      <% if (logoUrl) { %>
+        <img src="<%= logoUrl %>" alt="<%= shopName %>" class="logo-img" />
+      <% } else { %>
+        <div class="logo-text"><%= shopName %></div>
+      <% } %>
+      <% if (shopTagline) { %>
+        <div class="tagline"><%= shopTagline %></div>
+      <% } %>
     </div>
-  </div>
+
+    <div class="receipt-banner">✦ &nbsp; Official Receipt &nbsp; ✦</div>
+
+    <!-- ═══════════ BODY ═══════════ -->
+    <div class="body">
+
+      <!-- Order meta -->
+      <table class="meta-grid" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="meta-label">Order</td>
+          <td class="meta-value"><strong><%= orderName %></strong></td>
+        </tr>
+        <tr>
+          <td class="meta-label">Date</td>
+          <td class="meta-value"><%= dateOrder %></td>
+        </tr>
+        <tr>
+          <td class="meta-label">Served by</td>
+          <td class="meta-value"><%= servedBy %></td>
+        </tr>
+        <% if (customerName) { %>
+        <tr>
+          <td class="meta-label">Customer</td>
+          <td class="meta-value"><%= customerName %></td>
+        </tr>
+        <% } %>
+        <tr>
+          <td class="meta-label">Order type</td>
+          <td class="meta-value"><%= orderType %></td>
+        </tr>
+      </table>
+
+      <!-- Items -->
+      <p class="section-heading">Items</p>
+      <table class="items-table" cellspacing="0" cellpadding="0">
+        <thead>
+          <tr>
+            <th style="width:36px;">Qty</th>
+            <th>Item</th>
+            <th style="width:72px; text-align:right;">Price</th>
+            <th style="width:72px; text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% lines.forEach(function(line) { %>
+          <tr>
+            <td class="center" style="color:#888;"><%= line.qty %></td>
+            <td>
+              <div class="item-name"><%= line.name %></div>
+              <% if (line.discount > 0) { %>
+                <div class="item-discount">– <%= line.discount %>% discount</div>
+              <% } %>
+            </td>
+            <td style="text-align:right; color:#555;">
+              <%= line.priceUnit.toFixed(2) %>
+            </td>
+            <td style="text-align:right;">
+              <%= line.priceTotal.toFixed(2) %>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+
+      <!-- Totals -->
+      <div class="totals-block">
+        <div class="totals-row">
+          <span class="t-label">Subtotal</span>
+          <span><%= subtotal.toFixed(2) %></span>
+        </div>
+        <div class="totals-row">
+          <span class="t-label">Tax</span>
+          <span><%= tax.toFixed(2) %></span>
+        </div>
+        <div class="totals-row grand-total">
+          <span class="t-label">Total</span>
+          <span class="t-value"><%= total.toFixed(2) %></span>
+        </div>
+
+        <hr class="divider" style="margin: 12px 0;" />
+
+        <div class="totals-row">
+          <span class="t-label">Amount Paid</span>
+          <span><%= amountPaid.toFixed(2) %></span>
+        </div>
+        <% if (change > 0) { %>
+        <div class="totals-row change-row">
+          <span class="t-label">Change</span>
+          <span>– <%= change.toFixed(2) %></span>
+        </div>
+        <% } %>
+
+        <div>
+          <span class="payment-badge"><%= paymentMethod %></span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <% if (ticketUrl) { %>
+      <div class="cta-wrapper">
+        <a href="<%= ticketUrl %>" class="cta-button">View Full Receipt Online</a>
+      </div>
+      <% } %>
+
+    </div><!-- /body -->
+
+    <!-- ═══════════ FOOTER ═══════════ -->
+    <div class="footer">
+      <div class="footer-shop"><%= shopName %></div>
+      <div class="footer-contact">
+        <% if (shopAddress) { %><%= shopAddress %><br /><% } %>
+        <% if (shopPhone) { %>
+          <a href="tel:<%= shopPhone %>"><%= shopPhone %></a>
+          <% if (shopEmail) { %> &nbsp;·&nbsp; <% } %>
+        <% } %>
+        <% if (shopEmail) { %>
+          <a href="mailto:<%= shopEmail %>"><%= shopEmail %></a>
+        <% } %>
+      </div>
+      <div class="footer-legal">
+        This is an automated receipt. Please keep it for your records.<br />
+        © <%= new Date().getFullYear() %> <%= shopName %>. All rights reserved.
+      </div>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /wrapper -->
 </body>
 </html>
