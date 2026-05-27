@@ -50,11 +50,11 @@ export function PrintableReceipt({
     minute: "2-digit",
   });
 
-  const shopName = import.meta.env.VITE_SHOP_NAME ?? "Chef's World";
+  const shopName ="Chef's World";
   const shopTagline =
-    import.meta.env.VITE_SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies";
-  const shopAddress = import.meta.env.VITE_SHOP_ADDRESS ?? "";
-  const shopPhone = import.meta.env.VITE_SHOP_PHONE ?? "";
+  "Restaurant, Bar & Kitchen Supplies";
+    const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
+    const shopPhone = "(555) 123-4567";
 
   return (
     /*
