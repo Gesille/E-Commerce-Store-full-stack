@@ -183,21 +183,43 @@ export function PrintableReceipt({
 
 export function usePrintReceipt() {
   const printReceipt = () => {
-    const style = document.createElement("style");
-    style.id = "__receipt_print_override__";
-    style.innerHTML = `
-      @page { size: 80mm auto !important; margin: 3mm !important; }
-      @media print {
-        html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
+    // Temporarily hide everything except the receipt
+    const allChildren = Array.from(document.body.children) as HTMLElement[];
+    const receipt = document.getElementById('printable-receipt');
+
+    allChildren.forEach(el => {
+      if (el !== receipt) {
+        el.dataset.printHidden = el.style.display;
+        el.style.display = 'none';
       }
+    });
+
+    if (receipt) receipt.style.display = 'block';
+
+    const style = document.createElement('style');
+    style.id = '__receipt_print_override__';
+    style.innerHTML = `
+      @page { size: 80mm auto !important; margin: 2mm !important; }
+      html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
     `;
     document.head.appendChild(style);
+
     setTimeout(() => {
       window.print();
+
       setTimeout(() => {
-        document.getElementById("__receipt_print_override__")?.remove();
+        // Restore everything
+        allChildren.forEach(el => {
+          if (el.dataset.printHidden !== undefined) {
+            el.style.display = el.dataset.printHidden || '';
+            delete el.dataset.printHidden;
+          }
+        });
+        if (receipt) receipt.style.display = 'none';
+        document.getElementById('__receipt_print_override__')?.remove();
       }, 1000);
-    }, 100);
+    }, 150);
   };
+
   return { printReceipt };
 }
