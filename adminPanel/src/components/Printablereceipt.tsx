@@ -72,6 +72,8 @@ export function PrintableReceipt({
         display:    "none",
         width:      `${RECEIPT_W}px`,
         background: "#ffffff",
+        padding:    "0 8px",
+        boxSizing:  "border-box",
       }}
     >
       {/* ── HEADER ── */}
@@ -191,6 +193,8 @@ export function usePrintReceipt() {
       width: ${RECEIPT_W}px !important;
       background: #ffffff !important;
       z-index: -1 !important;
+      padding: 0 8px !important;
+      box-sizing: border-box !important;
     `;
 
     // Small delay so browser paints the layout before capture
@@ -205,6 +209,10 @@ export function usePrintReceipt() {
         windowWidth:     RECEIPT_W,
         logging:         false,
         removeContainer: false,
+        x:               0,
+        y:               0,
+        scrollX:         0,
+        scrollY:         0,
       });
 
       const imgDataUrl = canvas.toDataURL("image/png");
