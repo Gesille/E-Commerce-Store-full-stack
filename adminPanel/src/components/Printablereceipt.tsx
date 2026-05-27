@@ -84,9 +84,9 @@ export function PrintableReceipt({
         <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
           {shopName.toUpperCase()}
         </div>
-        <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>{shopTagline}</div>
-        <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
-        <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
+        <div style={{ ...S.small, marginTop: "4px", color: "#000000" }}>
+          {shopTagline} &nbsp;·&nbsp; {shopAddress} &nbsp;·&nbsp; {shopPhone}
+        </div>
       </div>
 
       {/* ── META ── */}
