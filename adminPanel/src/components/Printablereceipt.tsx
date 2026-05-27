@@ -1,10 +1,12 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
+import html2canvas from "html2canvas-pro";
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const FONT       = "Georgia, 'Times New Roman', serif";
 const FONT_SIZE  = "17px";
-const FONT_SHOP  = "26px";   // Chef's World headline
-const FONT_TOTAL = "20px";   // TOTAL line
+const FONT_SHOP  = "26px";
+const FONT_TOTAL = "20px";
+const RECEIPT_W  = 302;      // px — 80 mm at 96 dpi
 
 const shopName    = "Chef's World";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
@@ -16,7 +18,6 @@ const fmt = (n: number) => n.toFixed(2);
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
 }
-
 function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
   const tax      = subtotal * 0.1;
@@ -24,21 +25,23 @@ function calcOrderTotals(cart: CartItem[]) {
   return { subtotal, tax, total };
 }
 
-// ─── Shared inline styles ──────────────────────────────────────────────────
-const base: React.CSSProperties = {
-  fontFamily: FONT,
-  fontSize:   FONT_SIZE,
-  color:      "#000",
-  background: "#fff",
-  margin:     0,
-  padding:    0,
-  lineHeight: "1.6",
+// ─── Shared style atoms ────────────────────────────────────────────────────
+const S = {
+  base: {
+    fontFamily: FONT,
+    fontSize:   FONT_SIZE,
+    color:      "#000000",
+    background: "#ffffff",
+    margin:     0,
+    padding:    0,
+    lineHeight: "1.6",
+  } as React.CSSProperties,
+  center:  { textAlign: "center"  } as React.CSSProperties,
+  bold:    { fontWeight: "bold"   } as React.CSSProperties,
+  small:   { fontSize: "13px"     } as React.CSSProperties,
+  row:     { display: "flex", justifyContent: "space-between", alignItems: "baseline" } as React.CSSProperties,
+  grid:    { display: "grid", gridTemplateColumns: "1fr 32px 60px 64px", gap: "0 4px", alignItems: "baseline" } as React.CSSProperties,
 };
-
-const center: React.CSSProperties = { textAlign: "center" };
-const bold:   React.CSSProperties = { fontWeight: "bold" };
-const muted:  React.CSSProperties = { fontSize: "13px" };
-const row:    React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "baseline" };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 interface PrintableReceiptProps {
@@ -50,11 +53,7 @@ interface PrintableReceiptProps {
 }
 
 export function PrintableReceipt({
-  cart,
-  customer,
-  paymentLines,
-  odooOrderId,
-  receiptNo,
+  cart, customer, paymentLines, odooOrderId, receiptNo,
 }: PrintableReceiptProps) {
   const { subtotal, tax, total } = calcOrderTotals(cart);
   const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
@@ -66,60 +65,60 @@ export function PrintableReceipt({
   });
 
   return (
-    <div id="printable-receipt" style={{ ...base, display: "none", width: "100%" }}>
-
+    <div
+      id="printable-receipt"
+      style={{
+        ...S.base,
+        display:    "none",
+        width:      `${RECEIPT_W}px`,
+        background: "#ffffff",
+      }}
+    >
       {/* ── HEADER ── */}
-      <div style={{ ...center, paddingBottom: "10px", borderBottom: "2px solid #000" }}>
-        <div style={{ ...bold, fontSize: FONT_SHOP, letterSpacing: "2px", fontFamily: FONT }}>
+      <div style={{
+        ...S.center,
+        padding:      "14px 12px 10px",
+        borderBottom: "2px solid #000000",
+        background:   "#ffffff",
+      }}>
+        <div style={{ ...S.bold, fontFamily: FONT, fontSize: FONT_SHOP, letterSpacing: "2px", color: "#000000" }}>
           {shopName.toUpperCase()}
         </div>
-        <div style={{ ...muted, marginTop: "3px" }}>{shopTagline}</div>
-        <div style={{ ...muted }}>{shopAddress}</div>
-        <div style={{ ...muted }}>{shopPhone}</div>
+        <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>{shopTagline}</div>
+        <div style={{ ...S.small, color: "#000000" }}>{shopAddress}</div>
+        <div style={{ ...S.small, color: "#000000" }}>{shopPhone}</div>
       </div>
 
       {/* ── META ── */}
-      <div style={{ ...center, padding: "8px 0", borderBottom: "1px dashed #000" }}>
-        <div style={{ ...muted }}>{dateStr}</div>
-        <div style={{ ...bold }}>Receipt: {receiptNo}</div>
-        {odooOrderId && <div style={{ ...muted }}>Order ID: #{odooOrderId}</div>}
-        {customer    && <div style={{ ...muted }}>Customer: {customer.name}</div>}
+      <div style={{ ...S.center, padding: "8px 12px", borderBottom: "1px dashed #000000", background: "#ffffff" }}>
+        <div style={{ ...S.small, color: "#000000" }}>{dateStr}</div>
+        <div style={{ ...S.bold, color: "#000000" }}>Receipt: {receiptNo}</div>
+        {odooOrderId && <div style={{ ...S.small, color: "#000000" }}>Order ID: #{odooOrderId}</div>}
+        {customer    && <div style={{ ...S.small, color: "#000000" }}>Customer: {customer.name}</div>}
       </div>
 
       {/* ── COLUMN HEADERS ── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 32px 60px 64px",
-        gap: "0 4px",
-        padding: "5px 0",
-        borderBottom: "1px solid #000",
-        ...bold, ...muted,
-      }}>
-        <span>Item</span>
-        <span style={{ textAlign: "center" }}>Qty</span>
-        <span style={{ textAlign: "right" }}>Price</span>
-        <span style={{ textAlign: "right" }}>Total</span>
+      <div style={{ ...S.grid, ...S.bold, ...S.small, padding: "5px 12px", borderBottom: "1px solid #000000", background: "#ffffff" }}>
+        <span style={{ color: "#000000" }}>Item</span>
+        <span style={{ textAlign: "center", color: "#000000" }}>Qty</span>
+        <span style={{ textAlign: "right",  color: "#000000" }}>Price</span>
+        <span style={{ textAlign: "right",  color: "#000000" }}>Total</span>
       </div>
 
       {/* ── LINE ITEMS ── */}
-      <div style={{ padding: "4px 0", borderBottom: "1px dashed #000" }}>
+      <div style={{ padding: "6px 12px", borderBottom: "1px dashed #000000", background: "#ffffff" }}>
         {cart.map((item, idx) => {
           const lineTotal = calcLineTotal(item);
           return (
-            <div key={idx} style={{ marginBottom: "3px" }}>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 32px 60px 64px",
-                gap: "0 4px",
-                alignItems: "baseline",
-              }}>
-                <span style={{ ...bold }}>{item.name}</span>
-                <span style={{ textAlign: "center" }}>{item.qty}</span>
-                <span style={{ textAlign: "right" }}>${fmt(item.price)}</span>
-                <span style={{ textAlign: "right", ...bold }}>${fmt(lineTotal)}</span>
+            <div key={idx} style={{ marginBottom: "4px" }}>
+              <div style={{ ...S.grid }}>
+                <span style={{ ...S.bold, color: "#000000" }}>{item.name}</span>
+                <span style={{ textAlign: "center", color: "#000000" }}>{item.qty}</span>
+                <span style={{ textAlign: "right",  color: "#000000" }}>${fmt(item.price)}</span>
+                <span style={{ ...S.bold, textAlign: "right", color: "#000000" }}>${fmt(lineTotal)}</span>
               </div>
               {(item.discount ?? 0) > 0 && (
-                <div style={{ ...row, ...muted, paddingLeft: "10px" }}>
+                <div style={{ ...S.row, ...S.small, paddingLeft: "10px", color: "#555555" }}>
                   <span>Discount {item.discount}%</span>
                   <span>-${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
                 </div>
@@ -130,34 +129,36 @@ export function PrintableReceipt({
       </div>
 
       {/* ── SUBTOTALS ── */}
-      <div style={{ padding: "6px 0" }}>
-        <div style={{ ...row }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-        <div style={{ ...row }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
+      <div style={{ padding: "6px 12px", background: "#ffffff" }}>
+        <div style={{ ...S.row, color: "#000000" }}><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+        <div style={{ ...S.row, color: "#000000" }}><span>Tax (10%)</span><span>${fmt(tax)}</span></div>
       </div>
 
       {/* ── TOTAL ── */}
       <div style={{
-        ...row, ...bold,
+        ...S.row, ...S.bold,
         fontSize:     FONT_TOTAL,
-        borderTop:    "2px solid #000",
-        borderBottom: "2px solid #000",
-        padding:      "5px 0",
+        borderTop:    "2px solid #000000",
+        borderBottom: "2px solid #000000",
+        padding:      "5px 12px",
         margin:       "2px 0 6px",
+        color:        "#000000",
+        background:   "#ffffff",
       }}>
         <span>TOTAL</span>
         <span>${fmt(total)}</span>
       </div>
 
       {/* ── PAYMENTS ── */}
-      <div style={{ padding: "2px 0 6px", borderBottom: "1px dashed #000" }}>
+      <div style={{ padding: "4px 12px 8px", borderBottom: "1px dashed #000000", background: "#ffffff" }}>
         {paymentLines.map((l, idx) => (
-          <div key={idx} style={{ ...row }}>
+          <div key={idx} style={{ ...S.row, color: "#000000" }}>
             <span style={{ textTransform: "capitalize" }}>{l.method}</span>
             <span>${fmt(l.amount)}</span>
           </div>
         ))}
         {change > 0.005 && (
-          <div style={{ ...row, ...bold }}>
+          <div style={{ ...S.row, ...S.bold, color: "#000000" }}>
             <span>Change</span>
             <span>${fmt(change)}</span>
           </div>
@@ -165,34 +166,48 @@ export function PrintableReceipt({
       </div>
 
       {/* ── FOOTER ── */}
-      <div style={{ ...center, padding: "10px 0 4px" }}>
-        <div style={{ ...bold, fontSize: "15px" }}>Thank you for your visit!</div>
-        <div style={{ ...muted, marginTop: "3px" }}>Please keep this receipt for your records.</div>
-        <div style={{ ...muted, marginTop: "6px", letterSpacing: "2px" }}>{receiptNo}</div>
+      <div style={{ ...S.center, padding: "10px 12px 14px", background: "#ffffff" }}>
+        <div style={{ ...S.bold, fontSize: "15px", color: "#000000" }}>Thank you for your visit!</div>
+        <div style={{ ...S.small, marginTop: "3px", color: "#000000" }}>Please keep this receipt for your records.</div>
+        <div style={{ ...S.small, marginTop: "6px", letterSpacing: "2px", color: "#000000" }}>{receiptNo}</div>
       </div>
-
     </div>
   );
 }
 
 // ─── Print hook ────────────────────────────────────────────────────────────
 export function usePrintReceipt() {
-  const printReceipt = () => {
+  const printReceipt = async () => {
     const receipt = document.getElementById("printable-receipt");
     if (!receipt) return;
 
-    // Reveal off-screen so the browser computes layout
-    receipt.style.display    = "block";
-    receipt.style.visibility = "visible";
-    receipt.style.position   = "fixed";
-    receipt.style.top        = "-9999px";
-    receipt.style.left       = "0";
-    receipt.style.width      = "280px";   // ~72 mm — safe inner width inside 4 mm margins
+    // 1. Move off-screen and make fully visible
+    receipt.style.cssText = `
+      display: block !important;
+      visibility: visible !important;
+      position: fixed !important;
+      top: -9999px !important;
+      left: 0 !important;
+      width: ${RECEIPT_W}px !important;
+      background: #ffffff !important;
+      z-index: -1 !important;
+    `;
+
+    // Small delay so browser paints the layout before capture
+    await new Promise(r => setTimeout(r, 150));
 
     try {
-      // Clone the fully-laid-out HTML (all inline styles are already there)
-      const html = receipt.outerHTML
-        .replace(/display:\s*none[^;"']*/i, "display:block");
+      const canvas = await html2canvas(receipt, {
+        scale:           3,
+        useCORS:         true,
+        backgroundColor: "#ffffff",
+        width:           RECEIPT_W,
+        windowWidth:     RECEIPT_W,
+        logging:         false,
+        removeContainer: false,
+      });
+
+      const imgDataUrl = canvas.toDataURL("image/png");
 
       document.getElementById("__print_frame__")?.remove();
 
@@ -208,16 +223,12 @@ export function usePrintReceipt() {
       doc.open();
       doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  @page { size: 80mm auto; margin: 4mm 4mm; }
+  @page { size: 80mm auto; margin: 0; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    width: 80mm;
-    background: #fff;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+  html, body { width: 80mm; background: #fff; }
+  img { width: 80mm; display: block; }
 </style></head>
-<body>${html}</body></html>`);
+<body><img src="${imgDataUrl}" /></body></html>`);
       doc.close();
 
       iframe.onload = () => {
@@ -227,13 +238,10 @@ export function usePrintReceipt() {
           setTimeout(() => iframe.remove(), 2000);
         }, 300);
       };
+
     } finally {
-      receipt.style.display    = "";
-      receipt.style.visibility = "";
-      receipt.style.position   = "";
-      receipt.style.top        = "";
-      receipt.style.left       = "";
-      receipt.style.width      = "";
+      // Restore hidden
+      receipt.style.cssText = "display: none;";
     }
   };
 
