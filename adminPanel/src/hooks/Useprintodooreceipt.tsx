@@ -13,7 +13,7 @@ export function usePrintOdooReceipt() {
 
     try {
       // 1. Fetch PDF blob from your backend
-      const res = await fetch(`${API_BASE}/receipts/print/${orderId}`, {
+      const res = await fetch(`${API_BASE}/print/${orderId}`, {
         credentials: "include", // send auth cookie / token
       });
 
