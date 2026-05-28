@@ -340,7 +340,7 @@ function buildReceiptHTML(
 
   <!-- HEADER -->
   <div class="header">
-    <img src="/chefworldlogo.png" alt="${shopName}" class="shop-logo" />
+    <img src="/chefworldlogo1.png" alt="${shopName}" class="shop-logo" />
     <hr class="shop-divider"/>
     <div class="shop-sub">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
