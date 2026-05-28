@@ -146,7 +146,7 @@ function buildReceiptHTML(
        HEADER
     ══════════════════════════════════════════ */
     .header {
-      background: var(--black);
+      background: #ffffff;
       color: var(--white);
       padding: 14pt 6pt 12pt;
       text-align: center;
