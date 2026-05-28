@@ -126,38 +126,37 @@ export const printOdooReceipt = CatchAsyncError(
       return next(new ErrorHandler("Invalid order id", 400));
     }
 
-    // 1. Verify order exists
+    // 1. Fetch POS order + its linked account.move (invoice) id
     const orders = await odooRequest(
       "pos.order",
       "search_read",
       [[["id", "=", orderId]]],
-      { fields: ["id", "name", "state"], limit: 1 },
+      { fields: ["id", "name", "state", "account_move"], limit: 1 },
     );
 
     if (!orders?.length) {
       return next(new ErrorHandler("Order not found in Odoo", 404));
     }
 
-    // 2. Find the report action ID for POS receipts
-    const reportActions = await odooRequest(
-      "ir.actions.report",
-      "search_read",
-      [[["report_name", "=", "point_of_sale.report_pos_order"]]],
-      { fields: ["id", "report_name", "report_type"], limit: 1 },
-    );
+    const order = orders[0];
+    const accountMoveId: number | false = order.account_move?.[0] ?? order.account_move;
 
-    if (!reportActions?.length) {
-      return next(new ErrorHandler("POS report action not found in Odoo", 404));
+    if (!accountMoveId) {
+      return next(
+        new ErrorHandler(
+          "This POS order has no linked invoice. The order may not be invoiced yet.",
+          404,
+        ),
+      );
     }
 
-    const reportId = reportActions[0].id;
+    // 2. Render Invoice PDF (id=227 from your Odoo instance)
+    const INVOICE_REPORT_ID = 227; // account.report_invoice_with_payments
 
-    // 3. Call render_qweb_pdf with correct positional args:
-    //    arg[0] = report record id (integer), arg[1] = list of document ids
     const result = await odooRequest(
       "ir.actions.report",
       "render_qweb_pdf",
-      [reportId, [orderId]],   // <-- NOT nested in an extra array
+      [INVOICE_REPORT_ID, [accountMoveId]],
       {},
     );
 
@@ -165,11 +164,9 @@ export const printOdooReceipt = CatchAsyncError(
       return next(new ErrorHandler("Odoo returned empty PDF", 502));
     }
 
-    // result is [b64_string, 'pdf']
     const pdfBase64 = Array.isArray(result) ? result[0] : result;
     const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
-    // 4. Stream back to frontend
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
