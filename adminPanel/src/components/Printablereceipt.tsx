@@ -281,7 +281,7 @@ function buildReceiptHTML(
     }
 
     .items-border {
-      border-top: 0.75pt dashed var(--black);
+      border-top: 0.75pt solid var(--black);
       margin: 4pt 10pt 0;
     }
 
@@ -316,7 +316,7 @@ function buildReceiptHTML(
     ══════════════════════════════════════════ */
     .payments-section {
       padding: 5pt 10pt 6pt;
-      border-top: 0.75pt dashed var(--black);
+      border-top: 0.75pt solid var(--black);
     }
 
     .pay-row {
@@ -340,7 +340,7 @@ function buildReceiptHTML(
     .barcode-section {
       padding: 10pt 10pt 4pt;
       text-align: center;
-      border-top: 1pt dashed var(--black);
+      border-top: 1pt solid var(--black);
     }
 
     .barcode {
