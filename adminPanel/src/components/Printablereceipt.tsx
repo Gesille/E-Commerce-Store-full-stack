@@ -102,7 +102,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
 
    @page {
-  size: 76mm auto;
+  size: 76mm fit-content;
   margin: 0mm;
 }
 
@@ -363,11 +363,11 @@ function buildReceiptHTML(
       margin-bottom: 2pt;
     }
 
-    .footer {
-      text-align: center;
-      padding: 8pt 6pt 12pt;
-      border-top: 0.75pt solid var(--light);
-    }
+  .footer {
+  text-align: center;
+  padding: 6pt 6pt 2pt;
+  border-top: 0.75pt solid var(--light);
+}
 
     .footer-thanks {
       font-family: var(--serif);
@@ -503,7 +503,7 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
     iframe.style.cssText =
-      "position:fixed;top:0;left:0;width:76mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
+      "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
