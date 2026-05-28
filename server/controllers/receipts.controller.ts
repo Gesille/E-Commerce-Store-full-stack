@@ -126,7 +126,7 @@ export const printOdooReceipt = CatchAsyncError(
       return next(new ErrorHandler("Invalid order id", 400));
     }
 
-    // 1. Verify order exists via your existing odooRequest util
+    // 1. Verify order exists
     const orders = await odooRequest(
       "pos.order",
       "search_read",
@@ -138,54 +138,36 @@ export const printOdooReceipt = CatchAsyncError(
       return next(new ErrorHandler("Order not found in Odoo", 404));
     }
 
-    const odooUrl  = process.env.ODOO_URL!;
-    const odooDb   = process.env.ODOO_DB!;
-    // ✅ use the same env vars as odooRequest.ts
-    const odooUser = process.env.ODOO_USER!;     
-    const odooPass = process.env.ODOO_PASSWORD!;  
+    // 2. Render PDF via JSON-RPC — same auth as odooRequest, no session needed
+    let pdfBase64: string;
 
-    // 2. Authenticate to get a session cookie
-    const authRes = await fetch(`${odooUrl}/web/session/authenticate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "call",
-        params: { db: odooDb, login: odooUser, password: odooPass },
-      }),
-    });
-
-    const authJson = await authRes.json();
-
-    // Odoo returns 200 even on failure — check the result
-    if (!authJson?.result?.uid) {
-      return next(new ErrorHandler("Failed to authenticate with Odoo", 502));
-    }
-
-    const setCookie = authRes.headers.get("set-cookie");
-    if (!setCookie) {
-      return next(new ErrorHandler("No session cookie returned by Odoo", 502));
-    }
-
-    // 3. Download the PDF report
-    const reportUrl = `${odooUrl}/report/pdf/point_of_sale.report_pos_order/${orderId}`;
-
-    const pdfRes = await fetch(reportUrl, {
-      headers: { Cookie: setCookie },
-    });
-
-    if (!pdfRes.ok) {
-      return next(
-        new ErrorHandler(
-          `Odoo report failed: ${pdfRes.status} ${pdfRes.statusText}`,
-          502,
-        ),
+    try {
+      // Odoo 15 and below
+      const result = await odooRequest(
+        "ir.actions.report",
+        "render_qweb_pdf",
+        [["point_of_sale.report_pos_order", [orderId]]],
+        {},
       );
+      pdfBase64 = Array.isArray(result) ? result[0] : result;
+    } catch {
+      // Odoo 16+ renamed the method with an underscore prefix
+      const result = await odooRequest(
+        "ir.actions.report",
+        "_render_qweb_pdf",
+        [["point_of_sale.report_pos_order", [orderId]]],
+        {},
+      );
+      pdfBase64 = Array.isArray(result) ? result[0] : result;
     }
 
-    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+    if (!pdfBase64) {
+      return next(new ErrorHandler("Odoo returned empty PDF", 502));
+    }
 
-    // 4. Stream PDF back to frontend
+    const pdfBuffer = Buffer.from(pdfBase64, "base64");
+
+    // 3. Stream back to frontend
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
