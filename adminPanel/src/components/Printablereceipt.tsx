@@ -1,17 +1,12 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
-// ─── Config ────────────────────────────────────────────────────────────────
-const FONT       = "Georgia, 'Times New Roman', serif";
-const FONT_SIZE  = "14px";
-const FONT_SHOP  = "22px";
-const FONT_TOTAL = "17px";
-const RECEIPT_W  = "72mm";   // slightly inside 80mm to give natural margins
-
+// ─── Shop Config ───────────────────────────────────────────────────────────
 const shopName    = "Chef's World";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
 
+// ─── Helpers ───────────────────────────────────────────────────────────────
 const fmt = (n: number) => n.toFixed(2);
 
 function calcLineTotal(item: CartItem) {
@@ -24,7 +19,7 @@ function calcOrderTotals(cart: CartItem[]) {
   return { subtotal, tax, total };
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
 interface PrintableReceiptProps {
   cart:         CartItem[];
   customer:     Customer | null;
@@ -33,23 +28,12 @@ interface PrintableReceiptProps {
   receiptNo:    string;
 }
 
-export function PrintableReceipt({
-  cart, customer, paymentLines, odooOrderId, receiptNo,
-}: PrintableReceiptProps) {
-  const { subtotal, tax, total } = calcOrderTotals(cart);
-  const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
-  const change = paid - total;
-
-  const dateStr = new Date().toLocaleString("en-US", {
-    month: "short", day: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-
-  // Not rendered on screen at all — built dynamically in the hook
+// Not rendered on screen — receipt is built in the hook
+export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
 }
 
-// ─── Build receipt HTML string ─────────────────────────────────────────────
+// ─── HTML Builder ──────────────────────────────────────────────────────────
 function buildReceiptHTML(
   cart: CartItem[],
   customer: Customer | null,
@@ -62,217 +46,441 @@ function buildReceiptHTML(
   const change = paid - total;
 
   const dateStr = new Date().toLocaleString("en-US", {
-    month: "short", day: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
+    weekday: "short",
+    month:   "short",
+    day:     "2-digit",
+    year:    "numeric",
+    hour:    "2-digit",
+    minute:  "2-digit",
   });
 
-  const lineItems = cart.map(item => {
-    const lineTotal = calcLineTotal(item);
-    const discount  = (item.discount ?? 0) > 0
-      ? `<div class="row small gray">
-           <span>Discount ${item.discount}%</span>
-           <span>-$${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}</span>
-         </div>`
-      : "";
+  // ── Line items ────────────────────────────────────────────────────────────
+  const lineItems = cart.map((item) => {
+    const lineTotal  = calcLineTotal(item);
+    const hasDiscount = (item.discount ?? 0) > 0;
+    const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
+
     return `
-      <div class="line-item">
-        <div class="grid">
-          <span class="bold">${item.name}</span>
-          <span class="center">${item.qty}</span>
-          <span class="right">$${fmt(item.price)}</span>
-          <span class="bold right">$${fmt(lineTotal)}</span>
-        </div>
-        ${discount}
-      </div>`;
+      <tr class="item-row">
+        <td class="item-name">${item.name}</td>
+        <td class="item-qty">${item.qty}</td>
+        <td class="item-price">$${fmt(item.price)}</td>
+        <td class="item-total">$${fmt(lineTotal)}</td>
+      </tr>
+      ${hasDiscount ? `
+      <tr class="discount-row">
+        <td colspan="3" class="discount-label">↳ Discount ${item.discount}%</td>
+        <td class="discount-amount">−$${fmt(discountAmt)}</td>
+      </tr>` : ""}`;
   }).join("");
 
-  const paymentRows = paymentLines.map(l =>
-    `<div class="row"><span class="capitalize">${l.method}</span><span>$${fmt(l.amount)}</span></div>`
-  ).join("");
+  // ── Payment rows ──────────────────────────────────────────────────────────
+  const paymentRows = paymentLines.map((l) => `
+    <div class="pay-row">
+      <span class="pay-method">${l.method}</span>
+      <span class="pay-amount">$${fmt(l.amount)}</span>
+    </div>`).join("");
 
-  const changeRow = change > 0.005
-    ? `<div class="row bold"><span>Change</span><span>$${fmt(change)}</span></div>`
-    : "";
+  const changeRow = change > 0.005 ? `
+    <div class="pay-row change-row">
+      <span class="pay-method">Change</span>
+      <span class="pay-amount">$${fmt(change)}</span>
+    </div>` : "";
 
-  const orderIdRow  = odooOrderId ? `<div class="small">Order ID: #${odooOrderId}</div>` : "";
-  const customerRow = customer    ? `<div class="small">Customer: ${customer.name}</div>` : "";
+  // ── Barcode-style receipt number (CSS stripes) ─────────────────────────
+  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
+    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
+    return `<div style="width:${w}px;background:#000;height:100%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;"></div>`;
+  }).join("");
 
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
+
     @page {
       size: 80mm auto;
       margin: 0;
     }
 
-    * {
+    *, *::before, *::after {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
-      box-sizing: border-box;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
 
+    :root {
+      --black:  #0a0a0a;
+      --white:  #fafaf8;
+      --gray:   #6b6b6b;
+      --light:  #e8e5df;
+      --accent: #1a1a1a;
+      --mono:   'IBM Plex Mono', 'Courier New', monospace;
+      --serif:  'DM Serif Display', Georgia, serif;
+    }
+
     html, body {
       width: 80mm;
-      background: #fff;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 12pt;
-      color: #000;
-      line-height: 1.5;
+      background: var(--white);
+      font-family: var(--mono);
+      font-size: 10.5pt;
+      color: var(--black);
+      line-height: 1.55;
     }
 
     .receipt {
       width: 80mm;
-      padding: 0 5mm;
-      box-sizing: border-box;
+      background: var(--white);
     }
 
-    /* ── typography helpers ── */
-    .bold      { font-weight: bold; }
-    .small     { font-size: 9pt; }
-    .center    { text-align: center; }
-    .right     { text-align: right; }
-    .gray      { color: #555; }
-    .capitalize{ text-transform: capitalize; }
-
-    /* ── layout helpers ── */
-    .row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-    }
-
-    /* 4-col grid: name | qty | price | total */
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 22pt 46pt 50pt;
-      gap: 0 3pt;
-      align-items: baseline;
-    }
-
-    /* ── sections ── */
+    /* ══════════════════════════════════════════
+       HEADER
+    ══════════════════════════════════════════ */
     .header {
+      background: var(--black);
+      color: var(--white);
+      padding: 14pt 10pt 12pt;
       text-align: center;
-      padding: 10pt 0 8pt;
-      border-bottom: 1.5pt solid #000;
+      position: relative;
     }
+
     .shop-name {
-      font-size: 18pt;
-      font-weight: bold;
-      letter-spacing: 2pt;
+      font-family: var(--serif);
+      font-size: 22pt;
+      letter-spacing: 1pt;
+      line-height: 1.1;
+      margin-bottom: 4pt;
     }
 
-    .meta {
-      text-align: center;
-      padding: 6pt 0;
-      border-bottom: 1pt dashed #000;
+    .shop-divider {
+      border: none;
+      border-top: 1pt solid rgba(255,255,255,0.25);
+      margin: 7pt auto;
+      width: 60%;
     }
 
-    .col-headers {
-      display: grid;
-      grid-template-columns: 1fr 22pt 46pt 50pt;
-      gap: 0 3pt;
-      font-weight: bold;
-      font-size: 9pt;
-      padding: 4pt 0;
-      border-bottom: 1pt solid #000;
+    .shop-sub {
+      font-size: 7.5pt;
+      letter-spacing: 2.5pt;
+      text-transform: uppercase;
+      opacity: 0.65;
+      line-height: 1.7;
     }
 
-    .line-items {
-      padding: 5pt 0;
-      border-bottom: 1pt dashed #000;
+    /* ══════════════════════════════════════════
+       RECEIPT META
+    ══════════════════════════════════════════ */
+    .meta-band {
+      background: var(--light);
+      border-bottom: 1.5pt solid var(--black);
+      padding: 7pt 10pt;
     }
-    .line-item { margin-bottom: 3pt; }
 
-    .subtotals {
-      padding: 5pt 0;
-    }
-
-    .total-row {
+    .meta-row {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      font-weight: bold;
-      font-size: 14pt;
-      border-top: 1.5pt solid #000;
-      border-bottom: 1.5pt solid #000;
-      padding: 4pt 0;
-      margin: 3pt 0 5pt;
+      font-size: 8pt;
+      line-height: 1.8;
     }
 
-    .payments {
-      padding: 3pt 0 6pt;
-      border-bottom: 1pt dashed #000;
+    .meta-label {
+      text-transform: uppercase;
+      letter-spacing: 1.5pt;
+      font-size: 7pt;
+      color: var(--gray);
+    }
+
+    .meta-value {
+      font-weight: 700;
+      font-size: 8.5pt;
+    }
+
+    .receipt-num {
+      font-size: 11pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
+    }
+
+    /* ══════════════════════════════════════════
+       SECTION LABELS
+    ══════════════════════════════════════════ */
+    .section-label {
+      font-size: 6.5pt;
+      font-weight: 700;
+      letter-spacing: 3pt;
+      text-transform: uppercase;
+      color: var(--gray);
+      padding: 6pt 10pt 3pt;
+      border-bottom: 0.5pt solid var(--light);
+    }
+
+    /* ══════════════════════════════════════════
+       ITEMS TABLE
+    ══════════════════════════════════════════ */
+    .items-section {
+      padding: 4pt 0 0;
+    }
+
+    .col-header {
+      display: grid;
+      grid-template-columns: 1fr 18pt 44pt 46pt;
+      gap: 0 3pt;
+      padding: 4pt 10pt;
+      font-size: 7pt;
+      font-weight: 700;
+      letter-spacing: 1.5pt;
+      text-transform: uppercase;
+      color: var(--gray);
+      border-bottom: 0.75pt solid var(--black);
+    }
+
+    .col-header span:nth-child(3),
+    .col-header span:nth-child(4) { text-align: right; }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      padding: 0 10pt;
+    }
+
+    table.items td {
+      padding: 3.5pt 0;
+      vertical-align: top;
+      font-size: 9.5pt;
+    }
+
+    /* first/last cells get side padding */
+    table.items td:first-child { padding-left: 10pt; }
+    table.items td:last-child  { padding-right: 10pt; }
+
+    .item-name  { }
+    .item-qty   { text-align: center; color: var(--gray); font-size: 9pt; }
+    .item-price { text-align: right;  color: var(--gray); font-size: 9pt; }
+    .item-total { text-align: right;  font-weight: 700; }
+
+    .discount-label  {
+      font-size: 8pt;
+      color: var(--gray);
+      padding-left: 10pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 4pt !important;
+    }
+    .discount-amount {
+      text-align: right;
+      font-size: 8pt;
+      color: #c0392b;
+      padding-right: 10pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 4pt !important;
+    }
+
+    .items-border {
+      border-top: 0.75pt dashed var(--black);
+      margin: 4pt 10pt 0;
+    }
+
+    /* ══════════════════════════════════════════
+       TOTALS
+    ══════════════════════════════════════════ */
+    .totals-section {
+      padding: 5pt 10pt;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9pt;
+      padding: 1.5pt 0;
+      color: var(--gray);
+    }
+
+    .totals-row.grand {
+      border-top: 1.5pt solid var(--black);
+      border-bottom: 1.5pt solid var(--black);
+      margin-top: 5pt;
+      padding: 5pt 0;
+      font-size: 14pt;
+      font-weight: 700;
+      color: var(--black);
+      letter-spacing: 0.5pt;
+    }
+
+    /* ══════════════════════════════════════════
+       PAYMENTS
+    ══════════════════════════════════════════ */
+    .payments-section {
+      padding: 5pt 10pt 6pt;
+      border-top: 0.75pt dashed var(--black);
+    }
+
+    .pay-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9pt;
+      padding: 1.5pt 0;
+      text-transform: capitalize;
+    }
+
+    .pay-amount { font-weight: 700; }
+
+    .change-row {
+      color: var(--gray);
+      font-size: 8.5pt;
+    }
+
+    /* ══════════════════════════════════════════
+       BARCODE + FOOTER
+    ══════════════════════════════════════════ */
+    .barcode-section {
+      padding: 10pt 10pt 4pt;
+      text-align: center;
+      border-top: 1pt dashed var(--black);
+    }
+
+    .barcode {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      height: 28pt;
+      gap: 0;
+      margin-bottom: 4pt;
+    }
+
+    .barcode-num {
+      font-size: 7.5pt;
+      letter-spacing: 3pt;
+      color: var(--gray);
+      margin-bottom: 2pt;
     }
 
     .footer {
       text-align: center;
-      padding: 8pt 0 10pt;
+      padding: 8pt 10pt 12pt;
+      border-top: 0.75pt solid var(--light);
     }
-    .footer .thank-you {
-      font-weight: bold;
-      font-size: 11pt;
+
+    .footer-thanks {
+      font-family: var(--serif);
+      font-size: 12pt;
+      margin-bottom: 4pt;
+    }
+
+    .footer-sub {
+      font-size: 7.5pt;
+      color: var(--gray);
+      letter-spacing: 0.5pt;
+      line-height: 1.8;
+    }
+
+    .dot-divider {
+      letter-spacing: 4pt;
+      color: var(--light);
+      font-size: 8pt;
+      margin: 5pt 0;
     }
   </style>
 </head>
 <body>
-  <div class="receipt">
+<div class="receipt">
 
-    <div class="header">
-      <div class="shop-name">${shopName.toUpperCase()}</div>
-      <div class="small" style="margin-top:3pt">${shopTagline}</div>
-      <div class="small">${shopAddress}</div>
-      <div class="small">${shopPhone}</div>
+  <!-- ══ HEADER ══ -->
+  <div class="header">
+    <div class="shop-name">${shopName}</div>
+    <hr class="shop-divider"/>
+    <div class="shop-sub">${shopTagline}</div>
+    <div class="shop-sub" style="margin-top:3pt;opacity:0.45;">${shopAddress}</div>
+    <div class="shop-sub" style="opacity:0.45;">${shopPhone}</div>
+  </div>
+
+  <!-- ══ META BAND ══ -->
+  <div class="meta-band">
+    <div class="meta-row">
+      <span class="meta-label">Receipt</span>
+      <span class="receipt-num">${receiptNo}</span>
     </div>
-
-    <div class="meta">
-      <div class="small">${dateStr}</div>
-      <div class="bold">Receipt: ${receiptNo}</div>
-      ${orderIdRow}
-      ${customerRow}
+    <div class="meta-row">
+      <span class="meta-label">Date</span>
+      <span class="meta-value">${dateStr}</span>
     </div>
+    ${odooOrderId ? `
+    <div class="meta-row">
+      <span class="meta-label">Order ID</span>
+      <span class="meta-value">#${odooOrderId}</span>
+    </div>` : ""}
+    ${customer ? `
+    <div class="meta-row">
+      <span class="meta-label">Customer</span>
+      <span class="meta-value">${customer.name}</span>
+    </div>` : ""}
+  </div>
 
-    <div class="col-headers">
-      <span>Item</span>
-      <span class="center">Qty</span>
-      <span class="right">Price</span>
-      <span class="right">Total</span>
+  <!-- ══ ITEMS ══ -->
+  <div class="items-section">
+    <div class="section-label">Items</div>
+    <div class="col-header">
+      <span>Description</span>
+      <span style="text-align:center">Qty</span>
+      <span style="text-align:right">Price</span>
+      <span style="text-align:right">Total</span>
     </div>
+    <table class="items">
+      <tbody>
+        ${lineItems}
+      </tbody>
+    </table>
+    <div class="items-border"></div>
+  </div>
 
-    <div class="line-items">
-      ${lineItems}
+  <!-- ══ TOTALS ══ -->
+  <div class="totals-section">
+    <div class="section-label" style="padding:0 0 4pt;border:none;">Summary</div>
+    <div class="totals-row">
+      <span>Subtotal</span>
+      <span>$${fmt(subtotal)}</span>
     </div>
-
-    <div class="subtotals">
-      <div class="row"><span>Subtotal</span><span>$${fmt(subtotal)}</span></div>
-      <div class="row"><span>Tax (10%)</span><span>$${fmt(tax)}</span></div>
+    <div class="totals-row">
+      <span>Tax (10%)</span>
+      <span>$${fmt(tax)}</span>
     </div>
-
-    <div class="total-row">
+    <div class="totals-row grand">
       <span>TOTAL</span>
       <span>$${fmt(total)}</span>
     </div>
-
-    <div class="payments">
-      ${paymentRows}
-      ${changeRow}
-    </div>
-
-    <div class="footer">
-      <div class="thank-you">Thank you for your visit!</div>
-      <div class="small" style="margin-top:2pt">Please keep this receipt for your records.</div>
-      <div class="small" style="margin-top:5pt;letter-spacing:2pt">${receiptNo}</div>
-    </div>
-
   </div>
+
+  <!-- ══ PAYMENTS ══ -->
+  <div class="payments-section">
+    <div class="section-label" style="padding:0 0 5pt;border:none;">Payment</div>
+    ${paymentRows}
+    ${changeRow}
+  </div>
+
+  <!-- ══ BARCODE ══ -->
+  <div class="barcode-section">
+    <div class="barcode">${barcodeStripes}</div>
+    <div class="barcode-num">${receiptNo}</div>
+  </div>
+
+  <!-- ══ FOOTER ══ -->
+  <div class="footer">
+    <div class="dot-divider">· · · · · · · · · ·</div>
+    <div class="footer-thanks">Thank you for your visit!</div>
+    <div class="footer-sub">Please keep this receipt for your records.</div>
+    <div class="footer-sub" style="margin-top:4pt;">${shopPhone} · ${shopName}</div>
+  </div>
+
+</div>
 </body>
 </html>`;
 }
 
-// ─── Print hook ────────────────────────────────────────────────────────────
+// ─── Print Hook ────────────────────────────────────────────────────────────
 interface UsePrintReceiptOptions {
   cart:         CartItem[];
   customer:     Customer | null;
@@ -284,7 +492,6 @@ interface UsePrintReceiptOptions {
 export function usePrintReceipt(options: UsePrintReceiptOptions) {
   const printReceipt = async () => {
     const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
-
     const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
     document.getElementById("__print_frame__")?.remove();
