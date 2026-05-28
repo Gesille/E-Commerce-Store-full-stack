@@ -119,7 +119,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
 
     printReceipt: builder.query<Blob, number>({
       query: (orderId) => ({
-        url: `/receipts/print/${orderId}`,
+        url: `print/${orderId}`,
         method: "GET",
         credentials: "include" as const,
         responseHandler: (response) => response.blob(), 
