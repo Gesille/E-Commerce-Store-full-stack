@@ -5,9 +5,6 @@ import {
   getReceiptByIdService,
   sendReceiptByEmailService,
 } from "../services/receipts.service.js";
-import ErrorHandler from "../utils/ErrorHandler.js";
-import { odooRequest } from "../odoo/odoo.client.js";
-import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 
 // ─────────────────────────────────────────────────────────
 // GET /receipts
@@ -116,88 +113,3 @@ export const sendReceiptByEmail = async (
     next(error);
   }
 };
-
-
-export const printOdooReceipt = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const orderId = Number(req.params.orderId);
-
-    if (!orderId || isNaN(orderId)) {
-      return next(new ErrorHandler("Invalid order id", 400));
-    }
-
-    // 1. Fetch POS order + its linked account.move (invoice) id
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
-      [[["id", "=", orderId]]],
-      { fields: ["id", "name", "state", "account_move"], limit: 1 },
-    );
-
-    if (!orders?.length) {
-      return next(new ErrorHandler("Order not found in Odoo", 404));
-    }
-
-    const order = orders[0];
-    const accountMoveId: number | false = order.account_move?.[0] ?? order.account_move;
-
-    if (!accountMoveId) {
-      return next(
-        new ErrorHandler(
-          "This POS order has no linked invoice. The order may not be invoiced yet.",
-          404,
-        ),
-      );
-    }
-
-    // 2. Render Invoice PDF (id=227 from your Odoo instance)
-    const INVOICE_REPORT_ID = 227; // account.report_invoice_with_payments
-
-    const result = await odooRequest(
-      "ir.actions.report",
-      "render_qweb_pdf",
-      [INVOICE_REPORT_ID, [accountMoveId]],
-      {},
-    );
-
-    if (!result) {
-      return next(new ErrorHandler("Odoo returned empty PDF", 502));
-    }
-
-    const pdfBase64 = Array.isArray(result) ? result[0] : result;
-    const pdfBuffer = Buffer.from(pdfBase64, "base64");
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="receipt-${orderId}.pdf"`,
-    );
-    res.setHeader("Content-Length", pdfBuffer.length);
-    res.send(pdfBuffer);
-  },
-);
-
-
-// DEBUG ENDPOINT - add this temporarily to find the correct report name
-export const debugPosReports = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const [byModel, byName] = await Promise.all([
-      // Search by model
-      odooRequest(
-        "ir.actions.report",
-        "search_read",
-        [[["model", "in", ["pos.order", "pos.session", "account.move"]]]],
-        { fields: ["id", "report_name", "name", "model", "report_type"], limit: 50 },
-      ),
-      // Search by common receipt keywords
-      odooRequest(
-        "ir.actions.report",
-        "search_read",
-        [[["name", "ilike", "receipt"]]],
-        { fields: ["id", "report_name", "name", "model", "report_type"], limit: 20 },
-      ),
-    ]);
-
-    res.json({ byModel, byName });
-  },
-);

@@ -4,7 +4,7 @@ import { apiSlice } from "../api/apiSlice";
 export interface SendReceiptEmailResponse {
   success: boolean;
   message: string;
-}
+} 
 export interface Receipt {
   id: number;
   name: string;
@@ -106,31 +106,18 @@ export const receiptsApi = apiSlice.injectEndpoints({
       }),
     }),
     sendReceiptByEmail: builder.mutation<
-      SendReceiptEmailResponse,
-      { receiptId: number; email: string }
-    >({
-      query: ({ receiptId, email }) => ({
-        url: `/receipts/${receiptId}/send-email`,
-        method: "POST",
-        credentials: "include" as const,
-        body: { email },
-      }),
-    }),
-
-    printReceipt: builder.query<Blob, number>({
-      query: (orderId) => ({
-        url: `print/${orderId}`,
-        method: "GET",
-        credentials: "include" as const,
-        responseHandler: (response) => response.blob(), 
-      }),
-    }),
+  SendReceiptEmailResponse,
+  { receiptId: number; email: string }
+>({
+  query: ({ receiptId, email }) => ({
+    url: `/receipts/${receiptId}/send-email`,
+    method: "POST",
+    credentials: "include" as const,
+    body: { email },
+  }),
+}),
   }),
 });
 
-export const {
-  useGetReceiptsQuery,
-  useGetReceiptByIdQuery,
-  useSendReceiptByEmailMutation,
-  useLazyPrintReceiptQuery,
-} = receiptsApi;
+
+export const { useGetReceiptsQuery, useGetReceiptByIdQuery, useSendReceiptByEmailMutation } = receiptsApi;
