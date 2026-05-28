@@ -145,39 +145,49 @@ function buildReceiptHTML(
     /* ══════════════════════════════════════════
        HEADER
     ══════════════════════════════════════════ */
-    .header {
-      background: #ffffff;
-      color: var(--white);
-      padding: 14pt 6pt 12pt;
-      text-align: center;
-      position: relative;
-    }
+   .header {
+  background: #ffffff;
+  color: #000000;
+  padding: 12pt 6pt 10pt;
+  text-align: center;
+}
+.shop-name {
+  width: 52mm;
+  max-width: 100%;
 
-    .shop-name {
-      font-family: var(--serif);
-      font-size: 22pt;
-      max-width: 52mm;
-      height: auto;
-      display: block;
-      margin: 0 auto 4pt;
-     
-    }
+  height: auto;
 
-    .shop-divider {
-      border: none;
-      border-top: 1pt solid rgba(255,255,255,0.25);
-      margin: 7pt auto;
-      width: 60%;
-    }
+  display: block;
 
-    .shop-sub {
-    text-color:var(--white);
-      font-size: 7.5pt;
-      letter-spacing: 2.5pt;
-      text-transform: uppercase;
-      opacity: 0.65;
-      line-height: 1.7;
-    }
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 6pt;
+
+  object-fit: contain;
+}
+
+.shop-divider {
+  border: none;
+  border-top: 1pt solid #00000020;
+  margin: 6pt auto;
+  width: 60%;
+}
+
+.shop-sub {
+  color: #000000;
+
+  font-size: 7pt;
+
+  letter-spacing: 1.5pt;
+
+  text-transform: uppercase;
+
+  line-height: 1.6;
+
+  text-align: center;
+
+  opacity: 0.75;
+}
 
     /* ══════════════════════════════════════════
        RECEIPT META
