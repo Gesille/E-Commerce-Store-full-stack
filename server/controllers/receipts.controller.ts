@@ -138,36 +138,38 @@ export const printOdooReceipt = CatchAsyncError(
       return next(new ErrorHandler("Order not found in Odoo", 404));
     }
 
-    // 2. Render PDF via JSON-RPC — same auth as odooRequest, no session needed
-    let pdfBase64: string;
+    // 2. Find the report action ID for POS receipts
+    const reportActions = await odooRequest(
+      "ir.actions.report",
+      "search_read",
+      [[["report_name", "=", "point_of_sale.report_pos_order"]]],
+      { fields: ["id", "report_name", "report_type"], limit: 1 },
+    );
 
-    try {
-      // Odoo 15 and below
-      const result = await odooRequest(
-        "ir.actions.report",
-        "render_qweb_pdf",
-        [["point_of_sale.report_pos_order", [orderId]]],
-        {},
-      );
-      pdfBase64 = Array.isArray(result) ? result[0] : result;
-    } catch {
-      // Odoo 16+ renamed the method with an underscore prefix
-      const result = await odooRequest(
-        "ir.actions.report",
-        "_render_qweb_pdf",
-        [["point_of_sale.report_pos_order", [orderId]]],
-        {},
-      );
-      pdfBase64 = Array.isArray(result) ? result[0] : result;
+    if (!reportActions?.length) {
+      return next(new ErrorHandler("POS report action not found in Odoo", 404));
     }
 
-    if (!pdfBase64) {
+    const reportId = reportActions[0].id;
+
+    // 3. Call render_qweb_pdf with correct positional args:
+    //    arg[0] = report record id (integer), arg[1] = list of document ids
+    const result = await odooRequest(
+      "ir.actions.report",
+      "render_qweb_pdf",
+      [reportId, [orderId]],   // <-- NOT nested in an extra array
+      {},
+    );
+
+    if (!result) {
       return next(new ErrorHandler("Odoo returned empty PDF", 502));
     }
 
+    // result is [b64_string, 'pdf']
+    const pdfBase64 = Array.isArray(result) ? result[0] : result;
     const pdfBuffer = Buffer.from(pdfBase64, "base64");
 
-    // 3. Stream back to frontend
+    // 4. Stream back to frontend
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
