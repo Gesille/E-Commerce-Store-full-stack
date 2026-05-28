@@ -184,13 +184,23 @@ export const printOdooReceipt = CatchAsyncError(
 // DEBUG ENDPOINT - add this temporarily to find the correct report name
 export const debugPosReports = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const reports = await odooRequest(
-      "ir.actions.report",
-      "search_read",
-      [[["report_name", "like", "pos"]]],  // broad search
-      { fields: ["id", "report_name", "name", "model", "report_type"], limit: 20 },
-    );
+    const [byModel, byName] = await Promise.all([
+      // Search by model
+      odooRequest(
+        "ir.actions.report",
+        "search_read",
+        [[["model", "in", ["pos.order", "pos.session", "account.move"]]]],
+        { fields: ["id", "report_name", "name", "model", "report_type"], limit: 50 },
+      ),
+      // Search by common receipt keywords
+      odooRequest(
+        "ir.actions.report",
+        "search_read",
+        [[["name", "ilike", "receipt"]]],
+        { fields: ["id", "report_name", "name", "model", "report_type"], limit: 20 },
+      ),
+    ]);
 
-    res.json({ reports });
+    res.json({ byModel, byName });
   },
 );
