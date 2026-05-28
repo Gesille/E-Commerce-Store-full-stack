@@ -179,3 +179,18 @@ export const printOdooReceipt = CatchAsyncError(
     res.send(pdfBuffer);
   },
 );
+
+
+// DEBUG ENDPOINT - add this temporarily to find the correct report name
+export const debugPosReports = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const reports = await odooRequest(
+      "ir.actions.report",
+      "search_read",
+      [[["report_name", "like", "pos"]]],  // broad search
+      { fields: ["id", "report_name", "name", "model", "report_type"], limit: 20 },
+    );
+
+    res.json({ reports });
+  },
+);

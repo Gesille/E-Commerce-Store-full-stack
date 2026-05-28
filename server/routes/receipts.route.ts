@@ -3,6 +3,7 @@ import express from "express";
 import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
 
 import {
+  debugPosReports,
   getReceiptById,
   getReceipts,
   printOdooReceipt,
@@ -41,4 +42,5 @@ receiptRouter.get(
   authorizeRoles("admin", "cashier"),
   printOdooReceipt,
 );
+receiptRouter.get("/debugPosReports", isAuthenticated, debugPosReports);
 export default receiptRouter;
