@@ -118,7 +118,7 @@ function buildReceiptHTML(
       --black:  #0a0a0a;
       --white:  #fafaf8;
       --gray:   #6b6b6b;
-      --light:  #e8e5df;
+      --light: #ffffff;
       --accent: #1a1a1a;
       --mono:   'IBM Plex Mono', 'Courier New', monospace;
       --serif:  'DM Serif Display', Georgia, serif;
@@ -184,7 +184,7 @@ function buildReceiptHTML(
        RECEIPT META
     ══════════════════════════════════════════ */
     .meta-band {
-      background: var(--light);
+        background: #ffffff;
       border-bottom: 1.5pt solid var(--black);
       padding: 7pt 6pt;
     }
@@ -223,7 +223,7 @@ function buildReceiptHTML(
       font-weight: 700;
       letter-spacing: 3pt;
       text-transform: uppercase;
-      color: var(--white);
+      color: var(--black);
       padding: 6pt 10pt 3pt;
       border-bottom: 0.5pt solid var(--light);
     }
@@ -244,7 +244,7 @@ function buildReceiptHTML(
       font-weight: 700;
       letter-spacing: 1.5pt;
       text-transform: uppercase;
-      color: var(--white);
+      color: var(--black);
       border-bottom: 0.75pt solid var(--black);
     }
 
