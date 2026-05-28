@@ -127,12 +127,12 @@ function buildReceiptHTML(
    
      html, body {
       width: 70mm;
-      max-width: 76mm;
+      
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
       color: var(--black);
-      line-height: 1.55;
+      line-height: 1.5;
     }
 
     .receipt {
