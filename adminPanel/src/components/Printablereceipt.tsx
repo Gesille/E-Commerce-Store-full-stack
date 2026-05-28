@@ -172,7 +172,7 @@ function buildReceiptHTML(
     }
 
     .shop-sub {
-    text-color:var(--black);
+    color: #000000;
       font-size: 7.5pt;
       letter-spacing: 2.5pt;
       text-transform: uppercase;
