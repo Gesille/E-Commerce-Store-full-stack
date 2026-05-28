@@ -28,7 +28,6 @@ interface PrintableReceiptProps {
   receiptNo:    string;
 }
 
-// Not rendered on screen — receipt is built in the hook
 export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
 }
@@ -54,9 +53,9 @@ function buildReceiptHTML(
     minute:  "2-digit",
   });
 
-  // ── Line items ────────────────────────────────────────────────────────────
+  // ── Line items ──────────────────────────────────────────────────────────
   const lineItems = cart.map((item) => {
-    const lineTotal  = calcLineTotal(item);
+    const lineTotal   = calcLineTotal(item);
     const hasDiscount = (item.discount ?? 0) > 0;
     const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
@@ -69,12 +68,12 @@ function buildReceiptHTML(
       </tr>
       ${hasDiscount ? `
       <tr class="discount-row">
-        <td colspan="3" class="discount-label">↳ Discount ${item.discount}%</td>
-        <td class="discount-amount">−$${fmt(discountAmt)}</td>
+        <td colspan="3" class="discount-label">Discount ${item.discount}%</td>
+        <td class="discount-amount">-$${fmt(discountAmt)}</td>
       </tr>` : ""}`;
   }).join("");
 
-  // ── Payment rows ──────────────────────────────────────────────────────────
+  // ── Payment rows ────────────────────────────────────────────────────────
   const paymentRows = paymentLines.map((l) => `
     <div class="pay-row">
       <span class="pay-method">${l.method}</span>
@@ -82,16 +81,10 @@ function buildReceiptHTML(
     </div>`).join("");
 
   const changeRow = change > 0.005 ? `
-    <div class="pay-row change-row">
+    <div class="pay-row">
       <span class="pay-method">Change</span>
       <span class="pay-amount">$${fmt(change)}</span>
     </div>` : "";
-
-  // ── Barcode-style receipt number (CSS stripes) ─────────────────────────
-  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
-    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
-    return `<div style="width:${w}px;background:#000;height:100%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;"></div>`;
-  }).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -99,12 +92,13 @@ function buildReceiptHTML(
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap');
 
-   @page {
-  size: 76mm auto;
-  margin: 0mm;
-}
+    @page {
+      size: 80mm auto;
+      /* Safe margins — keeps content away from cutter edges */
+      margin: 5mm 5mm;
+    }
 
     *, *::before, *::after {
       box-sizing: border-box;
@@ -114,75 +108,54 @@ function buildReceiptHTML(
       print-color-adjust: exact;
     }
 
-    :root {
-      --black:  #0a0a0a;
-      --white:  #fafaf8;
-      --gray:   #6b6b6b;
-      --light:  #e8e5df;
-      --accent: #1a1a1a;
-      --mono:   'IBM Plex Mono', 'Courier New', monospace;
-      --serif:  'DM Serif Display', Georgia, serif;
-    }
-
-   
-     html, body {
-  width: 76mm;
-  max-width: 76mm;
-      background: var(--white);
-      font-family: var(--mono);
-      font-size: 10.5pt;
-      color: var(--black);
-      line-height: 1.55;
+    html, body {
+      width: 70mm; /* 80mm minus 5mm side margins × 2 */
+      background: #ffffff;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 9.5pt;
+      color: #000000;
+      line-height: 1.5;
     }
 
     .receipt {
-    width: 76mm;
-  max-width: 76mm;
-  overflow: hidden;
-      background: var(--white);
+      width: 70mm;
+      background: #ffffff;
+      padding: 0;
     }
 
-    /* ══════════════════════════════════════════
-       HEADER
-    ══════════════════════════════════════════ */
+    /* ── HEADER ─────────────────────────────── */
     .header {
-      background: var(--black);
-      color: var(--white);
-      padding: 14pt 6pt 12pt;
       text-align: center;
-      position: relative;
+      padding: 6pt 4pt 8pt;
+      border-bottom: 2pt solid #000;
     }
 
-    .shop-name {
-      font-family: var(--serif);
-      font-size: 22pt;
-      letter-spacing: 1pt;
-      line-height: 1.1;
-      margin-bottom: 4pt;
+    .shop-logo {
+      max-width: 52mm;
+      height: auto;
+      display: block;
+      margin: 0 auto 4pt;
     }
 
     .shop-divider {
       border: none;
-      border-top: 1pt solid rgba(255,255,255,0.25);
-      margin: 7pt auto;
-      width: 60%;
+      border-top: 1pt dashed #000;
+      margin: 5pt auto;
+      width: 80%;
     }
 
     .shop-sub {
-      font-size: 7.5pt;
-      letter-spacing: 2.5pt;
-      text-transform: uppercase;
-      opacity: 0.65;
+      font-size: 7pt;
+      letter-spacing: 1pt;
       line-height: 1.7;
     }
 
-    /* ══════════════════════════════════════════
-       RECEIPT META
-    ══════════════════════════════════════════ */
+    /* ── META BAND ──────────────────────────── */
     .meta-band {
-      background: var(--light);
-      border-bottom: 1.5pt solid var(--black);
-      padding: 7pt 6pt;
+      border-top: 1pt solid #000;
+      border-bottom: 1pt solid #000;
+      padding: 5pt 4pt;
+      background: #ffffff;
     }
 
     .meta-row {
@@ -195,9 +168,8 @@ function buildReceiptHTML(
 
     .meta-label {
       text-transform: uppercase;
-      letter-spacing: 1.5pt;
+      letter-spacing: 1pt;
       font-size: 7pt;
-      color: var(--gray);
     }
 
     .meta-value {
@@ -206,94 +178,81 @@ function buildReceiptHTML(
     }
 
     .receipt-num {
-      font-size: 11pt;
+      font-size: 10pt;
       font-weight: 700;
-      letter-spacing: 0.5pt;
     }
 
-    /* ══════════════════════════════════════════
-       SECTION LABELS
-    ══════════════════════════════════════════ */
+    /* ── SECTION LABELS ─────────────────────── */
     .section-label {
       font-size: 6.5pt;
       font-weight: 700;
-      letter-spacing: 3pt;
+      letter-spacing: 2pt;
       text-transform: uppercase;
-      color: var(--gray);
-      padding: 6pt 10pt 3pt;
-      border-bottom: 0.5pt solid var(--light);
+      padding: 5pt 4pt 3pt;
+      border-bottom: 0.5pt solid #000;
     }
 
-    /* ══════════════════════════════════════════
-       ITEMS TABLE
-    ══════════════════════════════════════════ */
+    /* ── ITEMS TABLE ────────────────────────── */
     .items-section {
-      padding: 4pt 0 0;
+      padding: 3pt 0 0;
     }
 
     .col-header {
       display: grid;
-      grid-template-columns: 1fr 18pt 44pt 46pt;
+      grid-template-columns: 1fr 16pt 42pt 44pt;
       gap: 0 3pt;
-      padding: 4pt 6pt;
-      font-size: 7pt;
+      padding: 3pt 4pt;
+      font-size: 6.5pt;
       font-weight: 700;
-      letter-spacing: 1.5pt;
+      letter-spacing: 1pt;
       text-transform: uppercase;
-      color: var(--gray);
-      border-bottom: 0.75pt solid var(--black);
+      border-bottom: 1pt solid #000;
     }
 
     .col-header span:nth-child(3),
     .col-header span:nth-child(4) { text-align: right; }
+    .col-header span:nth-child(2) { text-align: center; }
 
     table.items {
       width: 100%;
       border-collapse: collapse;
-      padding: 0 6pt;
     }
 
     table.items td {
-      padding: 3.5pt 0;
+      padding: 3pt 0;
       vertical-align: top;
-      font-size: 9.5pt;
+      font-size: 9pt;
     }
 
-    /* first/last cells get side padding */
-    table.items td:first-child { padding-left: 2pt; }
-    table.items td:last-child  { padding-right: 2pt; }
+    table.items td:first-child { padding-left: 4pt; }
+    table.items td:last-child  { padding-right: 4pt; }
 
-    .item-name  { }
-    .item-qty   { text-align: center; color: var(--gray); font-size: 9pt; }
-    .item-price { text-align: right;  color: var(--gray); font-size: 9pt; }
+    .item-qty   { text-align: center; font-size: 8.5pt; }
+    .item-price { text-align: right;  font-size: 8.5pt; }
     .item-total { text-align: right;  font-weight: 700; }
 
-    .discount-label  {
-      font-size: 8pt;
-      color: var(--gray);
-      padding-left: 2pt !important;
+    .discount-label {
+      font-size: 7.5pt;
+      padding-left: 10pt !important;
       padding-top: 0 !important;
-      padding-bottom: 4pt !important;
+      padding-bottom: 3pt !important;
     }
     .discount-amount {
       text-align: right;
-      font-size: 8pt;
-      color: #c0392b;
-      padding-right: 2pt !important;
+      font-size: 7.5pt;
+      padding-right: 4pt !important;
       padding-top: 0 !important;
-      padding-bottom: 4pt !important;
+      padding-bottom: 3pt !important;
     }
 
     .items-border {
-      border-top: 0.75pt solid var(--black);
-      margin: 4pt 6pt 0;
+      border-top: 1pt dashed #000;
+      margin: 3pt 4pt 0;
     }
 
-    /* ══════════════════════════════════════════
-       TOTALS
-    ══════════════════════════════════════════ */
+    /* ── TOTALS ─────────────────────────────── */
     .totals-section {
-      padding: 5pt 6pt;
+      padding: 4pt 4pt;
     }
 
     .totals-row {
@@ -301,26 +260,22 @@ function buildReceiptHTML(
       justify-content: space-between;
       font-size: 9pt;
       padding: 1.5pt 0;
-      color: var(--gray);
     }
 
     .totals-row.grand {
-      border-top: 1.5pt solid var(--black);
-      border-bottom: 1.5pt solid var(--black);
-      margin-top: 5pt;
-      padding: 5pt 0;
-      font-size: 14pt;
+      border-top: 1.5pt solid #000;
+      border-bottom: 1.5pt solid #000;
+      margin-top: 4pt;
+      padding: 4pt 0;
+      font-size: 13pt;
       font-weight: 700;
-      color: var(--black);
       letter-spacing: 0.5pt;
     }
 
-    /* ══════════════════════════════════════════
-       PAYMENTS
-    ══════════════════════════════════════════ */
+    /* ── PAYMENTS ───────────────────────────── */
     .payments-section {
-      padding: 5pt 6pt 6pt;
-      border-top: 0.75pt solid var(--black);
+      padding: 4pt 4pt 5pt;
+      border-top: 1pt dashed #000;
     }
 
     .pay-row {
@@ -333,76 +288,66 @@ function buildReceiptHTML(
 
     .pay-amount { font-weight: 700; }
 
-    .change-row {
-      color: var(--gray);
-      font-size: 8.5pt;
-    }
-
-    /* ══════════════════════════════════════════
-       BARCODE + FOOTER
-    ══════════════════════════════════════════ */
+    /* ── BARCODE (text-only, no fills) ──────── */
     .barcode-section {
-      padding: 10pt 6pt 4pt;
+      padding: 8pt 4pt 4pt;
       text-align: center;
-      border-top: 1pt solid var(--black);
+      border-top: 1pt dashed #000;
     }
 
-    .barcode {
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      height: 28pt;
-      gap: 0;
-      margin-bottom: 4pt;
+    /* Pure text barcode — no filled divs */
+    .barcode-text {
+      font-size: 7.5pt;
+      letter-spacing: 2pt;
+      margin-bottom: 3pt;
+      font-weight: 700;
     }
 
     .barcode-num {
-      font-size: 7.5pt;
+      font-size: 7pt;
       letter-spacing: 3pt;
-      color: var(--gray);
-      margin-bottom: 2pt;
     }
 
-  .footer {
-  text-align: center;
-  padding: 6pt 6pt 2pt;
-  border-top: 0.75pt solid var(--light);
-}
+    /* ── FOOTER ─────────────────────────────── */
+    .footer {
+      text-align: center;
+      padding: 6pt 4pt 10pt;
+      border-top: 1pt solid #000;
+    }
 
     .footer-thanks {
-      font-family: var(--serif);
-      font-size: 12pt;
-      margin-bottom: 4pt;
+      font-size: 11pt;
+      font-weight: 700;
+      margin-bottom: 3pt;
+      letter-spacing: 0.5pt;
     }
 
     .footer-sub {
-      font-size: 7.5pt;
-      color: var(--gray);
+      font-size: 7pt;
       letter-spacing: 0.5pt;
       line-height: 1.8;
     }
 
     .dot-divider {
       letter-spacing: 4pt;
-      color: var(--light);
-      font-size: 8pt;
-      margin: 5pt 0;
+      font-size: 7pt;
+      margin: 4pt 0;
     }
   </style>
 </head>
 <body>
 <div class="receipt">
 
-  <!-- ══ HEADER ══ -->
+  <!-- HEADER -->
   <div class="header">
-    <div class="shop-name">${shopName}</div>
+    <img src="/chefworldlogo.png" alt="${shopName}" class="shop-logo" />
     <hr class="shop-divider"/>
     <div class="shop-sub">${shopTagline}</div>
-    <div class="shop-sub" style="margin-top:3pt;opacity:0.45;">${shopAddress}</div>
-    <div class="shop-sub" style="opacity:0.45;">${shopPhone}</div>
+    <div class="shop-sub">${shopAddress}</div>
+    <div class="shop-sub">${shopPhone}</div>
   </div>
 
-  <!-- ══ META BAND ══ -->
+  <!-- META BAND -->
   <div class="meta-band">
     <div class="meta-row">
       <span class="meta-label">Receipt</span>
@@ -424,12 +369,12 @@ function buildReceiptHTML(
     </div>` : ""}
   </div>
 
-  <!-- ══ ITEMS ══ -->
+  <!-- ITEMS -->
   <div class="items-section">
     <div class="section-label">Items</div>
     <div class="col-header">
       <span>Description</span>
-      <span style="text-align:center">Qty</span>
+      <span>Qty</span>
       <span style="text-align:right">Price</span>
       <span style="text-align:right">Total</span>
     </div>
@@ -441,9 +386,8 @@ function buildReceiptHTML(
     <div class="items-border"></div>
   </div>
 
-  <!-- ══ TOTALS ══ -->
+  <!-- TOTALS -->
   <div class="totals-section">
-    <div class="section-label" style="padding:0 0 4pt;border:none;">Summary</div>
     <div class="totals-row">
       <span>Subtotal</span>
       <span>$${fmt(subtotal)}</span>
@@ -458,29 +402,28 @@ function buildReceiptHTML(
     </div>
   </div>
 
-  <!-- ══ PAYMENTS ══ -->
+  <!-- PAYMENTS -->
   <div class="payments-section">
-    <div class="section-label" style="padding:0 0 5pt;border:none;">Payment</div>
+    <div class="section-label" style="padding:0 0 4pt;border:none;">Payment</div>
     ${paymentRows}
     ${changeRow}
   </div>
 
-  <!-- ══ BARCODE ══ -->
+  <!-- BARCODE (text-only) -->
   <div class="barcode-section">
-    <div class="barcode">${barcodeStripes}</div>
+    <div class="barcode-text">| || ||| || | ||| || | || ||| ||</div>
     <div class="barcode-num">${receiptNo}</div>
   </div>
 
-  <!-- ══ FOOTER ══ -->
+  <!-- FOOTER -->
   <div class="footer">
-    <div class="dot-divider">· · · · · · · · · ·</div>
+    <div class="dot-divider">- - - - - - - - - - - -</div>
     <div class="footer-thanks">Thank you for your visit!</div>
     <div class="footer-sub">Please keep this receipt for your records.</div>
-    <div class="footer-sub" style="margin-top:4pt;">${shopPhone} · ${shopName}</div>
+    <div class="footer-sub">${shopPhone} · ${shopName}</div>
   </div>
-<div style="height:1px;"></div>
-</div>
 
+</div>
 </body>
 </html>`;
 }
@@ -503,8 +446,8 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-  iframe.style.cssText =
-  "position:absolute;width:0;height:0;border:0;visibility:hidden;";
+    iframe.style.cssText =
+      "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
