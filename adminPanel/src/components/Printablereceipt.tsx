@@ -223,7 +223,7 @@ function buildReceiptHTML(
       font-weight: 700;
       letter-spacing: 3pt;
       text-transform: uppercase;
-      color: var(--gray);
+      color: var(--white);
       padding: 6pt 10pt 3pt;
       border-bottom: 0.5pt solid var(--light);
     }
@@ -244,7 +244,7 @@ function buildReceiptHTML(
       font-weight: 700;
       letter-spacing: 1.5pt;
       text-transform: uppercase;
-      color: var(--gray);
+      color: var(--white);
       border-bottom: 0.75pt solid var(--black);
     }
 
@@ -268,13 +268,13 @@ function buildReceiptHTML(
     table.items td:last-child  { padding-right: 2pt; }
 
     .item-name  { }
-    .item-qty   { text-align: center; color: var(--gray); font-size: 9pt; }
-    .item-price { text-align: right;  color: var(--gray); font-size: 9pt; }
+    .item-qty   { text-align: center; color: var(--black); font-size: 9pt; }
+    .item-price { text-align: right;  color: var(--black); font-size: 9pt; }
     .item-total { text-align: right;  font-weight: 700; }
 
     .discount-label  {
       font-size: 8pt;
-      color: var(--gray);
+      color: var(--black);
       padding-left: 2pt !important;
       padding-top: 0 !important;
       padding-bottom: 4pt !important;
