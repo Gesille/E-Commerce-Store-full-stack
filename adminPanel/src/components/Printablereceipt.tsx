@@ -159,9 +159,9 @@ function buildReceiptHTML(
 
     .header-tagline {
       font-size: 7pt;
-      letter-spacing: 3pt;
+      letter-spacing: 2pt;
       text-transform: uppercase;
-      line-height: 2.2;
+      line-height: 1.9;
     }
 
     .header-info {
@@ -171,14 +171,11 @@ function buildReceiptHTML(
       opacity: 0.5;
     }
 
-    /* ── STRIPE DIVIDER ───────────────────── */
+    /* ── DOUBLE BORDER DIVIDER ────────────── */
     .stripe-divider {
-      height: 3pt;
-      background: repeating-linear-gradient(
-        90deg,
-        #0a0a0a 0pt, #0a0a0a 4pt,
-        #ffffff 4pt, #ffffff 6pt
-      );
+      border-top: 2.5pt solid #0a0a0a;
+      border-bottom: 0.75pt solid #0a0a0a;
+      height: 4pt;
     }
 
     /* ── META GRID ────────────────────────── */
@@ -419,15 +416,14 @@ function buildReceiptHTML(
       <div class="meta-value">${dateStr}</div>
       <div class="meta-value-sm">${timeStr}</div>
     </div>
-    ${customer ? `
+    ${customer || odooOrderId ? `
     <div class="meta-cell border-right border-top">
       <div class="meta-label">Customer</div>
-      <div class="meta-value">${customer.name}</div>
-    </div>` : ""}
-    ${odooOrderId ? `
+      <div class="meta-value">${customer ? customer.name : "&mdash;"}</div>
+    </div>
     <div class="meta-cell border-top">
       <div class="meta-label">Order</div>
-      <div class="meta-value">#${odooOrderId}</div>
+      <div class="meta-value">${odooOrderId ? `#${odooOrderId}` : "&mdash;"}</div>
     </div>` : ""}
   </div>
 
