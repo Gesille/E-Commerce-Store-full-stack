@@ -5,6 +5,7 @@ import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
 import {
   getReceiptById,
   getReceipts,
+  printOdooReceipt,
   sendReceiptByEmail,
 } from "../controllers/receipts.controller.js";
 
@@ -33,5 +34,11 @@ receiptRouter.post(
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
   sendReceiptByEmail,
+);
+receiptRouter.get(
+  "/print/:orderId",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  printOdooReceipt,
 );
 export default receiptRouter;

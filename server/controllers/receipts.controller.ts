@@ -5,6 +5,9 @@ import {
   getReceiptByIdService,
   sendReceiptByEmailService,
 } from "../services/receipts.service.js";
+import ErrorHandler from "../utils/ErrorHandler.js";
+import { odooRequest } from "../odoo/odoo.client.js";
+import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 
 // ─────────────────────────────────────────────────────────
 // GET /receipts
@@ -113,3 +116,75 @@ export const sendReceiptByEmail = async (
     next(error);
   }
 };
+
+
+export const printOdooReceipt = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const orderId = Number(req.params.orderId);
+ 
+    if (!orderId || isNaN(orderId)) {
+      return next(new ErrorHandler("Invalid order id", 400));
+    }
+ 
+    // 1. Verify the order exists in Odoo
+    const orders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["id", "=", orderId]]],
+      { fields: ["id", "name", "state"], limit: 1 },
+    );
+ 
+    if (!orders?.length) {
+      return next(new ErrorHandler("Order not found in Odoo", 404));
+    }
+ 
+ 
+    const odooUrl = process.env.ODOO_URL!;
+    const odooDb  = process.env.ODOO_DB!;
+    const odooUser = process.env.ODOO_USER!;
+    const odooPass = process.env.ODOO_PASS!;
+ 
+    // Authenticate to get a session cookie
+    const authRes = await fetch(`${odooUrl}/web/session/authenticate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params: { db: odooDb, login: odooUser, password: odooPass },
+      }),
+    });
+ 
+    const setCookie = authRes.headers.get("set-cookie");
+    if (!setCookie) {
+      return next(new ErrorHandler("Failed to authenticate with Odoo", 502));
+    }
+ 
+    // 3. Download the PDF using the session cookie
+    const reportUrl = `${odooUrl}/report/pdf/point_of_sale.report_pos_order/${orderId}`;
+ 
+    const pdfRes = await fetch(reportUrl, {
+      headers: { Cookie: setCookie },
+    });
+ 
+    if (!pdfRes.ok) {
+      return next(
+        new ErrorHandler(
+          `Odoo report failed: ${pdfRes.status} ${pdfRes.statusText}`,
+          502,
+        ),
+      );
+    }
+ 
+    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+ 
+    // 4. Stream it back to the frontend
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="receipt-${orderId}.pdf"`,
+    );
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.send(pdfBuffer);
+  },
+);

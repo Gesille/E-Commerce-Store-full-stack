@@ -1,3 +1,4 @@
+import { usePrintOdooReceipt } from "@/hooks/Useprintodooreceipt";
 import {
   useLazyGetOrderReceiptPdfQuery,
   useCreateOdooInvoiceMutation,
@@ -5,7 +6,7 @@ import {
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
 import { useState } from "react";
-import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
+
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
@@ -49,15 +50,20 @@ export function ReceiptModal({
     pdfUrl?: string;
     message?: string;
   }>({ status: "idle" });
-const { printReceipt } = usePrintReceipt({
-  cart: order.cart,
-  customer,
-  paymentLines,
-  odooOrderId,
-  receiptNo,
-});
 
-  const handlePrint = () => printReceipt();
+  // ── NEW: Odoo PDF print hook ──────────────────────────────────────────────
+  const {
+    print: printOdooReceipt,
+    loading: isPrinting,
+    error: printError,
+  } = usePrintOdooReceipt();
+
+  const handlePrint = () => {
+    if (odooOrderId) {
+      printOdooReceipt(odooOrderId);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleCreateInvoice = async () => {
     if (!odooOrderId) return;
@@ -75,6 +81,7 @@ const { printReceipt } = usePrintReceipt({
       });
     }
   };
+
   const [sendReceiptByEmail, { isLoading: isSending }] =
     useSendReceiptByEmailMutation();
 
@@ -101,6 +108,7 @@ const { printReceipt } = usePrintReceipt({
       });
     }
   };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-[360px] flex flex-col overflow-hidden">
@@ -195,18 +203,29 @@ const { printReceipt } = usePrintReceipt({
             </div>
           )}
 
+          {/* Print error feedback */}
+          {printError && (
+            <div className="mt-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+              <span className="text-[12px] text-red-600">
+                ⚠️ {printError}
+              </span>
+            </div>
+          )}
+
           <div className="text-center text-[11px] text-gray-400 mt-4">
             Thank you for your purchase!
           </div>
         </div>
+
         {/* Actions */}
         <div className="flex flex-col gap-2 px-5 py-4">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handlePrint}
-              className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors"
+              disabled={isPrinting || !odooOrderId}
+              className="h-9 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 bg-transparent cursor-pointer transition-colors disabled:opacity-50"
             >
-              🖨 Print
+              {isPrinting ? "Printing…" : "🖨 Print"}
             </button>
 
             {odooOrderId && invoiceState.status !== "success" ? (
@@ -221,6 +240,7 @@ const { printReceipt } = usePrintReceipt({
               <div />
             )}
           </div>
+
           {odooOrderId && (
             <button
               onClick={() => {
@@ -242,6 +262,7 @@ const { printReceipt } = usePrintReceipt({
           </button>
         </div>
       </div>
+
       {/* Email Modal */}
       {emailModal && (
         <div className="absolute inset-0 z-60 flex items-center justify-center bg-black/40">
@@ -261,7 +282,6 @@ const { printReceipt } = usePrintReceipt({
               className="h-10 px-3 rounded-xl border border-gray-200 text-[13px] text-gray-800 outline-none focus:border-blue-400 transition-colors"
             />
 
-            {/* Feedback */}
             {emailState.status === "success" && (
               <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[12px] text-emerald-700 font-medium">
                 ✅ Receipt sent successfully!
@@ -291,13 +311,6 @@ const { printReceipt } = usePrintReceipt({
           </div>
         </div>
       )}
-      <PrintableReceipt
-        cart={order.cart}
-        customer={customer}
-        paymentLines={paymentLines}
-        odooOrderId={odooOrderId}
-        receiptNo={receiptNo}
-      />
     </div>
   );
 }
