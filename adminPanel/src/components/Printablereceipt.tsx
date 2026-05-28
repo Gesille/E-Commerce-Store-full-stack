@@ -142,7 +142,7 @@ function buildReceiptHTML(
        HEADER
     ══════════════════════════════════════════ */
     .header {
-      background: var(--black);
+      background: #fff;
       color: var(--white);
       padding: 14pt 10pt 12pt;
       text-align: center;
@@ -256,8 +256,8 @@ function buildReceiptHTML(
     }
 
     /* first/last cells get side padding */
-    table.items td:first-child { padding-left: 10pt; }
-    table.items td:last-child  { padding-right: 10pt; }
+    table.items td:first-child { padding-left: 2pt; }
+    table.items td:last-child  { padding-right: 2pt; }
 
     .item-name  { }
     .item-qty   { text-align: center; color: var(--gray); font-size: 9pt; }
@@ -267,7 +267,7 @@ function buildReceiptHTML(
     .discount-label  {
       font-size: 8pt;
       color: var(--gray);
-      padding-left: 10pt !important;
+      padding-left: 2pt !important;
       padding-top: 0 !important;
       padding-bottom: 4pt !important;
     }
@@ -275,7 +275,7 @@ function buildReceiptHTML(
       text-align: right;
       font-size: 8pt;
       color: #c0392b;
-      padding-right: 10pt !important;
+      padding-right: 2pt !important;
       padding-top: 0 !important;
       padding-bottom: 4pt !important;
     }
