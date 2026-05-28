@@ -101,10 +101,10 @@ function buildReceiptHTML(
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
 
-    @page {
-      size: 72mm auto;
-      margin: 0;
-    }
+   @page {
+  size: 76mm auto;
+  margin: 0mm;
+}
 
     *, *::before, *::after {
       box-sizing: border-box;
@@ -124,8 +124,10 @@ function buildReceiptHTML(
       --serif:  'DM Serif Display', Georgia, serif;
     }
 
-    html, body {
-      width: 72mm;
+   
+     html, body {
+  width: 76mm;
+  max-width: 76mm;
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
@@ -134,7 +136,9 @@ function buildReceiptHTML(
     }
 
     .receipt {
-      width: 72mm;
+    width: 76mm;
+  max-width: 76mm;
+  overflow: hidden;
       background: var(--white);
     }
 
@@ -144,7 +148,7 @@ function buildReceiptHTML(
     .header {
       background: var(--black);
       color: var(--white);
-      padding: 14pt 10pt 12pt;
+      padding: 14pt 6pt 12pt;
       text-align: center;
       position: relative;
     }
@@ -178,7 +182,7 @@ function buildReceiptHTML(
     .meta-band {
       background: var(--light);
       border-bottom: 1.5pt solid var(--black);
-      padding: 7pt 10pt;
+      padding: 7pt 6pt;
     }
 
     .meta-row {
@@ -231,7 +235,7 @@ function buildReceiptHTML(
       display: grid;
       grid-template-columns: 1fr 18pt 44pt 46pt;
       gap: 0 3pt;
-      padding: 4pt 10pt;
+      padding: 4pt 6pt;
       font-size: 7pt;
       font-weight: 700;
       letter-spacing: 1.5pt;
@@ -246,7 +250,7 @@ function buildReceiptHTML(
     table.items {
       width: 100%;
       border-collapse: collapse;
-      padding: 0 10pt;
+      padding: 0 6pt;
     }
 
     table.items td {
@@ -282,14 +286,14 @@ function buildReceiptHTML(
 
     .items-border {
       border-top: 0.75pt solid var(--black);
-      margin: 4pt 10pt 0;
+      margin: 4pt 6pt 0;
     }
 
     /* ══════════════════════════════════════════
        TOTALS
     ══════════════════════════════════════════ */
     .totals-section {
-      padding: 5pt 10pt;
+      padding: 5pt 6pt;
     }
 
     .totals-row {
@@ -315,7 +319,7 @@ function buildReceiptHTML(
        PAYMENTS
     ══════════════════════════════════════════ */
     .payments-section {
-      padding: 5pt 10pt 6pt;
+      padding: 5pt 6pt 6pt;
       border-top: 0.75pt solid var(--black);
     }
 
@@ -338,7 +342,7 @@ function buildReceiptHTML(
        BARCODE + FOOTER
     ══════════════════════════════════════════ */
     .barcode-section {
-      padding: 10pt 10pt 4pt;
+      padding: 10pt 6pt 4pt;
       text-align: center;
       border-top: 1pt solid var(--black);
     }
@@ -361,7 +365,7 @@ function buildReceiptHTML(
 
     .footer {
       text-align: center;
-      padding: 8pt 10pt 12pt;
+      padding: 8pt 6pt 12pt;
       border-top: 0.75pt solid var(--light);
     }
 
@@ -499,7 +503,7 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
     iframe.style.cssText =
-      "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
+      "position:fixed;top:0;left:0;width:76mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
