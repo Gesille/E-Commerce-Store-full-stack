@@ -102,7 +102,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
 
     @page {
-      size: 80mm auto;
+      size: 70mm auto;
       margin: 0;
     }
 
@@ -125,7 +125,7 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 80mm;
+      width: 70mm;
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
@@ -134,7 +134,7 @@ function buildReceiptHTML(
     }
 
     .receipt {
-      width: 80mm;
+      width: 70mm;
       background: var(--white);
     }
 
