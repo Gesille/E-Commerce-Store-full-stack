@@ -156,9 +156,11 @@ function buildReceiptHTML(
     .shop-name {
       font-family: var(--serif);
       font-size: 22pt;
-      letter-spacing: 1pt;
-      line-height: 1.1;
-      margin-bottom: 4pt;
+      max-width: 52mm;
+      height: auto;
+      display: block;
+      margin: 0 auto 4pt;
+     
     }
 
     .shop-divider {
