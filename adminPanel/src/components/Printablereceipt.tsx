@@ -114,12 +114,20 @@ function buildReceiptHTML(
       print-color-adjust: exact;
     }
 
-   
+    :root {
+      --black:  #0a0a0a;
+      --white:  #fafaf8;
+      --gray:   #6b6b6b;
+      --light:  #e8e5df;
+      --accent: #1a1a1a;
+      --mono:   'IBM Plex Mono', 'Courier New', monospace;
+      --serif:  'DM Serif Display', Georgia, serif;
+    }
 
    
      html, body {
   width: 70mm;
-  
+  max-width: 76mm;
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
