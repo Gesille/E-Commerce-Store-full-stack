@@ -102,7 +102,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=DM+Serif+Display&display=swap');
 
    @page {
-  size: 76mm fit-content;
+  size: 76mm auto;
   margin: 0mm;
 }
 
@@ -478,8 +478,9 @@ function buildReceiptHTML(
     <div class="footer-sub">Please keep this receipt for your records.</div>
     <div class="footer-sub" style="margin-top:4pt;">${shopPhone} · ${shopName}</div>
   </div>
-
+<div style="height:1px;"></div>
 </div>
+
 </body>
 </html>`;
 }
@@ -502,8 +503,8 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    iframe.style.cssText =
-      "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+  iframe.style.cssText =
+  "position:absolute;width:0;height:0;border:0;visibility:hidden;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
