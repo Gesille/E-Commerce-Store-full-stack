@@ -169,6 +169,7 @@ function buildReceiptHTML(
     }
 
     .shop-sub {
+    text-color:var(--white);
       font-size: 7.5pt;
       letter-spacing: 2.5pt;
       text-transform: uppercase;
@@ -395,7 +396,7 @@ function buildReceiptHTML(
 
   <!-- ══ HEADER ══ -->
  <div class="header">
-    <img src="/chefworldlogo.png" alt="${shopName}" class="shop-logo" />
+    <img src="/chefworldlogo1.png" alt="${shopName}" class="shop-logo" />
     <hr class="shop-divider"/>
     <div class="shop-sub">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
