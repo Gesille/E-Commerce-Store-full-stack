@@ -126,8 +126,8 @@ function buildReceiptHTML(
 
    
      html, body {
-  width: 70mm;
-  max-width: 76mm;
+      width: 70mm;
+      max-width: 76mm;
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
@@ -394,12 +394,12 @@ function buildReceiptHTML(
 <div class="receipt">
 
   <!-- ══ HEADER ══ -->
-  <div class="header">
-    <div class="shop-name">${shopName}</div>
+ <div class="header">
+    <img src="/chefworldlogo.png" alt="${shopName}" class="shop-logo" />
     <hr class="shop-divider"/>
     <div class="shop-sub">${shopTagline}</div>
-    <div class="shop-sub" style="margin-top:3pt;opacity:0.45;">${shopAddress}</div>
-    <div class="shop-sub" style="opacity:0.45;">${shopPhone}</div>
+    <div class="shop-sub">${shopAddress}</div>
+    <div class="shop-sub">${shopPhone}</div>
   </div>
 
   <!-- ══ META BAND ══ -->
