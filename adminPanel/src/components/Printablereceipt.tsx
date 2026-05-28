@@ -1,10 +1,10 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
 // ─── Shop Config ───────────────────────────────────────────────────────────
-const shopName = "Chef's World";
+const shopName    = "Chef's World";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
-const shopPhone = "(555) 123-4567";
+const shopPhone   = "(555) 123-4567";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const fmt = (n: number) => n.toFixed(2);
@@ -14,18 +14,18 @@ function calcLineTotal(item: CartItem) {
 }
 function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const tax      = subtotal * 0.1;
+  const total    = subtotal + tax;
   return { subtotal, tax, total };
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface PrintableReceiptProps {
-  cart: CartItem[];
-  customer: Customer | null;
+  cart:         CartItem[];
+  customer:     Customer | null;
   paymentLines: PaymentLine[];
   odooOrderId?: number;
-  receiptNo: string;
+  receiptNo:    string;
 }
 
 // Not rendered on screen — receipt is built in the hook
@@ -42,63 +42,50 @@ function buildReceiptHTML(
   receiptNo: string,
 ): string {
   const { subtotal, tax, total } = calcOrderTotals(cart);
-  const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
+  const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
 
   const dateStr = new Date().toLocaleString("en-US", {
     weekday: "short",
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    month:   "short",
+    day:     "2-digit",
+    year:    "numeric",
+    hour:    "2-digit",
+    minute:  "2-digit",
   });
 
   // ── Line items ────────────────────────────────────────────────────────────
-  const lineItems = cart
-    .map((item) => {
-      const lineTotal = calcLineTotal(item);
-      const hasDiscount = (item.discount ?? 0) > 0;
-      const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
+  const lineItems = cart.map((item) => {
+    const lineTotal  = calcLineTotal(item);
+    const hasDiscount = (item.discount ?? 0) > 0;
+    const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
-      return `
+    return `
       <tr class="item-row">
         <td class="item-name">${item.name}</td>
         <td class="item-qty">${item.qty}</td>
         <td class="item-price">$${fmt(item.price)}</td>
         <td class="item-total">$${fmt(lineTotal)}</td>
       </tr>
-      ${
-        hasDiscount
-          ? `
+      ${hasDiscount ? `
       <tr class="discount-row">
         <td colspan="3" class="discount-label">↳ Discount ${item.discount}%</td>
         <td class="discount-amount">−$${fmt(discountAmt)}</td>
-      </tr>`
-          : ""
-      }`;
-    })
-    .join("");
+      </tr>` : ""}`;
+  }).join("");
 
   // ── Payment rows ──────────────────────────────────────────────────────────
-  const paymentRows = paymentLines
-    .map(
-      (l) => `
+  const paymentRows = paymentLines.map((l) => `
     <div class="pay-row">
       <span class="pay-method">${l.method}</span>
       <span class="pay-amount">$${fmt(l.amount)}</span>
-    </div>`,
-    )
-    .join("");
+    </div>`).join("");
 
-  const changeRow =
-    change > 0.005
-      ? `
+  const changeRow = change > 0.005 ? `
     <div class="pay-row change-row">
       <span class="pay-method">Change</span>
       <span class="pay-amount">$${fmt(change)}</span>
-    </div>`
-      : "";
+    </div>` : "";
 
   // ── Barcode-style receipt number (CSS stripes) ─────────────────────────
   const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
@@ -128,36 +115,26 @@ function buildReceiptHTML(
     }
 
     :root {
-     --black: #000;
-  --white: #fff;
-  --gray: #000;
-  --light: #fff;
-  --accent: #000;
+      --black:  #0a0a0a;
+      --white:  #fafaf8;
+      --gray:   #6b6b6b;
+      --light:  #e8e5df;
+      --accent: #1a1a1a;
       --mono:   'IBM Plex Mono', 'Courier New', monospace;
       --serif:  'DM Serif Display', Georgia, serif;
     }
 
     html, body {
-      width: 72mm;
+      width: 80mm;
       background: var(--white);
       font-family: var(--mono);
       font-size: 10.5pt;
       color: var(--black);
       line-height: 1.55;
-        margin: 0 auto;
-  padding: 0;
-  overflow: hidden;
     }
-  body {
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
-  background: #fff !important;
-  color: #000 !important;
-}
 
     .receipt {
-      width: 72mm;
-  margin: 0 auto;
+      width: 80mm;
       background: var(--white);
     }
 
@@ -165,9 +142,8 @@ function buildReceiptHTML(
        HEADER
     ══════════════════════════════════════════ */
     .header {
-      background: #fff;
-  color: #000;
-  border-bottom: 2px solid #000;
+      background: var(--black);
+      color: var(--white);
       padding: 14pt 10pt 12pt;
       text-align: center;
       position: relative;
@@ -192,7 +168,7 @@ function buildReceiptHTML(
       font-size: 7.5pt;
       letter-spacing: 2.5pt;
       text-transform: uppercase;
-   
+      opacity: 0.65;
       line-height: 1.7;
     }
 
@@ -200,7 +176,7 @@ function buildReceiptHTML(
        RECEIPT META
     ══════════════════════════════════════════ */
     .meta-band {
-      background: #fff;
+      background: var(--light);
       border-bottom: 1.5pt solid var(--black);
       padding: 7pt 10pt;
     }
@@ -217,7 +193,7 @@ function buildReceiptHTML(
       text-transform: uppercase;
       letter-spacing: 1.5pt;
       font-size: 7pt;
-      color: #000;
+      color: var(--gray);
     }
 
     .meta-value {
@@ -280,8 +256,8 @@ function buildReceiptHTML(
     }
 
     /* first/last cells get side padding */
-    table.items td:first-child { padding-left: 4pt; }
-    table.items td:last-child  { padding-right: 4pt; }
+    table.items td:first-child { padding-left: 10pt; }
+    table.items td:last-child  { padding-right: 10pt; }
 
     .item-name  { }
     .item-qty   { text-align: center; color: var(--gray); font-size: 9pt; }
@@ -291,7 +267,7 @@ function buildReceiptHTML(
     .discount-label  {
       font-size: 8pt;
       color: var(--gray);
-      padding-left: 4pt !important;
+      padding-left: 10pt !important;
       padding-top: 0 !important;
       padding-bottom: 4pt !important;
     }
@@ -299,13 +275,13 @@ function buildReceiptHTML(
       text-align: right;
       font-size: 8pt;
       color: #c0392b;
-      padding-right: 4pt !important;
+      padding-right: 10pt !important;
       padding-top: 0 !important;
       padding-bottom: 4pt !important;
     }
 
     .items-border {
-      border-top: 0.75pt solid var(--black);
+      border-top: 0.75pt dashed var(--black);
       margin: 4pt 10pt 0;
     }
 
@@ -340,7 +316,7 @@ function buildReceiptHTML(
     ══════════════════════════════════════════ */
     .payments-section {
       padding: 5pt 10pt 6pt;
-      border-top: 0.75pt solid var(--black);
+      border-top: 0.75pt dashed var(--black);
     }
 
     .pay-row {
@@ -364,7 +340,7 @@ function buildReceiptHTML(
     .barcode-section {
       padding: 10pt 10pt 4pt;
       text-align: center;
-      border-top: 1pt solid var(--black);
+      border-top: 1pt dashed var(--black);
     }
 
     .barcode {
@@ -418,8 +394,8 @@ function buildReceiptHTML(
     <div class="shop-name">${shopName}</div>
     <hr class="shop-divider"/>
     <div class="shop-sub">${shopTagline}</div>
-    <div class="shop-sub" style="margin-top:3pt;">${shopAddress}</div>
-    <div class="shop-sub">${shopPhone}</div>
+    <div class="shop-sub" style="margin-top:3pt;opacity:0.45;">${shopAddress}</div>
+    <div class="shop-sub" style="opacity:0.45;">${shopPhone}</div>
   </div>
 
   <!-- ══ META BAND ══ -->
@@ -432,24 +408,16 @@ function buildReceiptHTML(
       <span class="meta-label">Date</span>
       <span class="meta-value">${dateStr}</span>
     </div>
-    ${
-      odooOrderId
-        ? `
+    ${odooOrderId ? `
     <div class="meta-row">
       <span class="meta-label">Order ID</span>
       <span class="meta-value">#${odooOrderId}</span>
-    </div>`
-        : ""
-    }
-    ${
-      customer
-        ? `
+    </div>` : ""}
+    ${customer ? `
     <div class="meta-row">
       <span class="meta-label">Customer</span>
       <span class="meta-value">${customer.name}</span>
-    </div>`
-        : ""
-    }
+    </div>` : ""}
   </div>
 
   <!-- ══ ITEMS ══ -->
@@ -514,30 +482,24 @@ function buildReceiptHTML(
 
 // ─── Print Hook ────────────────────────────────────────────────────────────
 interface UsePrintReceiptOptions {
-  cart: CartItem[];
-  customer: Customer | null;
+  cart:         CartItem[];
+  customer:     Customer | null;
   paymentLines: PaymentLine[];
   odooOrderId?: number;
-  receiptNo: string;
+  receiptNo:    string;
 }
 
 export function usePrintReceipt(options: UsePrintReceiptOptions) {
   const printReceipt = async () => {
     const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
-    const html = buildReceiptHTML(
-      cart,
-      customer,
-      paymentLines,
-      odooOrderId,
-      receiptNo,
-    );
+    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
     document.getElementById("__print_frame__")?.remove();
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
     iframe.style.cssText =
-      "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;pointer-events:none;z-index:-1;";
+      "position:fixed;top:0;left:0;width:80mm;height:1px;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
