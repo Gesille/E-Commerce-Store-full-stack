@@ -129,7 +129,7 @@ function buildReceiptHTML(
     /* ── HEADER ───────────────────────── */
     .header {
       text-align: center;
-      padding: 0 4pt 10pt;
+      padding: 0 2pt 10pt;
       border-bottom: 1.5pt solid #000;
     }
 
@@ -137,7 +137,7 @@ function buildReceiptHTML(
       display: block;
       max-width: 54mm;
       height: auto;
-      margin: 0 auto 6pt;
+     
     }
 
     .header-rule {
@@ -340,7 +340,7 @@ function buildReceiptHTML(
 
   <!-- HEADER -->
   <div class="header">
-    <img src="/chefworldlogo.png" alt="${shopName}" class="logo" />
+    <img src="/chefworldlogo1.png" alt="${shopName}" class="logo" />
     <hr class="header-rule"/>
     <div class="header-line">${shopTagline}</div>
     <div class="header-line">${shopAddress}</div>
