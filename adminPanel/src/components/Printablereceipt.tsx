@@ -145,7 +145,7 @@ function buildReceiptHTML(
       border: none;
       border-top: 0.75pt dashed #000;
       width: 70%;
-      
+      margin: 5pt 0 6pt;
     }
 
     .header-line {
