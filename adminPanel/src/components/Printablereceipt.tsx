@@ -101,7 +101,7 @@ function buildReceiptHTML(
 
     @page {
       size: 80mm auto;
-      margin: 0;
+      margin: 4mm 0;
     }
 
     *, *::before, *::after {
@@ -113,7 +113,7 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 70mm;
+      width: 80mm;
       background: #ffffff;
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 9pt;
@@ -122,20 +122,22 @@ function buildReceiptHTML(
     }
 
     .receipt {
-      width: 70mm;
+      width: 80mm;
+      padding: 0 5mm;
       background: #ffffff;
+      box-sizing: border-box;
     }
 
     /* ── HEADER ───────────────────────── */
     .header {
       text-align: center;
-      padding: 0 2pt 10pt;
+      padding: 6pt 0 10pt;
       border-bottom: 1.5pt solid #000;
     }
 
     .logo {
       display: block;
-      max-width: 54mm;
+      max-width: 44mm;
       height: auto;
       margin: 0 auto 4pt;
     }
