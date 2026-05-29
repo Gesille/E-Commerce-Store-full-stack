@@ -18,7 +18,7 @@ function calcOrderTotals(cart: CartItem[]) {
   return { subtotal, tax, total };
 }
 
-interface PrintableReceiptProps {
+export interface PrintableReceiptProps {
   cart:         CartItem[];
   customer:     Customer | null;
   paymentLines: PaymentLine[];
@@ -28,6 +28,23 @@ interface PrintableReceiptProps {
 
 export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
+}
+
+// Pad a string on the right to a fixed column width (ASCII safe)
+function col(text: string, width: number): string {
+  const s = String(text);
+  return s.length >= width ? s.slice(0, width) : s + " ".repeat(width - s.length);
+}
+
+// Pad a string on the left (right-align)
+function colR(text: string, width: number): string {
+  const s = String(text);
+  return s.length >= width ? s.slice(0, width) : " ".repeat(width - s.length) + s;
+}
+
+// Repeat a character n times
+function repeat(char: string, n: number): string {
+  return char.repeat(Math.max(0, n));
 }
 
 function buildReceiptHTML(
@@ -40,7 +57,7 @@ function buildReceiptHTML(
   const { subtotal, tax, total } = calcOrderTotals(cart);
   const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
- 
+
   const logoUrl = window.location.origin + "/chefworldlogo1.png";
 
   const dateStr = new Date().toLocaleString("en-US", {
@@ -52,260 +69,228 @@ function buildReceiptHTML(
     minute:  "2-digit",
   });
 
-  const lineItems = cart.map((item) => {
+  // 48 chars wide — standard for 80mm paper at 12pt monospace
+  // Adjust COLS to 42 if using 76mm paper
+  const COLS = 48;
+  const DIVIDER_SOLID = repeat("-", COLS);
+  const DIVIDER_DASH  = repeat("- ", Math.floor(COLS / 2));
+
+  // Build item rows as plain text lines
+  const itemLines: string[] = [];
+  for (const item of cart) {
     const lineTotal   = calcLineTotal(item);
     const hasDiscount = (item.discount ?? 0) > 0;
     const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
+    // Name line: truncate name to leave room for qty x price = total
+    // Layout: "Item Name       qty x $pp.pp   $tt.tt"
+    const rightPart = `${item.qty} x $${fmt(item.price)}`;
+    const totalPart = `$${fmt(lineTotal)}`;
+    const rightWidth = rightPart.length + 1 + totalPart.length;
+    const nameWidth  = COLS - rightWidth - 1;
+    const nameTrunc  = item.name.length > nameWidth
+      ? item.name.slice(0, nameWidth - 1) + "."
+      : item.name;
 
-  const lines: string[] = [];
-  const p = (s: string) => lines.push(s);
-
-  p('<!DOCTYPE html>');
-  p('<html lang="en"><head><meta charset="utf-8">');
-  p('<style>');
-  p('@page{size:76mm auto;margin:0}');
-  p('*{box-sizing:border-box;margin:0;padding:0}');
-  p('html,body{width:76mm;font-family:monospace;font-size:9pt;color:#000;background:#fff}');
-  p('.w{width:76mm;padding:0 4mm}');
-  p('.center{text-align:center}');
-  p('.hdr{padding:6pt 0 10pt;border-bottom:1.5pt solid #000;text-align:center}');
-  p('.logo{display:block;max-width:40mm;height:auto;margin:0 auto 4pt}');
-  p('.hline{font-size:7pt;letter-spacing:1pt;text-transform:uppercase;line-height:1.9}');
-  p('.meta{padding:6pt 0;border-bottom:1pt solid #000}');
-  p('.mrow{display:flex;justify-content:space-between;padding:1pt 0}');
-  p('.mk{font-size:6.5pt;letter-spacing:1.5pt;text-transform:uppercase;font-weight:600}');
-  p('.mv{font-size:8pt;font-weight:700}');
-  p('.mvl{font-size:9.5pt;font-weight:700}');
-  p('.sh{font-size:6pt;font-weight:700;letter-spacing:3pt;text-transform:uppercase;padding:5pt 0 4pt;border-bottom:.75pt solid #000}');
-  p('.ch{display:grid;grid-template-columns:1fr 16pt 40pt 42pt;padding:3pt 0;font-size:6.5pt;font-weight:700;text-transform:uppercase;border-bottom:.75pt solid #000}');
-  p('.ch span:nth-child(2){text-align:center}');
-  p('.ch span:nth-child(3),.ch span:nth-child(4){text-align:right}');
-  p('table{width:100%;border-collapse:collapse}');
-  p('td{padding:3.5pt 0;vertical-align:top}');
-  p('.tn{font-size:9pt}');
-  p('.tq{text-align:center;font-size:8.5pt}');
-  p('.tp{text-align:right;font-size:8.5pt}');
-  p('.tt{text-align:right;font-size:9pt;font-weight:700}');
-  p('.dl{font-size:7.5pt;padding-left:8pt}');
-  p('.da{text-align:right;font-size:7.5pt}');
-  p('.rule{border-top:.75pt dashed #000;margin:3pt 0 0}');
-  p('.tots{padding:5pt 0 4pt}');
-  p('.tr{display:flex;justify-content:space-between;font-size:9pt;padding:1.5pt 0}');
-  p('.grand{border-top:1.5pt solid #000;border-bottom:1.5pt solid #000;margin-top:5pt;padding:5pt 0;font-size:13.5pt;font-weight:700}');
-  p('.pay{padding:5pt 0 6pt;border-top:.75pt dashed #000}');
-  p('.pr{display:flex;justify-content:space-between;font-size:9pt;padding:1.5pt 0;text-transform:capitalize}');
-  p('.pa{font-weight:700}');
-  p('.bc{padding:7pt 0 4pt;border-top:.75pt dashed #000}');
-  p('.bb{display:flex;align-items:flex-end;height:28pt;margin-bottom:4pt}');
-  p('.bn{font-size:7pt;letter-spacing:3pt}');
-  p('.ftr{text-align:center;padding:7pt 0 6pt;border-top:1pt solid #000}');
-  p('.ft{font-size:10.5pt;font-weight:700;margin-bottom:4pt}');
-  p('.fs{font-size:7pt;line-height:2}');
-  p('.fr{border:none;border-top:.75pt dashed #000;width:50%;margin:5pt auto}');
-  p('</style></head><body>');
-  p('<div class="w">');
-
-  const logoUrl = window.location.origin + '/chefworldlogo1.png';
-  p('<div class="hdr">');
-  p('<img src="' + logoUrl + '" class="logo" alt="logo">');
-  p('<hr class="fr">');
-  p('<div class="hline">' + shopTagline + '</div>');
-  p('<div class="hline">' + shopAddress + '</div>');
-  p('<div class="hline">' + shopPhone + '</div>');
-  p('</div>');
-
-  p('<div class="meta">');
-  p('<div class="mrow"><span class="mk">Receipt</span><span class="mvl">' + receiptNo + '</span></div>');
-  p('<div class="mrow"><span class="mk">Date</span><span class="mv">' + dateStr + '</span></div>');
-  if (odooOrderId) p('<div class="mrow"><span class="mk">Order ID</span><span class="mv">#' + odooOrderId + '</span></div>');
-  if (customer)    p('<div class="mrow"><span class="mk">Customer</span><span class="mv">' + customer.name + '</span></div>');
-  p('</div>');
-
-  p('<div class="sh">Items</div>');
-  p('<div class="ch"><span>Description</span><span>Qty</span><span>Price</span><span>Total</span></div>');
-  p('<table><tbody>');
-  cart.forEach((item) => {
-    const lt  = calcLineTotal(item);
-    const dis = (item.discount ?? 0) > 0;
-    const da  = item.price * item.qty * ((item.discount ?? 0) / 100);
-    p('<tr><td class="tn">' + item.name + '</td><td class="tq">' + item.qty + '</td><td class="tp">$' + fmt(item.price) + '</td><td class="tt">$' + fmt(lt) + '</td></tr>');
-    if (dis) p('<tr><td colspan="3" class="dl">Discount ' + item.discount + '%</td><td class="da">-$' + fmt(da) + '</td></tr>');
-  });
-  p('</tbody></table>');
-  p('<div class="rule"></div>');
-
-  p('<div class="tots">');
-  p('<div class="tr"><span>Subtotal</span><span>$' + fmt(subtotal) + '</span></div>');
-  p('<div class="tr"><span>Tax (10%)</span><span>$' + fmt(tax) + '</span></div>');
-  p('<div class="tr grand"><span>TOTAL</span><span>$' + fmt(total) + '</span></div>');
-  p('</div>');
-
-  p('<div class="pay">');
-  p('<div class="sh" style="padding:0 0 5pt;border:none">Payment</div>');
-  paymentLines.forEach((l) => {
-    p('<div class="pr"><span>' + l.method + '</span><span class="pa">$' + fmt(l.amount) + '</span></div>');
-  });
-  if (change > 0.005) p('<div class="pr"><span>Change</span><span class="pa">$' + fmt(change) + '</span></div>');
-  p('</div>');
-
-  const bars = Array.from({ length: 30 }, (_, i) => {
-    const w = [2,1,3,1,2,1,1,3,2,1][i % 10];
-    const mr = i % 3 === 0 ? 2 : 1;
-    return '<div style="width:' + w + 'px;background:#000;height:100%;display:inline-block;margin-right:' + mr + 'px"></div>';
-  }).join('');
-  p('<div class="bc"><div class="bb">' + bars + '</div><div class="bn">' + receiptNo + '</div></div>');
-
-  p('<div class="ftr">');
-  p('<hr class="fr">');
-  p('<div class="ft">Thank you for your visit!</div>');
-  p('<div class="fs">Please keep this receipt for your records.</div>');
-  p('<div class="fs">' + shopPhone + ' &middot; ' + shopName + '</div>');
-  p('<hr class="fr">');
-  p('</div>');
-
-  p('</div></body></html>');
-
-  return lines.join('\n');
-
-  }).join("");
-
-  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
-    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
-    return (
-      "<div style=\"width:" + w + "px;background:#000;height:100%;" +
-      "display:inline-block;margin-right:" + (i % 3 === 0 ? 2 : 1) + "px;\"></div>"
+    itemLines.push(
+      col(nameTrunc, nameWidth) +
+      " " +
+      col(rightPart, rightPart.length) +
+      " " +
+      colR(totalPart, totalPart.length),
     );
-  }).join("");
 
-  const paymentRows = paymentLines.map((l) =>
-    "<div class='pay-row'>" +
-      "<span>" + l.method + "</span>" +
-      "<span class='pay-amt'>$" + fmt(l.amount) + "</span>" +
-    "</div>"
-  ).join("");
+    if (hasDiscount) {
+      const discLabel = `  Discount ${item.discount}%`;
+      const discAmt   = `-$${fmt(discountAmt)}`;
+      itemLines.push(col(discLabel, COLS - discAmt.length) + discAmt);
+    }
+  }
 
-  const changeRow = change > 0.005
-    ? "<div class='pay-row'><span>Change</span><span class='pay-amt'>$" + fmt(change) + "</span></div>"
-    : "";
+  // Payment rows
+  const paymentLines_str: string[] = paymentLines.map((l) => {
+    const method = l.method.charAt(0).toUpperCase() + l.method.slice(1);
+    const amount = `$${fmt(l.amount)}`;
+    return col(method, COLS - amount.length) + amount;
+  });
 
-  const orderIdRow = odooOrderId
-    ? "<div class='meta-row'><span class='meta-key'>Order ID</span><span class='meta-val'>#" + odooOrderId + "</span></div>"
-    : "";
+  if (change > 0.005) {
+    const changeAmt = `$${fmt(change)}`;
+    paymentLines_str.push(col("Change", COLS - changeAmt.length) + changeAmt);
+  }
 
-  const customerRow = customer
-    ? "<div class='meta-row'><span class='meta-key'>Customer</span><span class='meta-val'>" + customer.name + "</span></div>"
-    : "";
+  // Encode plain text lines to escaped HTML spans (one per line)
+  function lines(...groups: string[][]): string {
+    return groups.flat().map(l =>
+      `<div class="line">${l
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+      }</div>`
+    ).join("");
+  }
 
-  return (
-    "<!DOCTYPE html>" +
-    "<html lang='en'>" +
-    "<head>" +
-    "<meta charset='utf-8'/>" +
-    "<style>" +
-    "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');" +
-    "@page { size: 76mm auto; margin: 0; }" +
-    "*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }" +
-    "html, body { width: 76mm; background: #fff; font-family: 'IBM Plex Mono','Courier New',monospace; font-size: 9pt; color: #000; line-height: 1.5; }" +
-    ".receipt { width: 76mm; padding: 0 4mm; background: #fff; box-sizing: border-box; }" +
-    ".header { text-align: center; padding: 6pt 0 10pt; border-bottom: 1.5pt solid #000; }" +
-    ".logo { display: block; max-width: 40mm; height: auto; margin: 0 auto 4pt; }" +
-    ".header-rule { border: none; border-top: 0.75pt dashed #000; width: 70%; margin: 5pt auto 6pt; }" +
-    ".header-line { font-size: 7pt; letter-spacing: 1.5pt; text-transform: uppercase; line-height: 1.9; color: #000; }" +
-    ".meta { padding: 6pt 0; border-bottom: 1pt solid #000; }" +
-    ".meta-row { display: flex; justify-content: space-between; align-items: baseline; padding: 1pt 0; }" +
-    ".meta-key { font-size: 6.5pt; letter-spacing: 1.5pt; text-transform: uppercase; font-weight: 600; }" +
-    ".meta-val { font-size: 8pt; font-weight: 700; letter-spacing: 0.25pt; }" +
-    ".meta-val-lg { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.5pt; }" +
-    ".sec-head { font-size: 6pt; font-weight: 700; letter-spacing: 3pt; text-transform: uppercase; padding: 5pt 0 4pt; border-bottom: 0.75pt solid #000; }" +
-    ".col-head { display: grid; grid-template-columns: 1fr 16pt 40pt 42pt; padding: 3pt 0; font-size: 6.5pt; font-weight: 700; letter-spacing: 1pt; text-transform: uppercase; border-bottom: 0.75pt solid #000; }" +
-    ".col-head span:nth-child(2) { text-align: center; }" +
-    ".col-head span:nth-child(3), .col-head span:nth-child(4) { text-align: right; }" +
-    "table.items { width: 100%; border-collapse: collapse; }" +
-    "table.items td { padding: 3.5pt 0; vertical-align: top; }" +
-    "table.items td:last-child { text-align: right; }" +
-    ".td-name { font-size: 9pt; }" +
-    ".td-qty { text-align: center; font-size: 8.5pt; }" +
-    ".td-price { text-align: right; font-size: 8.5pt; }" +
-    ".td-total { text-align: right; font-size: 9pt; font-weight: 700; }" +
-    ".td-disc-label { font-size: 7.5pt; padding-left: 8pt; }" +
-    ".td-disc-amt { text-align: right; font-size: 7.5pt; }" +
-    ".items-rule { border-top: 0.75pt dashed #000; margin: 3pt 0 0; }" +
-    ".totals { padding: 5pt 0 4pt; }" +
-    ".tot-row { display: flex; justify-content: space-between; font-size: 9pt; padding: 1.5pt 0; }" +
-    ".tot-row.grand { border-top: 1.5pt solid #000; border-bottom: 1.5pt solid #000; margin-top: 5pt; padding: 5pt 0; font-size: 13.5pt; font-weight: 700; letter-spacing: 0.5pt; }" +
-    ".payment { padding: 5pt 0 6pt; border-top: 0.75pt dashed #000; }" +
-    ".pay-row { display: flex; justify-content: space-between; font-size: 9pt; padding: 1.5pt 0; text-transform: capitalize; }" +
-    ".pay-amt { font-weight: 700; }" +
-    ".barcode-wrap { padding: 7pt 0 4pt; text-align: left; border-top: 0.75pt dashed #000; }" +
-    ".barcode-bars { display: flex; align-items: flex-end; height: 28pt; margin-bottom: 4pt; }" +
-    ".barcode-num { font-size: 7pt; letter-spacing: 3pt; }" +
-    ".footer { text-align: center; padding: 7pt 0 6pt; border-top: 1pt solid #000; }" +
-    ".footer-thanks { font-size: 10.5pt; font-weight: 700; letter-spacing: 0.5pt; margin-bottom: 4pt; }" +
-    ".footer-sub { font-size: 7pt; line-height: 2; letter-spacing: 0.25pt; }" +
-    ".footer-rule { border: none; border-top: 0.75pt dashed #000; width: 50%; margin: 5pt auto; }" +
-    "</style>" +
-    "</head>" +
-    "<body>" +
-    "<div class='receipt'>" +
+  const metaLines: string[] = [
+    `Receipt : ${receiptNo}`,
+    `Date    : ${dateStr}`,
+    ...(odooOrderId ? [`Order   : #${odooOrderId}`] : []),
+    ...(customer    ? [`Customer: ${customer.name}`] : []),
+  ];
 
-      "<div class='header'>" +
-        "<img src='" + logoUrl + "' alt='" + shopName + "' class='logo' />" +
-        "<hr class='header-rule'/>" +
-        "<div class='header-line'>" + shopTagline + "</div>" +
-        "<div class='header-line'>" + shopAddress + "</div>" +
-        "<div class='header-line'>" + shopPhone + "</div>" +
-      "</div>" +
+  const subtotalLine = col("Subtotal", COLS - fmt(subtotal).length - 1) + `$${fmt(subtotal)}`;
+  const taxLine      = col("Tax (10%)", COLS - fmt(tax).length - 1)     + `$${fmt(tax)}`;
+  const totalLine    = col("TOTAL", COLS - fmt(total).length - 1)       + `$${fmt(total)}`;
 
-      "<div class='meta'>" +
-        "<div class='meta-row'><span class='meta-key'>Receipt</span><span class='meta-val-lg'>" + receiptNo + "</span></div>" +
-        "<div class='meta-row'><span class='meta-key'>Date</span><span class='meta-val'>" + dateStr + "</span></div>" +
-        orderIdRow +
-        customerRow +
-      "</div>" +
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>
+@page {
+  size: 80mm auto;
+  margin: 4mm 2mm;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+html, body {
+  width: 80mm;
+  background: #ffffff;
+  color: #000000;
+  /* Courier New is universally available and maps well to thermal printer fonts */
+  font-family: "Courier New", Courier, monospace;
+  font-size: 10pt;
+  line-height: 1.4;
+}
+.receipt {
+  width: 100%;
+  padding: 0;
+}
+.center {
+  text-align: center;
+}
+.bold {
+  font-weight: bold;
+}
+.large {
+  font-size: 13pt;
+  font-weight: bold;
+}
+.small {
+  font-size: 8pt;
+}
+.logo {
+  display: block;
+  max-width: 38mm;
+  height: auto;
+  margin: 0 auto 3pt auto;
+}
+.line {
+  display: block;
+  white-space: pre;
+  overflow: hidden;
+}
+.section {
+  margin: 4pt 0;
+}
+.divider-solid {
+  border: none;
+  border-top: 1pt solid #000000;
+  margin: 4pt 0;
+}
+.divider-dash {
+  border: none;
+  border-top: 1pt dashed #000000;
+  margin: 4pt 0;
+}
+.total-block {
+  border-top: 2pt solid #000000;
+  border-bottom: 2pt solid #000000;
+  padding: 4pt 0;
+  margin: 3pt 0;
+}
+.barcode-area {
+  margin: 6pt 0 3pt 0;
+  font-size: 7pt;
+  letter-spacing: 4pt;
+}
+</style>
+</head>
+<body>
+<div class="receipt">
 
-      "<div class='sec-head'>Items</div>" +
-      "<div class='col-head'>" +
-        "<span>Description</span>" +
-        "<span>Qty</span>" +
-        "<span>Price</span>" +
-        "<span>Total</span>" +
-      "</div>" +
-      "<table class='items'><tbody>" + lineItems + "</tbody></table>" +
-      "<div class='items-rule'></div>" +
+  <div class="section center">
+    <img src="${logoUrl}" alt="${shopName}" class="logo"/>
+    <hr class="divider-dash"/>
+    <div class="small">${shopTagline}</div>
+    <div class="small">${shopAddress}</div>
+    <div class="small">${shopPhone}</div>
+  </div>
 
-      "<div class='totals'>" +
-        "<div class='tot-row'><span>Subtotal</span><span>$" + fmt(subtotal) + "</span></div>" +
-        "<div class='tot-row'><span>Tax (10%)</span><span>$" + fmt(tax) + "</span></div>" +
-        "<div class='tot-row grand'><span>TOTAL</span><span>$" + fmt(total) + "</span></div>" +
-      "</div>" +
+  <hr class="divider-solid"/>
 
-      "<div class='payment'>" +
-        "<div class='sec-head' style='padding:0 0 5pt;border:none;'>Payment</div>" +
-        paymentRows +
-        changeRow +
-      "</div>" +
+  <div class="section">
+    ${lines(metaLines)}
+  </div>
 
-      "<div class='barcode-wrap'>" +
-        "<div class='barcode-bars'>" + barcodeStripes + "</div>" +
-        "<div class='barcode-num'>" + receiptNo + "</div>" +
-      "</div>" +
+  <hr class="divider-solid"/>
 
-      "<div class='footer'>" +
-        "<hr class='footer-rule'/>" +
-        "<div class='footer-thanks'>Thank you for your visit!</div>" +
-        "<div class='footer-sub'>Please keep this receipt for your records.</div>" +
-        "<div class='footer-sub'>" + shopPhone + " &middot; " + shopName + "</div>" +
-        "<hr class='footer-rule'/>" +
-      "</div>" +
+  <div class="section bold small">
+    <div class="line">${col("ITEM", COLS - 20)} $UNIT   TOTAL</div>
+  </div>
 
-    "</div>" +
-    "</body>" +
-    "</html>"
-  );
+  <hr class="divider-dash"/>
+
+  <div class="section">
+    ${lines(itemLines)}
+  </div>
+
+  <hr class="divider-dash"/>
+
+  <div class="section">
+    <div class="line">${subtotalLine}</div>
+    <div class="line">${taxLine}</div>
+  </div>
+
+  <div class="total-block">
+    <div class="line large">${totalLine}</div>
+  </div>
+
+  <hr class="divider-dash"/>
+
+  <div class="section bold small">
+    <div class="line">PAYMENT</div>
+  </div>
+
+  <div class="section">
+    ${lines(paymentLines_str)}
+  </div>
+
+  <hr class="divider-dash"/>
+
+  <div class="section barcode-area center">
+    <div>|||  ||| || ||| || |||  || ||| |  ||</div>
+    <div class="small" style="letter-spacing:2pt">${receiptNo}</div>
+  </div>
+
+  <hr class="divider-solid"/>
+
+  <div class="section center">
+    <div class="bold">Thank you for your visit!</div>
+    <div class="small">Please keep this receipt for your records.</div>
+    <div class="small">${shopPhone}</div>
+  </div>
+
+</div>
+</body>
+</html>`;
 }
 
-interface UsePrintReceiptOptions {
+export interface UsePrintReceiptOptions {
   cart:         CartItem[];
   customer:     Customer | null;
   paymentLines: PaymentLine[];
@@ -320,8 +305,8 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
 
     document.getElementById("__print_frame__")?.remove();
 
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
+    const blob  = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url   = URL.createObjectURL(blob);
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
