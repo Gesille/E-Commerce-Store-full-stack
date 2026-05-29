@@ -100,7 +100,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
     @page {
-      size: 80mm auto;
+      size: 76mm auto;
       margin: 0;
     }
 
@@ -113,7 +113,7 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 70mm;
+      width: 76mm;
       background: #ffffff;
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 9pt;
@@ -122,29 +122,30 @@ function buildReceiptHTML(
     }
 
     .receipt {
-      width: 70mm;
+      width: 76mm;
+      padding: 0 4mm;
       background: #ffffff;
+      box-sizing: border-box;
     }
 
-    /* ── HEADER ───────────────────────── */
     .header {
       text-align: center;
-      padding: 0 2pt 10pt;
+      padding: 6pt 0 10pt;
       border-bottom: 1.5pt solid #000;
     }
 
     .logo {
       display: block;
-      max-width: 54mm;
+      max-width: 44mm;
       height: auto;
-     
+      margin: 0 auto 4pt;
     }
 
     .header-rule {
       border: none;
       border-top: 0.75pt dashed #000;
       width: 70%;
-      
+      margin: 5pt auto 6pt;
     }
 
     .header-line {
@@ -155,7 +156,7 @@ function buildReceiptHTML(
       color: #000;
     }
 
-    /* ── META ─────────────────────────── */
+  
     .meta {
       padding: 6pt 4pt;
       border-bottom: 1pt solid #000;
@@ -187,7 +188,7 @@ function buildReceiptHTML(
       letter-spacing: 0.5pt;
     }
 
-    /* ── SECTION HEADING ──────────────── */
+  
     .sec-head {
       font-size: 6pt;
       font-weight: 700;
@@ -197,7 +198,7 @@ function buildReceiptHTML(
       border-bottom: 0.75pt solid #000;
     }
 
-    /* ── ITEMS TABLE ──────────────────── */
+   
     .col-head {
       display: grid;
       grid-template-columns: 1fr 16pt 40pt 42pt;
@@ -249,7 +250,6 @@ function buildReceiptHTML(
       margin: 3pt 4pt 0;
     }
 
-    /* ── TOTALS ───────────────────────── */
     .totals {
       padding: 5pt 4pt 4pt;
     }
@@ -271,7 +271,7 @@ function buildReceiptHTML(
       letter-spacing: 0.5pt;
     }
 
-    /* ── PAYMENT ──────────────────────── */
+ 
     .payment {
       padding: 5pt 4pt 6pt;
       border-top: 0.75pt dashed #000;
@@ -287,7 +287,7 @@ function buildReceiptHTML(
 
     .pay-amt { font-weight: 700; }
 
-    /* ── BARCODE ──────────────────────── */
+  
     .barcode-wrap {
       padding: 7pt 4pt 4pt;
       text-align: center;
@@ -307,7 +307,7 @@ function buildReceiptHTML(
       letter-spacing: 3pt;
     }
 
-    /* ── FOOTER ───────────────────────── */
+
     .footer {
       text-align: center;
       padding: 7pt 4pt 6pt;
@@ -338,7 +338,7 @@ function buildReceiptHTML(
 <body>
 <div class="receipt">
 
-  <!-- HEADER -->
+
   <div class="header">
     <img src="/chefworldlogo1.png" alt="${shopName}" class="logo" />
     <hr class="header-rule"/>
@@ -347,7 +347,7 @@ function buildReceiptHTML(
     <div class="header-line">${shopPhone}</div>
   </div>
 
-  <!-- META -->
+
   <div class="meta">
     <div class="meta-row">
       <span class="meta-key">Receipt</span>
@@ -369,7 +369,7 @@ function buildReceiptHTML(
     </div>` : ""}
   </div>
 
-  <!-- ITEMS -->
+
   <div class="sec-head">Items</div>
   <div class="col-head">
     <span>Description</span>
@@ -382,7 +382,6 @@ function buildReceiptHTML(
   </table>
   <div class="items-rule"></div>
 
-  <!-- TOTALS -->
   <div class="totals">
     <div class="tot-row">
       <span>Subtotal</span>
@@ -398,20 +397,20 @@ function buildReceiptHTML(
     </div>
   </div>
 
-  <!-- PAYMENT -->
+
   <div class="payment">
     <div class="sec-head" style="padding:0 0 5pt;border:none;">Payment</div>
     ${paymentRows}
     ${changeRow}
   </div>
 
-  <!-- BARCODE -->
+  
   <div class="barcode-wrap">
     <div class="barcode-bars">${barcodeStripes}</div>
     <div class="barcode-num">${receiptNo}</div>
   </div>
 
-  <!-- FOOTER -->
+
   <div class="footer">
     <hr class="footer-rule"/>
     <div class="footer-thanks">Thank you for your visit!</div>
