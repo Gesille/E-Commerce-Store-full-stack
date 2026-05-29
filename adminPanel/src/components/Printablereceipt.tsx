@@ -40,7 +40,7 @@ function buildReceiptHTML(
   const { subtotal, tax, total } = calcOrderTotals(cart);
   const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
-
+ 
   const logoUrl = window.location.origin + "/chefworldlogo1.png";
 
   const dateStr = new Date().toLocaleString("en-US", {
@@ -57,20 +57,117 @@ function buildReceiptHTML(
     const hasDiscount = (item.discount ?? 0) > 0;
     const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
-    return (
-      "<tr>" +
-        "<td class='td-name'>" + item.name + "</td>" +
-        "<td class='td-qty'>" + item.qty + "</td>" +
-        "<td class='td-price'>$" + fmt(item.price) + "</td>" +
-        "<td class='td-total'>$" + fmt(lineTotal) + "</td>" +
-      "</tr>" +
-      (hasDiscount
-        ? "<tr>" +
-            "<td colspan='3' class='td-disc-label'>Discount " + item.discount + "%</td>" +
-            "<td class='td-disc-amt'>-$" + fmt(discountAmt) + "</td>" +
-          "</tr>"
-        : "")
-    );
+
+  const lines: string[] = [];
+  const p = (s: string) => lines.push(s);
+
+  p('<!DOCTYPE html>');
+  p('<html lang="en"><head><meta charset="utf-8">');
+  p('<style>');
+  p('@page{size:76mm auto;margin:0}');
+  p('*{box-sizing:border-box;margin:0;padding:0}');
+  p('html,body{width:76mm;font-family:monospace;font-size:9pt;color:#000;background:#fff}');
+  p('.w{width:76mm;padding:0 4mm}');
+  p('.center{text-align:center}');
+  p('.hdr{padding:6pt 0 10pt;border-bottom:1.5pt solid #000;text-align:center}');
+  p('.logo{display:block;max-width:40mm;height:auto;margin:0 auto 4pt}');
+  p('.hline{font-size:7pt;letter-spacing:1pt;text-transform:uppercase;line-height:1.9}');
+  p('.meta{padding:6pt 0;border-bottom:1pt solid #000}');
+  p('.mrow{display:flex;justify-content:space-between;padding:1pt 0}');
+  p('.mk{font-size:6.5pt;letter-spacing:1.5pt;text-transform:uppercase;font-weight:600}');
+  p('.mv{font-size:8pt;font-weight:700}');
+  p('.mvl{font-size:9.5pt;font-weight:700}');
+  p('.sh{font-size:6pt;font-weight:700;letter-spacing:3pt;text-transform:uppercase;padding:5pt 0 4pt;border-bottom:.75pt solid #000}');
+  p('.ch{display:grid;grid-template-columns:1fr 16pt 40pt 42pt;padding:3pt 0;font-size:6.5pt;font-weight:700;text-transform:uppercase;border-bottom:.75pt solid #000}');
+  p('.ch span:nth-child(2){text-align:center}');
+  p('.ch span:nth-child(3),.ch span:nth-child(4){text-align:right}');
+  p('table{width:100%;border-collapse:collapse}');
+  p('td{padding:3.5pt 0;vertical-align:top}');
+  p('.tn{font-size:9pt}');
+  p('.tq{text-align:center;font-size:8.5pt}');
+  p('.tp{text-align:right;font-size:8.5pt}');
+  p('.tt{text-align:right;font-size:9pt;font-weight:700}');
+  p('.dl{font-size:7.5pt;padding-left:8pt}');
+  p('.da{text-align:right;font-size:7.5pt}');
+  p('.rule{border-top:.75pt dashed #000;margin:3pt 0 0}');
+  p('.tots{padding:5pt 0 4pt}');
+  p('.tr{display:flex;justify-content:space-between;font-size:9pt;padding:1.5pt 0}');
+  p('.grand{border-top:1.5pt solid #000;border-bottom:1.5pt solid #000;margin-top:5pt;padding:5pt 0;font-size:13.5pt;font-weight:700}');
+  p('.pay{padding:5pt 0 6pt;border-top:.75pt dashed #000}');
+  p('.pr{display:flex;justify-content:space-between;font-size:9pt;padding:1.5pt 0;text-transform:capitalize}');
+  p('.pa{font-weight:700}');
+  p('.bc{padding:7pt 0 4pt;border-top:.75pt dashed #000}');
+  p('.bb{display:flex;align-items:flex-end;height:28pt;margin-bottom:4pt}');
+  p('.bn{font-size:7pt;letter-spacing:3pt}');
+  p('.ftr{text-align:center;padding:7pt 0 6pt;border-top:1pt solid #000}');
+  p('.ft{font-size:10.5pt;font-weight:700;margin-bottom:4pt}');
+  p('.fs{font-size:7pt;line-height:2}');
+  p('.fr{border:none;border-top:.75pt dashed #000;width:50%;margin:5pt auto}');
+  p('</style></head><body>');
+  p('<div class="w">');
+
+  const logoUrl = window.location.origin + '/chefworldlogo1.png';
+  p('<div class="hdr">');
+  p('<img src="' + logoUrl + '" class="logo" alt="logo">');
+  p('<hr class="fr">');
+  p('<div class="hline">' + shopTagline + '</div>');
+  p('<div class="hline">' + shopAddress + '</div>');
+  p('<div class="hline">' + shopPhone + '</div>');
+  p('</div>');
+
+  p('<div class="meta">');
+  p('<div class="mrow"><span class="mk">Receipt</span><span class="mvl">' + receiptNo + '</span></div>');
+  p('<div class="mrow"><span class="mk">Date</span><span class="mv">' + dateStr + '</span></div>');
+  if (odooOrderId) p('<div class="mrow"><span class="mk">Order ID</span><span class="mv">#' + odooOrderId + '</span></div>');
+  if (customer)    p('<div class="mrow"><span class="mk">Customer</span><span class="mv">' + customer.name + '</span></div>');
+  p('</div>');
+
+  p('<div class="sh">Items</div>');
+  p('<div class="ch"><span>Description</span><span>Qty</span><span>Price</span><span>Total</span></div>');
+  p('<table><tbody>');
+  cart.forEach((item) => {
+    const lt  = calcLineTotal(item);
+    const dis = (item.discount ?? 0) > 0;
+    const da  = item.price * item.qty * ((item.discount ?? 0) / 100);
+    p('<tr><td class="tn">' + item.name + '</td><td class="tq">' + item.qty + '</td><td class="tp">$' + fmt(item.price) + '</td><td class="tt">$' + fmt(lt) + '</td></tr>');
+    if (dis) p('<tr><td colspan="3" class="dl">Discount ' + item.discount + '%</td><td class="da">-$' + fmt(da) + '</td></tr>');
+  });
+  p('</tbody></table>');
+  p('<div class="rule"></div>');
+
+  p('<div class="tots">');
+  p('<div class="tr"><span>Subtotal</span><span>$' + fmt(subtotal) + '</span></div>');
+  p('<div class="tr"><span>Tax (10%)</span><span>$' + fmt(tax) + '</span></div>');
+  p('<div class="tr grand"><span>TOTAL</span><span>$' + fmt(total) + '</span></div>');
+  p('</div>');
+
+  p('<div class="pay">');
+  p('<div class="sh" style="padding:0 0 5pt;border:none">Payment</div>');
+  paymentLines.forEach((l) => {
+    p('<div class="pr"><span>' + l.method + '</span><span class="pa">$' + fmt(l.amount) + '</span></div>');
+  });
+  if (change > 0.005) p('<div class="pr"><span>Change</span><span class="pa">$' + fmt(change) + '</span></div>');
+  p('</div>');
+
+  const bars = Array.from({ length: 30 }, (_, i) => {
+    const w = [2,1,3,1,2,1,1,3,2,1][i % 10];
+    const mr = i % 3 === 0 ? 2 : 1;
+    return '<div style="width:' + w + 'px;background:#000;height:100%;display:inline-block;margin-right:' + mr + 'px"></div>';
+  }).join('');
+  p('<div class="bc"><div class="bb">' + bars + '</div><div class="bn">' + receiptNo + '</div></div>');
+
+  p('<div class="ftr">');
+  p('<hr class="fr">');
+  p('<div class="ft">Thank you for your visit!</div>');
+  p('<div class="fs">Please keep this receipt for your records.</div>');
+  p('<div class="fs">' + shopPhone + ' &middot; ' + shopName + '</div>');
+  p('<hr class="fr">');
+  p('</div>');
+
+  p('</div></body></html>');
+
+  return lines.join('\n');
+
   }).join("");
 
   const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
