@@ -138,14 +138,14 @@ function buildReceiptHTML(
       display: block;
       max-width: 44mm;
       height: auto;
-      margin: 0 auto 4pt;
+     
     }
 
     .header-rule {
       border: none;
       border-top: 0.75pt dashed #000;
       width: 70%;
-      margin: 5pt auto 6pt;
+      
     }
 
     .header-line {
