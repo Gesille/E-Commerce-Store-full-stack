@@ -101,7 +101,7 @@ function buildReceiptHTML(
 
     @page {
       size: 80mm auto;
-      margin: 5mm 5mm 0 0;
+      margin: 3mm 5mm 0 0;
     }
 
     *, *::before, *::after {
