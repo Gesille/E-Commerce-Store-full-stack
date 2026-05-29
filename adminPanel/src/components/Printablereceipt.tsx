@@ -101,7 +101,7 @@ function buildReceiptHTML(
 
     @page {
       size: 80mm auto;
-      margin: 3mm 5mm 0 0;
+      margin: 2mm 5mm 0 0;
     }
 
     *, *::before, *::after {
@@ -155,7 +155,7 @@ function buildReceiptHTML(
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
-      margin-right: -2mm;
+      
     }
 
   
