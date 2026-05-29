@@ -33,6 +33,16 @@ export function PrintableReceipt(_props: PrintableReceiptProps) {
 }
 
 // ─── HTML Builder ──────────────────────────────────────────────────────────
+// OPTIMISED FOR EPSON TM-U220II DOT MATRIX IMPACT PRINTER
+// Key constraints:
+//   - ~160 DPI, 76mm paper width, ~42 chars per line at 10pt
+//   - No images (too blurry at low DPI) — use ASCII art header instead
+//   - No thin lines (<2pt) — they vanish or blur
+//   - No letter-spacing > 1pt — dot matrix spacing is uneven
+//   - Minimum font size 11pt — anything smaller is unreadable
+//   - Use bold heavily — normal weight is very faint on impact printers
+//   - Avoid dashed borders — use solid or ASCII chars instead
+//   - Stick to Courier New — it's the native dot-matrix font
 function buildReceiptHTML(
   cart: CartItem[],
   customer: Customer | null,
@@ -53,56 +63,76 @@ function buildReceiptHTML(
     minute:  "2-digit",
   });
 
-  // ── Line items ──────────────────────────────────────────────────────────
+  // ── Line items ─────────────────────────────────────────────────────────
+  // Dot matrix: use a simple 2-line layout per item for readability
+  // Line 1: item name (full width, bold)
+  // Line 2: qty x price = total (right-aligned)
   const lineItems = cart.map((item) => {
     const lineTotal   = calcLineTotal(item);
     const hasDiscount = (item.discount ?? 0) > 0;
     const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
     return `
-      <tr class="item-row">
-        <td class="td-name">${item.name}</td>
-        <td class="td-qty">${item.qty}</td>
-        <td class="td-price">$${fmt(item.price)}</td>
+      <tr>
+        <td colspan="4" class="item-name">${item.name}</td>
+      </tr>
+      <tr class="item-detail">
+        <td class="td-qty-detail">${item.qty} x $${fmt(item.price)}</td>
+        <td colspan="2"></td>
         <td class="td-total">$${fmt(lineTotal)}</td>
       </tr>
       ${hasDiscount ? `
       <tr class="disc-row">
-        <td colspan="3" class="td-disc-label">Discount ${item.discount}%</td>
+        <td colspan="3" class="td-disc-label">  Discount (${item.discount}%)</td>
         <td class="td-disc-amt">-$${fmt(discountAmt)}</td>
-      </tr>` : ""}`;
+      </tr>` : ""}
+      <tr><td colspan="4" class="item-gap"></td></tr>`;
   }).join("");
 
-  // ── Barcode — vertical bars (correct orientation) ───────────────────────
-  // Pattern based on receipt number characters for visual variety
-  const pattern = [3,1,2,1,1,3,2,1,3,1,2,2,1,3,1,2,1,1,3,2,1,3,1,2,2,1,3,1,2,1];
-  const barcodeStripes = pattern.map((w, i) => {
-    const isBlack = i % 2 === 0;
-    return `<div style="width:${w * 1.5}px;background:${isBlack ? '#000' : '#fff'};height:40px;flex-shrink:0;"></div>`;
-  }).join("");
+  // ── ASCII barcode (dot matrix can't render graphic barcodes well) ───────
+  // Use a text-based barcode representation with the receipt number
+  const barcodeAscii = `
+    <div class="barcode-ascii">
+      ||||| |||| ||||| ||| ||||| |||| |||||
+    </div>
+    <div class="barcode-num">${receiptNo}</div>`;
 
   // ── Payment rows ────────────────────────────────────────────────────────
   const paymentRows = paymentLines.map((l) => `
     <div class="pay-row">
-      <span class="pay-method">${l.method}</span>
+      <span class="pay-method">${l.method.toUpperCase()}</span>
       <span class="pay-amt">$${fmt(l.amount)}</span>
     </div>`).join("");
 
   const changeRow = change > 0.005 ? `
     <div class="pay-row">
-      <span class="pay-method">Change Due</span>
+      <span class="pay-method">CHANGE DUE</span>
       <span class="pay-amt">$${fmt(change)}</span>
     </div>` : "";
+
+  // ── 42-char wide separator lines (fits 76mm at 10cpi dot matrix) ────────
+  const SEP_SOLID = "==========================================";
+  const SEP_DASH  = "------------------------------------------";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <style>
-    /* ── Thermal-print optimised: no gradients, no shadows, pure B&W ── */
+    /*
+     * EPSON TM-U220II DOT MATRIX RECEIPT
+     * Rules:
+     *   - Courier New ONLY (native dot-matrix font)
+     *   - Minimum 11pt (12pt preferred)
+     *   - Bold everything important
+     *   - No images, no thin lines, no letter-spacing
+     *   - Solid borders only, minimum 2pt
+     *   - Page width 76mm
+     */
+
     @page {
-      size: 80mm auto;
-      margin: 0;
+      size: 76mm auto;
+      margin: 2mm 0 0 0;
     }
 
     *, *::before, *::after {
@@ -113,276 +143,262 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 80mm;
+      width: 76mm;
       background: #fff;
-      /* Courier Prime is cleaner on thermal than IBM Plex Mono */
-      font-family: 'Courier Prime', 'Courier New', Courier, monospace;
-      font-size: 10pt;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12pt;
       color: #000;
-      line-height: 1.45;
+      line-height: 1.5;
     }
 
     .receipt {
-      width: 80mm;
-      padding: 0 3mm 4mm;
+      width: 76mm;
+      padding: 0 2mm 4mm;
     }
 
-    /* ───── HEADER ───── */
+    /* ── HEADER: text only, NO image ── */
     .header {
       text-align: center;
-      padding: 8pt 0 8pt;
-    }
-
-    .logo {
-      display: block;
-      width: 40mm;
-      height: auto;
-      margin: 0 auto 5pt;
-      /* Force B&W on thermal — prevents color ghosting */
-      filter: grayscale(100%) contrast(150%);
+      padding: 6pt 0 4pt;
     }
 
     .shop-name {
-      font-size: 14pt;
-      font-weight: 700;
-      letter-spacing: 2pt;
-      text-transform: uppercase;
+      font-size: 18pt;
+      font-weight: 900;
       line-height: 1.2;
-      margin-bottom: 3pt;
+      /* Double-strike effect using text-shadow for impact printers */
+      text-shadow: 0.5px 0 0 #000;
     }
 
     .shop-tagline {
-      font-size: 7.5pt;
-      letter-spacing: 0.5pt;
-      margin-bottom: 1.5pt;
+      font-size: 10pt;
+      font-weight: 700;
+      margin: 3pt 0 2pt;
     }
 
-    .shop-address,
-    .shop-phone {
-      font-size: 7.5pt;
-      letter-spacing: 0.25pt;
+    .shop-info {
+      font-size: 10pt;
+      font-weight: 600;
+      line-height: 1.6;
     }
 
-    /* ───── DIVIDERS ───── */
-    .div-solid {
-      border: none;
-      border-top: 1.5pt solid #000;
-      margin: 6pt 0;
+    /* ── SEPARATORS ── */
+    .sep {
+      font-size: 11pt;
+      font-weight: 700;
+      white-space: pre;
+      display: block;
+      overflow: hidden;
+      text-align: center;
+      margin: 4pt 0;
     }
 
-    .div-dash {
-      border: none;
-      border-top: 1pt dashed #000;
-      margin: 5pt 0;
-    }
-
-    /* ───── META ───── */
-    .meta { padding: 2pt 0 4pt; }
+    /* ── META ── */
+    .meta { padding: 3pt 0; }
 
     .meta-row {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
       padding: 2pt 0;
     }
 
     .meta-key {
-      font-size: 7.5pt;
+      font-size: 11pt;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 1.5pt;
     }
 
     .meta-val {
-      font-size: 9pt;
-      font-weight: 700;
-    }
-
-    .meta-val-xl {
       font-size: 11pt;
       font-weight: 700;
-      letter-spacing: 1pt;
     }
 
-    /* ───── SECTION HEADING ───── */
-    .sec-head {
-      font-size: 7pt;
-      font-weight: 700;
-      letter-spacing: 3pt;
+    .meta-val-lg {
+      font-size: 13pt;
+      font-weight: 900;
+      text-shadow: 0.4px 0 0 #000;
+    }
+
+    /* ── SECTION LABEL ── */
+    .sec-label {
+      font-size: 12pt;
+      font-weight: 900;
       text-transform: uppercase;
       text-align: center;
       padding: 3pt 0;
+      text-shadow: 0.4px 0 0 #000;
     }
 
-    /* ───── COLUMN HEADERS ───── */
+    /* ── COLUMN HEADERS ── */
     .col-head {
-      display: grid;
-      grid-template-columns: 1fr 18pt 46pt 46pt;
-      font-size: 7pt;
-      font-weight: 700;
-      letter-spacing: 1.5pt;
+      display: flex;
+      font-size: 10pt;
+      font-weight: 900;
       text-transform: uppercase;
-      padding: 3pt 0 3pt;
+      padding: 2pt 0;
     }
-    .col-head span:nth-child(2) { text-align: center; }
-    .col-head span:nth-child(3),
-    .col-head span:nth-child(4) { text-align: right; }
+    .col-item  { flex: 1; }
+    .col-total { width: 52pt; text-align: right; }
 
-    /* ───── ITEMS TABLE ───── */
+    /* ── ITEMS TABLE ── */
     table.items {
       width: 100%;
       border-collapse: collapse;
     }
 
-    .item-row td {
-      padding: 4pt 0 2pt;
-      vertical-align: top;
-      font-size: 9.5pt;
+    .item-name {
+      font-size: 12pt;
+      font-weight: 900;
+      padding: 3pt 0 0;
+      text-shadow: 0.4px 0 0 #000;
     }
 
-    .td-name  { font-weight: 600; line-height: 1.3; }
-    .td-qty   { text-align: center; font-size: 9pt; }
-    .td-price { text-align: right;  font-size: 9pt; }
-    .td-total { text-align: right;  font-size: 9.5pt; font-weight: 700; }
+    .item-detail td {
+      font-size: 11pt;
+      font-weight: 600;
+      padding: 0 0 2pt;
+    }
+
+    .td-qty-detail { }
+
+    .td-total {
+      text-align: right;
+      font-size: 12pt;
+      font-weight: 900;
+    }
 
     .disc-row td {
-      font-size: 8pt;
-      padding: 0 0 3pt;
+      font-size: 10pt;
+      font-weight: 700;
+      padding: 0 0 2pt;
     }
-    .td-disc-label { padding-left: 8pt !important; }
-    .td-disc-amt   { text-align: right; font-weight: 600; }
+    .td-disc-amt {
+      text-align: right;
+    }
 
-    /* ───── TOTALS ───── */
-    .totals { padding: 2pt 0 2pt; }
+    .item-gap { height: 2pt; }
+
+    /* ── TOTALS ── */
+    .totals { padding: 2pt 0; }
 
     .tot-row {
       display: flex;
       justify-content: space-between;
-      font-size: 9.5pt;
+      font-size: 12pt;
+      font-weight: 700;
       padding: 2pt 0;
     }
 
     .tot-row.grand {
-      border-top: 2pt solid #000;
-      border-bottom: 2pt solid #000;
-      margin: 5pt 0 3pt;
+      font-size: 16pt;
+      font-weight: 900;
       padding: 5pt 0;
-      font-size: 14pt;
-      font-weight: 700;
-      letter-spacing: 1pt;
+      text-shadow: 0.6px 0 0 #000;
     }
 
-    /* ───── PAYMENT ───── */
-    .payment { padding: 2pt 0 3pt; }
+    /* ── PAYMENT ── */
+    .payment { padding: 3pt 0; }
 
     .pay-row {
       display: flex;
       justify-content: space-between;
-      font-size: 9.5pt;
+      font-size: 12pt;
+      font-weight: 700;
       padding: 2pt 0;
     }
 
-    .pay-method {
-      text-transform: capitalize;
+    .pay-amt {
+      font-weight: 900;
+      text-shadow: 0.4px 0 0 #000;
     }
 
-    .pay-amt { font-weight: 700; }
-
-    /* ───── BARCODE ───── */
-    .barcode-wrap {
+    /* ── BARCODE ── */
+    .barcode-ascii {
+      font-size: 10pt;
+      font-weight: 900;
       text-align: center;
-      padding: 6pt 0 3pt;
-    }
-
-    .barcode-bars {
-      display: flex;
-      justify-content: center;
-      align-items: stretch;
-      height: 40px;
-      margin-bottom: 4pt;
-      /* Ensure bars print horizontally as intended */
-      flex-direction: row;
+      letter-spacing: 1pt;
+      margin: 4pt 0 2pt;
+      text-shadow: 0.4px 0 0 #000;
     }
 
     .barcode-num {
-      font-size: 7.5pt;
+      font-size: 11pt;
       font-weight: 700;
-      letter-spacing: 4pt;
       text-align: center;
+      letter-spacing: 2pt;
     }
 
-    /* ───── FOOTER ───── */
+    /* ── FOOTER ── */
     .footer {
       text-align: center;
-      padding: 5pt 0 4pt;
+      padding: 5pt 0 3pt;
     }
 
     .footer-thanks {
-      font-size: 11pt;
-      font-weight: 700;
-      letter-spacing: 0.75pt;
+      font-size: 14pt;
+      font-weight: 900;
+      text-shadow: 0.5px 0 0 #000;
       margin-bottom: 4pt;
     }
 
     .footer-sub {
-      font-size: 7.5pt;
+      font-size: 10pt;
+      font-weight: 700;
       line-height: 1.8;
-      letter-spacing: 0.25pt;
     }
   </style>
 </head>
 <body>
 <div class="receipt">
 
-  <!-- HEADER -->
+  <!-- HEADER — text only, no image (images are blurry on TM-U220II) -->
   <div class="header">
-    <img src="/chefworldlogo1.png" alt="${shopName}" class="logo" onerror="this.style.display='none'"/>
-    <div class="shop-name">${shopName}</div>
+    <div class="shop-name">CHEF'S WORLD</div>
     <div class="shop-tagline">${shopTagline}</div>
-    <div class="shop-address">${shopAddress}</div>
-    <div class="shop-phone">${shopPhone}</div>
+    <div class="shop-info">${shopAddress}</div>
+    <div class="shop-info">${shopPhone}</div>
   </div>
 
-  <hr class="div-solid"/>
+  <span class="sep">${SEP_SOLID}</span>
 
   <!-- META -->
   <div class="meta">
     <div class="meta-row">
-      <span class="meta-key">Receipt #</span>
-      <span class="meta-val-xl">${receiptNo}</span>
+      <span class="meta-key">RECEIPT</span>
+      <span class="meta-val-lg">${receiptNo}</span>
     </div>
     <div class="meta-row">
-      <span class="meta-key">Date</span>
+      <span class="meta-key">DATE</span>
       <span class="meta-val">${dateStr}</span>
     </div>
     ${odooOrderId ? `
     <div class="meta-row">
-      <span class="meta-key">Order ID</span>
+      <span class="meta-key">ORDER ID</span>
       <span class="meta-val">#${odooOrderId}</span>
     </div>` : ""}
     ${customer ? `
     <div class="meta-row">
-      <span class="meta-key">Customer</span>
+      <span class="meta-key">CUSTOMER</span>
       <span class="meta-val">${customer.name}</span>
     </div>` : ""}
   </div>
 
-  <hr class="div-solid"/>
+  <span class="sep">${SEP_SOLID}</span>
 
   <!-- ITEMS -->
-  <div class="sec-head">— Order Items —</div>
-  <hr class="div-dash"/>
+  <div class="sec-label">ORDER ITEMS</div>
+  <span class="sep">${SEP_DASH}</span>
   <div class="col-head">
-    <span>Item</span>
-    <span>Qty</span>
-    <span>Price</span>
-    <span>Total</span>
+    <span class="col-item">ITEM</span>
+    <span class="col-total">TOTAL</span>
   </div>
-  <hr class="div-dash"/>
+  <span class="sep">${SEP_DASH}</span>
   <table class="items">
     <tbody>${lineItems}</tbody>
   </table>
-  <hr class="div-dash"/>
+
+  <span class="sep">${SEP_SOLID}</span>
 
   <!-- TOTALS -->
   <div class="totals">
@@ -394,34 +410,40 @@ function buildReceiptHTML(
       <span>Tax (10%)</span>
       <span>$${fmt(tax)}</span>
     </div>
+  </div>
+
+  <span class="sep">${SEP_SOLID}</span>
+
+  <div class="totals">
     <div class="tot-row grand">
       <span>TOTAL</span>
       <span>$${fmt(total)}</span>
     </div>
   </div>
 
+  <span class="sep">${SEP_SOLID}</span>
+
   <!-- PAYMENT -->
-  <div class="sec-head">— Payment —</div>
+  <div class="sec-label">PAYMENT</div>
   <div class="payment">
     ${paymentRows}
     ${changeRow}
   </div>
 
-  <hr class="div-dash"/>
+  <span class="sep">${SEP_DASH}</span>
 
-  <!-- BARCODE -->
-  <div class="barcode-wrap">
-    <div class="barcode-bars">${barcodeStripes}</div>
-    <div class="barcode-num">${receiptNo}</div>
-  </div>
+  <!-- BARCODE (ASCII representation) -->
+  ${barcodeAscii}
 
-  <hr class="div-solid"/>
+  <span class="sep">${SEP_SOLID}</span>
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="footer-thanks">Thank You For Your Visit!</div>
-    <div class="footer-sub">Please keep this receipt for your records.</div>
-    <div class="footer-sub">${shopPhone} &bull; ${shopName}</div>
+    <div class="footer-thanks">THANK YOU!</div>
+    <div class="footer-sub">Please keep this receipt</div>
+    <div class="footer-sub">for your records.</div>
+    <div class="footer-sub">${shopPhone}</div>
+    <div class="footer-sub">${shopName}</div>
   </div>
 
 </div>
@@ -458,12 +480,13 @@ export function usePrintReceipt(options: UsePrintReceiptOptions) {
     doc.write(html);
     doc.close();
 
+    // TM-U220II needs a longer delay to spool the job correctly
     iframe.onload = () => {
       setTimeout(() => {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
-        setTimeout(() => iframe.remove(), 3000);
-      }, 400);
+        setTimeout(() => iframe.remove(), 5000);
+      }, 800);
     };
   };
 
