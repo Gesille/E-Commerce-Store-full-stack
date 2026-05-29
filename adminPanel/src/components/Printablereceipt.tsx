@@ -138,7 +138,8 @@ function buildReceiptHTML(
       display: block;
       max-width: 44mm;
       height: auto;
-     
+     align-self: center;
+    
     }
 
     .header-rule {
@@ -154,6 +155,7 @@ function buildReceiptHTML(
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
+      margin-right: -2mm;
     }
 
   
