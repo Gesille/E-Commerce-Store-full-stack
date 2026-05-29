@@ -2,7 +2,7 @@ import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
 // ─── Shop Config ───────────────────────────────────────────────────────────
 const shopName    = "Chef's World";
-const shopTagline = "Restaurant & Kitchen Supplies";
+const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
 
@@ -46,63 +46,62 @@ function buildReceiptHTML(
 
   const dateStr = new Date().toLocaleString("en-US", {
     weekday: "short",
-    day:     "2-digit",
     month:   "short",
+    day:     "2-digit",
     year:    "numeric",
-  });
-  const timeStr = new Date().toLocaleString("en-US", {
-    hour:   "2-digit",
-    minute: "2-digit",
+    hour:    "2-digit",
+    minute:  "2-digit",
   });
 
-  // ── Barcode stripes ──────────────────────────────────────────────────────
-  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
-    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
-    const h = [100, 75, 100, 85, 65, 100, 80, 100, 70, 90][i % 10];
-    return `<div style="width:${w}px;background:#0a0a0a;height:${h}%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;vertical-align:bottom;"></div>`;
-  }).join("");
-
-  // ── Line items ───────────────────────────────────────────────────────────
+  // ── Line items ──────────────────────────────────────────────────────────
   const lineItems = cart.map((item) => {
     const lineTotal   = calcLineTotal(item);
     const hasDiscount = (item.discount ?? 0) > 0;
     const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
     return `
-      <div class="item-row">
-        <div class="item-grid">
-          <span class="item-name">${item.name}</span>
-          <span class="item-qty">${item.qty}</span>
-          <span class="item-each">$${fmt(item.price)}</span>
-          <span class="item-total">$${fmt(lineTotal)}</span>
-        </div>
-        ${hasDiscount ? `
-        <div class="item-disc">
-          <span>&#8627; ${item.discount}% discount applied</span>
-          <span>&minus;$${fmt(discountAmt)}</span>
-        </div>` : ""}
-      </div>`;
+      <tr>
+        <td class="td-name">${item.name}</td>
+        <td class="td-qty">${item.qty}</td>
+        <td class="td-price">$${fmt(item.price)}</td>
+        <td class="td-total">$${fmt(lineTotal)}</td>
+      </tr>
+      ${hasDiscount ? `
+      <tr>
+        <td colspan="3" class="td-disc-label">  Discount ${item.discount}%</td>
+        <td class="td-disc-amt">-$${fmt(discountAmt)}</td>
+      </tr>` : ""}`;
   }).join("");
 
-  // ── Payment rows ─────────────────────────────────────────────────────────
-  const paymentMethods = paymentLines.map((l) => `
-    <div class="pay-method">${l.method}</div>
-    <div class="pay-amount">$${fmt(l.amount)} tendered</div>`).join("");
+  // ── Barcode stripes ─────────────────────────────────────────────────────
+  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
+    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
+    return `<div style="width:${w}px;background:#000;height:100%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;"></div>`;
+  }).join("");
 
-  const changeHtml = change > 0.005
-    ? `<div class="pay-change">$${fmt(change)} change</div>`
-    : "";
+  // ── Payment rows ────────────────────────────────────────────────────────
+  const paymentRows = paymentLines.map((l) => `
+    <div class="pay-row">
+      <span>${l.method}</span>
+      <span class="pay-amt">$${fmt(l.amount)}</span>
+    </div>`).join("");
+
+  const changeRow = change > 0.005 ? `
+    <div class="pay-row">
+      <span>Change</span>
+      <span class="pay-amt">$${fmt(change)}</span>
+    </div>` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
     @page {
       size: 80mm auto;
-      margin: 6mm 5mm;
+      margin: 0;
     }
 
     *, *::before, *::after {
@@ -118,272 +117,221 @@ function buildReceiptHTML(
       background: #ffffff;
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 9pt;
-      color: #0a0a0a;
-      line-height: 1.4;
+      color: #000000;
+      line-height: 1.5;
     }
 
-    .receipt { width: 70mm; background: #ffffff; }
+    .receipt {
+      width: 70mm;
+      background: #ffffff;
+    }
 
-    /* ── HEADER ───────────────────────────── */
+    /* ── HEADER ───────────────────────── */
     .header {
-      padding: 14pt 8pt 12pt;
       text-align: center;
-      border-bottom: 2pt solid #0a0a0a;
+      padding: 0 4pt 10pt;
+      border-bottom: 1.5pt solid #000;
     }
 
     .logo {
       display: block;
-      max-width: 52mm;
+      max-width: 54mm;
       height: auto;
-      margin: 0 auto 10pt;
+      margin: 0 auto 6pt;
     }
 
-    .ornament-row {
-      display: flex;
-      align-items: center;
-      gap: 5pt;
-      margin-bottom: 8pt;
-    }
-
-    .ornament-line {
-      flex: 1;
+    .header-rule {
       border: none;
-      border-top: 0.75pt dashed #0a0a0a;
+      border-top: 0.75pt dashed #000;
+      width: 70%;
+      margin: 5pt auto 6pt;
     }
 
-    .ornament-star {
-      font-size: 10pt;
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    .header-tagline {
+    .header-line {
       font-size: 7pt;
-      letter-spacing: 2pt;
+      letter-spacing: 1.5pt;
       text-transform: uppercase;
       line-height: 1.9;
+      color: #000;
     }
 
-    .header-info {
-      font-size: 6pt;
-      letter-spacing: 1pt;
-      line-height: 2;
-      opacity: 0.5;
+    /* ── META ─────────────────────────── */
+    .meta {
+      padding: 6pt 4pt;
+      border-bottom: 1pt solid #000;
     }
 
-    /* ── DOUBLE BORDER DIVIDER ────────────── */
-    .stripe-divider {
-      border-top: 2.5pt solid #0a0a0a;
-      border-bottom: 0.75pt solid #0a0a0a;
-      height: 4pt;
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 1pt 0;
     }
 
-    /* ── META GRID ────────────────────────── */
-    .meta-grid {
-      display: grid;
-      grid-template-columns: 1fr 1.4fr;
-      border-bottom: 0.75pt solid #0a0a0a;
-    }
-
-    .meta-cell {
-      padding: 7pt 8pt;
-    }
-
-    .meta-cell.border-right {
-      border-right: 0.75pt solid #0a0a0a;
-    }
-
-    .meta-cell.border-top {
-      border-top: 0.75pt solid #0a0a0a;
-    }
-
-    .meta-label {
-      font-size: 5.5pt;
-      letter-spacing: 2.5pt;
+    .meta-key {
+      font-size: 6.5pt;
+      letter-spacing: 1.5pt;
       text-transform: uppercase;
-      opacity: 0.4;
-      margin-bottom: 2pt;
+      font-weight: 600;
     }
 
-    .meta-value {
+    .meta-val {
       font-size: 8pt;
       font-weight: 700;
+      letter-spacing: 0.25pt;
     }
 
-    .meta-value-lg {
-      font-size: 11pt;
-      font-weight: 900;
-      letter-spacing: -0.5pt;
+    .meta-val-lg {
+      font-size: 9.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
     }
 
-    .meta-value-sm {
-      font-size: 7pt;
-      opacity: 0.5;
+    /* ── SECTION HEADING ──────────────── */
+    .sec-head {
+      font-size: 6pt;
+      font-weight: 700;
+      letter-spacing: 3pt;
+      text-transform: uppercase;
+      padding: 5pt 4pt 4pt;
+      border-bottom: 0.75pt solid #000;
     }
 
-    /* ── ITEMS ────────────────────────────── */
+    /* ── ITEMS TABLE ──────────────────── */
     .col-head {
       display: grid;
-      grid-template-columns: 1fr 16pt 42pt 42pt;
-      padding: 6pt 8pt 5pt;
-      font-size: 5.5pt;
+      grid-template-columns: 1fr 16pt 40pt 42pt;
+      padding: 3pt 4pt;
+      font-size: 6.5pt;
       font-weight: 700;
-      letter-spacing: 2.5pt;
+      letter-spacing: 1pt;
       text-transform: uppercase;
-      opacity: 0.4;
-      border-bottom: 0.75pt solid #0a0a0a;
+      border-bottom: 0.75pt solid #000;
     }
-
     .col-head span:nth-child(2) { text-align: center; }
     .col-head span:nth-child(3),
     .col-head span:nth-child(4) { text-align: right; }
 
-    .items-wrap { padding: 0 8pt; }
-
-    .item-row {
-      padding: 6pt 0;
-      border-bottom: 0.5pt dashed rgba(10,10,10,0.2);
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
     }
 
-    .item-row:last-child { border-bottom: none; }
-
-    .item-grid {
-      display: grid;
-      grid-template-columns: 1fr 16pt 42pt 42pt;
-      align-items: baseline;
+    table.items td {
+      padding: 3.5pt 0;
+      vertical-align: top;
     }
 
-    .item-name  { font-size: 9pt; font-weight: 700; }
-    .item-qty   { text-align: center; font-size: 8.5pt; }
-    .item-each  { text-align: right; font-size: 8pt; opacity: 0.5; }
-    .item-total { text-align: right; font-size: 9pt; font-weight: 700; }
+    table.items td:first-child { padding-left: 4pt; }
+    table.items td:last-child  { padding-right: 4pt; }
 
-    .item-disc {
-      display: flex;
-      justify-content: space-between;
-      font-size: 7pt;
-      opacity: 0.45;
-      padding-top: 2pt;
-      padding-left: 8pt;
+    .td-name  { font-size: 9pt; }
+    .td-qty   { text-align: center; font-size: 8.5pt; }
+    .td-price { text-align: right;  font-size: 8.5pt; }
+    .td-total { text-align: right;  font-size: 9pt; font-weight: 700; }
+
+    .td-disc-label {
+      font-size: 7.5pt;
+      padding-left: 12pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 3.5pt !important;
+    }
+    .td-disc-amt {
+      text-align: right;
+      font-size: 7.5pt;
+      padding-right: 4pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 3.5pt !important;
     }
 
-    /* ── TOTALS ───────────────────────────── */
-    .totals-wrap {
-      padding: 7pt 8pt 0;
-      border-top: 0.75pt solid #0a0a0a;
+    .items-rule {
+      border-top: 0.75pt dashed #000;
+      margin: 3pt 4pt 0;
+    }
+
+    /* ── TOTALS ───────────────────────── */
+    .totals {
+      padding: 5pt 4pt 4pt;
     }
 
     .tot-row {
       display: flex;
       justify-content: space-between;
-      font-size: 8pt;
-      padding: 2pt 0;
-      opacity: 0.55;
+      font-size: 9pt;
+      padding: 1.5pt 0;
     }
 
-    /* ── GRAND TOTAL ──────────────────────── */
-    .grand-total {
-      margin: 6pt 8pt 0;
-      padding: 8pt 0;
-      border-top: 2.5pt solid #0a0a0a;
-      border-bottom: 2.5pt solid #0a0a0a;
+    .tot-row.grand {
+      border-top: 1.5pt solid #000;
+      border-bottom: 1.5pt solid #000;
+      margin-top: 5pt;
+      padding: 5pt 0;
+      font-size: 13.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
+    }
+
+    /* ── PAYMENT ──────────────────────── */
+    .payment {
+      padding: 5pt 4pt 6pt;
+      border-top: 0.75pt dashed #000;
+    }
+
+    .pay-row {
       display: flex;
       justify-content: space-between;
-      align-items: flex-end;
-    }
-
-    .grand-left {}
-
-    .grand-label {
-      font-size: 5.5pt;
-      letter-spacing: 2.5pt;
-      text-transform: uppercase;
-      opacity: 0.4;
-      margin-bottom: 2pt;
-    }
-
-    .grand-amount {
-      font-size: 20pt;
-      font-weight: 900;
-      letter-spacing: -1pt;
-      line-height: 1;
-    }
-
-    .grand-right { text-align: right; }
-
-    .grand-pay-label {
-      font-size: 5.5pt;
-      letter-spacing: 2pt;
-      text-transform: uppercase;
-      opacity: 0.4;
-      margin-bottom: 2pt;
-    }
-
-    .pay-method {
       font-size: 9pt;
-      font-weight: 700;
+      padding: 1.5pt 0;
       text-transform: capitalize;
     }
 
-    .pay-amount {
-      font-size: 7.5pt;
-      opacity: 0.5;
-    }
+    .pay-amt { font-weight: 700; }
 
-    .pay-change {
-      font-size: 7.5pt;
-      opacity: 0.5;
-    }
-
-    /* ── BARCODE ──────────────────────────── */
+    /* ── BARCODE ──────────────────────── */
     .barcode-wrap {
-      margin: 0 8pt;
-      padding: 9pt 0 5pt;
+      padding: 7pt 4pt 4pt;
       text-align: center;
-      border-top: 0.75pt solid #0a0a0a;
+      border-top: 0.75pt dashed #000;
     }
 
     .barcode-bars {
-      height: 28pt;
       display: flex;
       justify-content: center;
       align-items: flex-end;
+      height: 28pt;
       margin-bottom: 4pt;
     }
 
     .barcode-num {
-      font-size: 6pt;
-      letter-spacing: 3.5pt;
-      opacity: 0.45;
+      font-size: 7pt;
+      letter-spacing: 3pt;
     }
 
-    /* ── FOOTER ───────────────────────────── */
+    /* ── FOOTER ───────────────────────── */
     .footer {
-      padding: 12pt 8pt 14pt;
       text-align: center;
-      border-top: 0.75pt solid #0a0a0a;
-    }
-
-    .footer-ornament {
-      display: flex;
-      align-items: center;
-      gap: 5pt;
-      margin-bottom: 9pt;
+      padding: 7pt 4pt 6pt;
+      border-top: 1pt solid #000;
     }
 
     .footer-thanks {
-      font-size: 11pt;
-      font-weight: 900;
+      font-size: 10.5pt;
+      font-weight: 700;
       letter-spacing: 0.5pt;
-      margin-bottom: 5pt;
+      margin-bottom: 4pt;
     }
 
     .footer-sub {
-      font-size: 6.5pt;
-      letter-spacing: 1.5pt;
-      text-transform: uppercase;
-      opacity: 0.4;
-      line-height: 2.2;
+      font-size: 7pt;
+      line-height: 2;
+      letter-spacing: 0.25pt;
+    }
+
+    .footer-rule {
+      border: none;
+      border-top: 0.75pt dashed #000;
+      width: 50%;
+      margin: 5pt auto;
     }
   </style>
 </head>
@@ -393,68 +341,68 @@ function buildReceiptHTML(
   <!-- HEADER -->
   <div class="header">
     <img src="/chefworldlogo.png" alt="${shopName}" class="logo" />
-    <div class="ornament-row">
-      <hr class="ornament-line"/>
-      <span class="ornament-star">&#10022;</span>
-      <hr class="ornament-line"/>
-    </div>
-    <div class="header-tagline">${shopTagline}</div>
-    <div class="header-info">${shopAddress} &middot; ${shopPhone}</div>
+    <hr class="header-rule"/>
+    <div class="header-line">${shopTagline}</div>
+    <div class="header-line">${shopAddress}</div>
+    <div class="header-line">${shopPhone}</div>
   </div>
 
-  <!-- STRIPE -->
-  <div class="stripe-divider"></div>
-
   <!-- META -->
-  <div class="meta-grid">
-    <div class="meta-cell border-right">
-      <div class="meta-label">Receipt</div>
-      <div class="meta-value-lg">${receiptNo}</div>
+  <div class="meta">
+    <div class="meta-row">
+      <span class="meta-key">Receipt</span>
+      <span class="meta-val-lg">${receiptNo}</span>
     </div>
-    <div class="meta-cell">
-      <div class="meta-label">Issued</div>
-      <div class="meta-value">${dateStr}</div>
-      <div class="meta-value-sm">${timeStr}</div>
+    <div class="meta-row">
+      <span class="meta-key">Date</span>
+      <span class="meta-val">${dateStr}</span>
     </div>
-    ${customer || odooOrderId ? `
-    <div class="meta-cell border-right border-top">
-      <div class="meta-label">Customer</div>
-      <div class="meta-value">${customer ? customer.name : "&mdash;"}</div>
-    </div>
-    <div class="meta-cell border-top">
-      <div class="meta-label">Order</div>
-      <div class="meta-value">${odooOrderId ? `#${odooOrderId}` : "&mdash;"}</div>
+    ${odooOrderId ? `
+    <div class="meta-row">
+      <span class="meta-key">Order ID</span>
+      <span class="meta-val">#${odooOrderId}</span>
+    </div>` : ""}
+    ${customer ? `
+    <div class="meta-row">
+      <span class="meta-key">Customer</span>
+      <span class="meta-val">${customer.name}</span>
     </div>` : ""}
   </div>
 
   <!-- ITEMS -->
+  <div class="sec-head">Items</div>
   <div class="col-head">
     <span>Description</span>
-    <span>Q</span>
-    <span>Each</span>
-    <span>Line</span>
+    <span>Qty</span>
+    <span>Price</span>
+    <span>Total</span>
   </div>
-  <div class="items-wrap">
-    ${lineItems}
-  </div>
+  <table class="items">
+    <tbody>${lineItems}</tbody>
+  </table>
+  <div class="items-rule"></div>
 
   <!-- TOTALS -->
-  <div class="totals-wrap">
-    <div class="tot-row"><span>Subtotal</span><span>$${fmt(subtotal)}</span></div>
-    <div class="tot-row"><span>Tax (10%)</span><span>$${fmt(tax)}</span></div>
+  <div class="totals">
+    <div class="tot-row">
+      <span>Subtotal</span>
+      <span>$${fmt(subtotal)}</span>
+    </div>
+    <div class="tot-row">
+      <span>Tax (10%)</span>
+      <span>$${fmt(tax)}</span>
+    </div>
+    <div class="tot-row grand">
+      <span>TOTAL</span>
+      <span>$${fmt(total)}</span>
+    </div>
   </div>
 
-  <!-- GRAND TOTAL -->
-  <div class="grand-total">
-    <div class="grand-left">
-      <div class="grand-label">Amount due</div>
-      <div class="grand-amount">$${fmt(total)}</div>
-    </div>
-    <div class="grand-right">
-      <div class="grand-pay-label">Paid by</div>
-      ${paymentMethods}
-      ${changeHtml}
-    </div>
+  <!-- PAYMENT -->
+  <div class="payment">
+    <div class="sec-head" style="padding:0 0 5pt;border:none;">Payment</div>
+    ${paymentRows}
+    ${changeRow}
   </div>
 
   <!-- BARCODE -->
@@ -465,14 +413,11 @@ function buildReceiptHTML(
 
   <!-- FOOTER -->
   <div class="footer">
-    <div class="footer-ornament">
-      <hr class="ornament-line"/>
-      <span class="ornament-star">&#10022;</span>
-      <hr class="ornament-line"/>
-    </div>
-    <div class="footer-thanks">Thank you!</div>
-    <div class="footer-sub">We appreciate your business</div>
-    <div class="footer-sub">Please retain this receipt</div>
+    <hr class="footer-rule"/>
+    <div class="footer-thanks">Thank you for your visit!</div>
+    <div class="footer-sub">Please keep this receipt for your records.</div>
+    <div class="footer-sub">${shopPhone} &middot; ${shopName}</div>
+    <hr class="footer-rule"/>
   </div>
 
 </div>
