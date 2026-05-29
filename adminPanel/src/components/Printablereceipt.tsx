@@ -100,7 +100,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
     @page {
-      size: 76mm auto;
+      size: 80mm auto;
       margin: 5mm 5mm 0 0;
     }
 
