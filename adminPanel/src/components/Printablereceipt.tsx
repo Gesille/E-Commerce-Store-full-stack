@@ -100,7 +100,7 @@ function buildReceiptHTML(
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
     @page {
-      size: 80mm auto;
+      size: 76mm auto;
       margin: 4mm 0;
     }
 
@@ -113,7 +113,7 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 80mm;
+      width: 76mm;
       background: #ffffff;
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 9pt;
@@ -122,8 +122,8 @@ function buildReceiptHTML(
     }
 
     .receipt {
-      width: 80mm;
-      padding: 0 5mm;
+      width: 76mm;
+      padding: 0 4mm;
       background: #ffffff;
       box-sizing: border-box;
     }
