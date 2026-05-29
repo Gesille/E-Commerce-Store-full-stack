@@ -97,10 +97,10 @@ function buildReceiptHTML(
 <head>
   <meta charset="utf-8"/>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+
 
     @page {
-      size: 76mm auto;
+      size: 80mm auto;
       margin: 0;
     }
 
@@ -113,9 +113,9 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 76mm;
+      width: 80mm;
       background: #ffffff;
-      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-family: monospace;
       font-size: 9pt;
       color: #000000;
       line-height: 1.5;
@@ -150,7 +150,7 @@ function buildReceiptHTML(
 
     .header-line {
       font-size: 7pt;
-      letter-spacing: 1.5pt;
+     
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
@@ -171,7 +171,7 @@ function buildReceiptHTML(
 
     .meta-key {
       font-size: 6.5pt;
-      letter-spacing: 1.5pt;
+      
       text-transform: uppercase;
       font-weight: 600;
     }
@@ -192,7 +192,7 @@ function buildReceiptHTML(
     .sec-head {
       font-size: 6pt;
       font-weight: 700;
-      letter-spacing: 3pt;
+      
       text-transform: uppercase;
       padding: 5pt 4pt 4pt;
       border-bottom: 0.75pt solid #000;
@@ -205,7 +205,7 @@ function buildReceiptHTML(
       padding: 3pt 4pt;
       font-size: 6.5pt;
       font-weight: 700;
-      letter-spacing: 1pt;
+     
       text-transform: uppercase;
       border-bottom: 0.75pt solid #000;
     }
@@ -304,7 +304,7 @@ function buildReceiptHTML(
 
     .barcode-num {
       font-size: 7pt;
-      letter-spacing: 3pt;
+      
     }
 
 
@@ -317,7 +317,7 @@ function buildReceiptHTML(
     .footer-thanks {
       font-size: 10.5pt;
       font-weight: 700;
-      letter-spacing: 0.5pt;
+    
       margin-bottom: 4pt;
     }
 
