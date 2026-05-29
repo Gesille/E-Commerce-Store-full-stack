@@ -434,31 +434,45 @@ interface UsePrintReceiptOptions {
 }
 
 export function usePrintReceipt(options: UsePrintReceiptOptions) {
-  const printReceipt = async () => {
-    const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
-    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
+  const printReceipt = () => {
+    const {
+      cart,
+      customer,
+      paymentLines,
+      odooOrderId,
+      receiptNo,
+    } = options;
 
-    document.getElementById("__print_frame__")?.remove();
+    const html = buildReceiptHTML(
+      cart,
+      customer,
+      paymentLines,
+      odooOrderId,
+      receiptNo
+    );
 
-    const iframe = document.createElement("iframe");
-    iframe.id = "__print_frame__";
-    iframe.style.cssText =
-      "position:absolute;width:0;height:0;border:0;visibility:hidden;";
-    document.body.appendChild(iframe);
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=400,height=800"
+    );
 
-    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-    if (!doc) return;
+    if (!printWindow) return;
 
-    doc.open();
-    doc.write(html);
-    doc.close();
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 
-    iframe.onload = () => {
+    printWindow.onload = () => {
+      printWindow.focus();
+
       setTimeout(() => {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-        setTimeout(() => iframe.remove(), 3000);
-      }, 400);
+        printWindow.print();
+
+        setTimeout(() => {
+          printWindow.close();
+        }, 500);
+      }, 300);
     };
   };
 
