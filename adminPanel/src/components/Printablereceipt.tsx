@@ -73,12 +73,6 @@ function buildReceiptHTML(
       </tr>` : ""}`;
   }).join("");
 
-  // ── Barcode stripes ─────────────────────────────────────────────────────
-  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
-    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
-    return `<div style="width:${w}px;background:#000;height:100%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;"></div>`;
-  }).join("");
-
   // ── Payment rows ────────────────────────────────────────────────────────
   const paymentRows = paymentLines.map((l) => `
     <div class="pay-row">
@@ -97,11 +91,11 @@ function buildReceiptHTML(
 <head>
   <meta charset="utf-8"/>
   <style>
-
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
     @page {
       size: 80mm auto;
-      margin: 0;
+      margin: 6mm 5mm;
     }
 
     *, *::before, *::after {
@@ -113,32 +107,31 @@ function buildReceiptHTML(
     }
 
     html, body {
-      width: 80mm;
+      width: 70mm;
       background: #ffffff;
-      font-family: monospace;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 9pt;
       color: #000000;
       line-height: 1.5;
     }
 
     .receipt {
-      width: 76mm;
-      padding: 0 4mm;
+      width: 70mm;
       background: #ffffff;
-      box-sizing: border-box;
     }
 
+    /* ── HEADER ───────────────────────── */
     .header {
       text-align: center;
-      padding: 6pt 0 10pt;
+      padding: 0 4pt 10pt;
       border-bottom: 1.5pt solid #000;
     }
 
     .logo {
       display: block;
-      max-width: 44mm;
+      max-width: 54mm;
       height: auto;
-      margin: 0 auto 4pt;
+      margin: 0 auto 6pt;
     }
 
     .header-rule {
@@ -150,13 +143,13 @@ function buildReceiptHTML(
 
     .header-line {
       font-size: 7pt;
-     
+      letter-spacing: 1.5pt;
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
     }
 
-  
+    /* ── META ─────────────────────────── */
     .meta {
       padding: 6pt 4pt;
       border-bottom: 1pt solid #000;
@@ -171,7 +164,7 @@ function buildReceiptHTML(
 
     .meta-key {
       font-size: 6.5pt;
-      
+      letter-spacing: 1.5pt;
       text-transform: uppercase;
       font-weight: 600;
     }
@@ -188,24 +181,24 @@ function buildReceiptHTML(
       letter-spacing: 0.5pt;
     }
 
-  
+    /* ── SECTION HEADING ──────────────── */
     .sec-head {
       font-size: 6pt;
       font-weight: 700;
-      
+      letter-spacing: 3pt;
       text-transform: uppercase;
       padding: 5pt 4pt 4pt;
       border-bottom: 0.75pt solid #000;
     }
 
-   
+    /* ── ITEMS TABLE ──────────────────── */
     .col-head {
       display: grid;
       grid-template-columns: 1fr 16pt 40pt 42pt;
       padding: 3pt 4pt;
       font-size: 6.5pt;
       font-weight: 700;
-     
+      letter-spacing: 1pt;
       text-transform: uppercase;
       border-bottom: 0.75pt solid #000;
     }
@@ -250,6 +243,7 @@ function buildReceiptHTML(
       margin: 3pt 4pt 0;
     }
 
+    /* ── TOTALS ───────────────────────── */
     .totals {
       padding: 5pt 4pt 4pt;
     }
@@ -271,7 +265,7 @@ function buildReceiptHTML(
       letter-spacing: 0.5pt;
     }
 
- 
+    /* ── PAYMENT ──────────────────────── */
     .payment {
       padding: 5pt 4pt 6pt;
       border-top: 0.75pt dashed #000;
@@ -287,7 +281,7 @@ function buildReceiptHTML(
 
     .pay-amt { font-weight: 700; }
 
-  
+    /* ── BARCODE ──────────────────────── */
     .barcode-wrap {
       padding: 7pt 4pt 4pt;
       text-align: center;
@@ -295,19 +289,20 @@ function buildReceiptHTML(
     }
 
     .barcode-bars {
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      height: 28pt;
-      margin-bottom: 4pt;
+      font-size: 20pt;
+      letter-spacing: -1pt;
+      line-height: 1;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      margin-bottom: 3pt;
     }
 
     .barcode-num {
       font-size: 7pt;
-      
+      letter-spacing: 3pt;
     }
 
-
+    /* ── FOOTER ───────────────────────── */
     .footer {
       text-align: center;
       padding: 7pt 4pt 6pt;
@@ -317,7 +312,7 @@ function buildReceiptHTML(
     .footer-thanks {
       font-size: 10.5pt;
       font-weight: 700;
-    
+      letter-spacing: 0.5pt;
       margin-bottom: 4pt;
     }
 
@@ -338,16 +333,16 @@ function buildReceiptHTML(
 <body>
 <div class="receipt">
 
-
+  <!-- HEADER -->
   <div class="header">
-    <img src="/chefworldlogo1.png" alt="${shopName}" class="logo" />
+    <img src="/chefworldlogo.png" alt="${shopName}" class="logo" />
     <hr class="header-rule"/>
     <div class="header-line">${shopTagline}</div>
     <div class="header-line">${shopAddress}</div>
     <div class="header-line">${shopPhone}</div>
   </div>
 
-
+  <!-- META -->
   <div class="meta">
     <div class="meta-row">
       <span class="meta-key">Receipt</span>
@@ -369,7 +364,7 @@ function buildReceiptHTML(
     </div>` : ""}
   </div>
 
-
+  <!-- ITEMS -->
   <div class="sec-head">Items</div>
   <div class="col-head">
     <span>Description</span>
@@ -382,6 +377,7 @@ function buildReceiptHTML(
   </table>
   <div class="items-rule"></div>
 
+  <!-- TOTALS -->
   <div class="totals">
     <div class="tot-row">
       <span>Subtotal</span>
@@ -397,20 +393,20 @@ function buildReceiptHTML(
     </div>
   </div>
 
-
+  <!-- PAYMENT -->
   <div class="payment">
     <div class="sec-head" style="padding:0 0 5pt;border:none;">Payment</div>
     ${paymentRows}
     ${changeRow}
   </div>
 
-  
+  <!-- BARCODE -->
   <div class="barcode-wrap">
-    <div class="barcode-bars">${barcodeStripes}</div>
+    <div class="barcode-bars">|||||</div>
     <div class="barcode-num">${receiptNo}</div>
   </div>
 
-
+  <!-- FOOTER -->
   <div class="footer">
     <hr class="footer-rule"/>
     <div class="footer-thanks">Thank you for your visit!</div>
@@ -434,45 +430,31 @@ interface UsePrintReceiptOptions {
 }
 
 export function usePrintReceipt(options: UsePrintReceiptOptions) {
-  const printReceipt = () => {
-    const {
-      cart,
-      customer,
-      paymentLines,
-      odooOrderId,
-      receiptNo,
-    } = options;
+  const printReceipt = async () => {
+    const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
+    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
-    const html = buildReceiptHTML(
-      cart,
-      customer,
-      paymentLines,
-      odooOrderId,
-      receiptNo
-    );
+    document.getElementById("__print_frame__")?.remove();
 
-    const printWindow = window.open(
-      "",
-      "_blank",
-      "width=400,height=800"
-    );
+    const iframe = document.createElement("iframe");
+    iframe.id = "__print_frame__";
+    iframe.style.cssText =
+      "position:absolute;width:0;height:0;border:0;visibility:hidden;";
+    document.body.appendChild(iframe);
 
-    if (!printWindow) return;
+    const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+    if (!doc) return;
 
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-    printWindow.onload = () => {
-      printWindow.focus();
-
+    iframe.onload = () => {
       setTimeout(() => {
-        printWindow.print();
-
-        setTimeout(() => {
-          printWindow.close();
-        }, 500);
-      }, 300);
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => iframe.remove(), 3000);
+      }, 400);
     };
   };
 
