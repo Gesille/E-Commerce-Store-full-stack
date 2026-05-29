@@ -1,282 +1,480 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
-import "../app/(dashboard)/Printable.css";
 
-function fmt(n: number) {
-  return n.toFixed(2);
-}
+// ─── Shop Config ───────────────────────────────────────────────────────────
+const shopName    = "Chef's World";
+const shopTagline = "Restaurant, Bar & Kitchen Supplies";
+const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
+const shopPhone   = "(555) 123-4567";
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const fmt = (n: number) => n.toFixed(2);
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
 }
-
 function calcOrderTotals(cart: CartItem[]) {
-  const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
-  const tax = subtotal * 0.1;
-  const total = subtotal + tax;
+  const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
+  const tax      = subtotal * 0.1;
+  const total    = subtotal + tax;
   return { subtotal, tax, total };
 }
 
+// ─── Types ─────────────────────────────────────────────────────────────────
 interface PrintableReceiptProps {
-  cart: CartItem[];
-  customer: Customer | null;
+  cart:         CartItem[];
+  customer:     Customer | null;
   paymentLines: PaymentLine[];
   odooOrderId?: number;
-  receiptNo: string;
-  onPrint?: () => void;
+  receiptNo:    string;
 }
 
-export function PrintableReceipt({
-  cart,
-  customer,
-  paymentLines,
-  odooOrderId,
-  receiptNo,
-}: PrintableReceiptProps) {
+export function PrintableReceipt(_props: PrintableReceiptProps) {
+  return null;
+}
+
+// ─── HTML Builder ──────────────────────────────────────────────────────────
+function buildReceiptHTML(
+  cart: CartItem[],
+  customer: Customer | null,
+  paymentLines: PaymentLine[],
+  odooOrderId: number | undefined,
+  receiptNo: string,
+): string {
   const { subtotal, tax, total } = calcOrderTotals(cart);
-  const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
+  const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
+
   const dateStr = new Date().toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+    weekday: "short",
+    month:   "short",
+    day:     "2-digit",
+    year:    "numeric",
+    hour:    "2-digit",
+    minute:  "2-digit",
   });
 
-  const shopName    = "Chef's World";
-  const shopTagline = "Restaurant, Bar & Kitchen Supplies";
-  const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
-  const shopPhone   = "(555) 123-4567";
+  // ── Line items ──────────────────────────────────────────────────────────
+  const lineItems = cart.map((item) => {
+    const lineTotal   = calcLineTotal(item);
+    const hasDiscount = (item.discount ?? 0) > 0;
+    const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
 
-  return (
-    <div id="printable-receipt" className="hidden print:block">
+    return `
+      <tr>
+        <td class="td-name">${item.name}</td>
+        <td class="td-qty">${item.qty}</td>
+        <td class="td-price">$${fmt(item.price)}</td>
+        <td class="td-total">$${fmt(lineTotal)}</td>
+      </tr>
+      ${hasDiscount ? `
+      <tr>
+        <td colspan="3" class="td-disc-label">  Discount ${item.discount}%</td>
+        <td class="td-disc-amt">-$${fmt(discountAmt)}</td>
+      </tr>` : ""}`;
+  }).join("");
 
-      {/* ═══ DARK HEADER ═══ */}
-      <div className="pr-header">
-        <div className="pr-large">{shopName}</div>
-        {shopTagline && <div className="pr-small pr-mt1">{shopTagline}</div>}
-        {shopAddress && <div className="pr-xs">{shopAddress}</div>}
-        {shopPhone   && <div className="pr-xs">{shopPhone}</div>}
-      </div>
+  // ── Barcode stripes ─────────────────────────────────────────────────────
+  const barcodeStripes = Array.from({ length: 30 }, (_, i) => {
+    const w = [2, 1, 3, 1, 2, 1, 1, 3, 2, 1][i % 10];
+    return `<div style="width:${w}px;background:#000;height:100%;display:inline-block;margin-right:${i % 3 === 0 ? 2 : 1}px;"></div>`;
+  }).join("");
 
-      {/* ═══ BODY ═══ */}
-      <div className="pr-body">
+  // ── Payment rows ────────────────────────────────────────────────────────
+  const paymentRows = paymentLines.map((l) => `
+    <div class="pay-row">
+      <span>${l.method}</span>
+      <span class="pay-amt">$${fmt(l.amount)}</span>
+    </div>`).join("");
 
-        {/* Order meta */}
-        <div className="pr-small pr-mt1">
-          <div className="pr-row">
-            <span className="pr-muted">Date:</span>
-            <span>{dateStr}</span>
-          </div>
-          <div className="pr-row">
-            <span className="pr-muted">Receipt:</span>
-            <span className="pr-bold">{receiptNo}</span>
-          </div>
-          {odooOrderId && (
-            <div className="pr-row">
-              <span className="pr-muted">Order ID:</span>
-              <span>#{odooOrderId}</span>
-            </div>
-          )}
-          {customer && (
-            <div className="pr-row">
-              <span className="pr-muted">Customer:</span>
-              <span>{customer.name}</span>
-            </div>
-          )}
-        </div>
+  const changeRow = change > 0.005 ? `
+    <div class="pay-row">
+      <span>Change</span>
+      <span class="pay-amt">$${fmt(change)}</span>
+    </div>` : "";
 
-        <hr className="pr-solid pr-mt2" />
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
 
-        {/* Column headers */}
-        <div className="pr-col-header">
-          <span className="pr-name">Item</span>
-          <span className="pr-qty">Qty</span>
-          <span className="pr-price">Price</span>
-          <span className="pr-total">Total</span>
-        </div>
+    @page {
+      size: 76mm auto;
+      margin: 0;
+    }
 
-        <hr className="pr-dash" />
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
 
-        {/* Line items */}
-        {cart.map((item, idx) => {
-          const lineTotal = calcLineTotal(item);
-          return (
-            <div key={idx} className="pr-small">
-              <div className="pr-row">
-                <span className="pr-name pr-bold">{item.name}</span>
-                <span className="pr-qty">{item.qty}</span>
-                <span className="pr-price">${fmt(item.price)}</span>
-                <span className="pr-total pr-bold">${fmt(lineTotal)}</span>
-              </div>
-              {(item.discount ?? 0) > 0 && (
-                <div className="pr-row pr-xs pr-muted">
-                  <span className="pr-name">&nbsp;&nbsp;Discount {item.discount}%</span>
-                  <span className="pr-total">
-                    -${fmt(item.price * item.qty * ((item.discount ?? 0) / 100))}
-                  </span>
-                </div>
-              )}
-            </div>
-          );
-        })}
+    html, body {
+      width: 76mm;
+      background: #ffffff;
+      font-family: 'IBM Plex Mono', 'Courier New', monospace;
+      font-size: 9pt;
+      color: #000000;
+      line-height: 1.5;
+    }
 
-        <hr className="pr-dash" />
+    .receipt {
+      width: 76mm;
+      padding: 0 4mm;
+      background: #ffffff;
+      box-sizing: border-box;
+    }
 
-        {/* Subtotals */}
-        <div className="pr-small">
-          <div className="pr-total-row">
-            <span className="pr-muted">Subtotal</span>
-            <span>${fmt(subtotal)}</span>
-          </div>
-          <div className="pr-total-row">
-            <span className="pr-muted">Tax (10%)</span>
-            <span>${fmt(tax)}</span>
-          </div>
-        </div>
+    .header {
+      text-align: center;
+      padding: 6pt 0 10pt;
+      border-bottom: 1.5pt solid #000;
+    }
 
-        <hr className="pr-double" />
+    .logo {
+      display: block;
+      max-width: 44mm;
+      height: auto;
+      margin: 0 auto 4pt;
+    }
 
-        {/* Grand total */}
-        <div className="pr-total-row pr-grand">
-          <span>TOTAL</span>
-          <span>${fmt(total)}</span>
-        </div>
+    .header-rule {
+      border: none;
+      border-top: 0.75pt dashed #000;
+      width: 70%;
+      margin: 5pt auto 6pt;
+    }
 
-        <hr className="pr-dash pr-mt1" />
+    .header-line {
+      font-size: 7pt;
+      letter-spacing: 1.5pt;
+      text-transform: uppercase;
+      line-height: 1.9;
+      color: #000;
+    }
 
-        {/* Payments */}
-        <div className="pr-small pr-mt1">
-          {paymentLines.map((l, idx) => (
-            <div key={idx} className="pr-total-row">
-              <span className="pr-muted" style={{ textTransform: "capitalize" }}>
-                {l.method}
-              </span>
-              <span>${fmt(l.amount)}</span>
-            </div>
-          ))}
-          {change > 0.005 && (
-            <div className="pr-total-row pr-bold">
-              <span>Change</span>
-              <span>${fmt(change)}</span>
-            </div>
-          )}
-        </div>
+  
+    .meta {
+      padding: 6pt 4pt;
+      border-bottom: 1pt solid #000;
+    }
 
-      </div>{/* end pr-body */}
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 1pt 0;
+    }
 
-      {/* ═══ LIGHT FOOTER ═══ */}
-      <div className="pr-footer">
-        <div className="pr-small pr-bold">Thank you for your visit!</div>
-        <div className="pr-xs pr-muted pr-mt1">
-          Please keep this receipt for your records.
-        </div>
-        
-        <div className="pr-xs pr-muted">{receiptNo}</div>
-      </div>
+    .meta-key {
+      font-size: 6.5pt;
+      letter-spacing: 1.5pt;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
 
+    .meta-val {
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.25pt;
+    }
+
+    .meta-val-lg {
+      font-size: 9.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
+    }
+
+  
+    .sec-head {
+      font-size: 6pt;
+      font-weight: 700;
+      letter-spacing: 3pt;
+      text-transform: uppercase;
+      padding: 5pt 4pt 4pt;
+      border-bottom: 0.75pt solid #000;
+    }
+
+   
+    .col-head {
+      display: grid;
+      grid-template-columns: 1fr 16pt 40pt 42pt;
+      padding: 3pt 4pt;
+      font-size: 6.5pt;
+      font-weight: 700;
+      letter-spacing: 1pt;
+      text-transform: uppercase;
+      border-bottom: 0.75pt solid #000;
+    }
+    .col-head span:nth-child(2) { text-align: center; }
+    .col-head span:nth-child(3),
+    .col-head span:nth-child(4) { text-align: right; }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    table.items td {
+      padding: 3.5pt 0;
+      vertical-align: top;
+    }
+
+    table.items td:first-child { padding-left: 4pt; }
+    table.items td:last-child  { padding-right: 4pt; }
+
+    .td-name  { font-size: 9pt; }
+    .td-qty   { text-align: center; font-size: 8.5pt; }
+    .td-price { text-align: right;  font-size: 8.5pt; }
+    .td-total { text-align: right;  font-size: 9pt; font-weight: 700; }
+
+    .td-disc-label {
+      font-size: 7.5pt;
+      padding-left: 12pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 3.5pt !important;
+    }
+    .td-disc-amt {
+      text-align: right;
+      font-size: 7.5pt;
+      padding-right: 4pt !important;
+      padding-top: 0 !important;
+      padding-bottom: 3.5pt !important;
+    }
+
+    .items-rule {
+      border-top: 0.75pt dashed #000;
+      margin: 3pt 4pt 0;
+    }
+
+    .totals {
+      padding: 5pt 4pt 4pt;
+    }
+
+    .tot-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9pt;
+      padding: 1.5pt 0;
+    }
+
+    .tot-row.grand {
+      border-top: 1.5pt solid #000;
+      border-bottom: 1.5pt solid #000;
+      margin-top: 5pt;
+      padding: 5pt 0;
+      font-size: 13.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
+    }
+
+ 
+    .payment {
+      padding: 5pt 4pt 6pt;
+      border-top: 0.75pt dashed #000;
+    }
+
+    .pay-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9pt;
+      padding: 1.5pt 0;
+      text-transform: capitalize;
+    }
+
+    .pay-amt { font-weight: 700; }
+
+  
+    .barcode-wrap {
+      padding: 7pt 4pt 4pt;
+      text-align: center;
+      border-top: 0.75pt dashed #000;
+    }
+
+    .barcode-bars {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      height: 28pt;
+      margin-bottom: 4pt;
+    }
+
+    .barcode-num {
+      font-size: 7pt;
+      letter-spacing: 3pt;
+    }
+
+
+    .footer {
+      text-align: center;
+      padding: 7pt 4pt 6pt;
+      border-top: 1pt solid #000;
+    }
+
+    .footer-thanks {
+      font-size: 10.5pt;
+      font-weight: 700;
+      letter-spacing: 0.5pt;
+      margin-bottom: 4pt;
+    }
+
+    .footer-sub {
+      font-size: 7pt;
+      line-height: 2;
+      letter-spacing: 0.25pt;
+    }
+
+    .footer-rule {
+      border: none;
+      border-top: 0.75pt dashed #000;
+      width: 50%;
+      margin: 5pt auto;
+    }
+  </style>
+</head>
+<body>
+<div class="receipt">
+
+
+  <div class="header">
+    <img src="/chefworldlogo1.png" alt="${shopName}" class="logo" />
+    <hr class="header-rule"/>
+    <div class="header-line">${shopTagline}</div>
+    <div class="header-line">${shopAddress}</div>
+    <div class="header-line">${shopPhone}</div>
+  </div>
+
+
+  <div class="meta">
+    <div class="meta-row">
+      <span class="meta-key">Receipt</span>
+      <span class="meta-val-lg">${receiptNo}</span>
     </div>
-  );
+    <div class="meta-row">
+      <span class="meta-key">Date</span>
+      <span class="meta-val">${dateStr}</span>
+    </div>
+    ${odooOrderId ? `
+    <div class="meta-row">
+      <span class="meta-key">Order ID</span>
+      <span class="meta-val">#${odooOrderId}</span>
+    </div>` : ""}
+    ${customer ? `
+    <div class="meta-row">
+      <span class="meta-key">Customer</span>
+      <span class="meta-val">${customer.name}</span>
+    </div>` : ""}
+  </div>
+
+
+  <div class="sec-head">Items</div>
+  <div class="col-head">
+    <span>Description</span>
+    <span>Qty</span>
+    <span>Price</span>
+    <span>Total</span>
+  </div>
+  <table class="items">
+    <tbody>${lineItems}</tbody>
+  </table>
+  <div class="items-rule"></div>
+
+  <div class="totals">
+    <div class="tot-row">
+      <span>Subtotal</span>
+      <span>$${fmt(subtotal)}</span>
+    </div>
+    <div class="tot-row">
+      <span>Tax (10%)</span>
+      <span>$${fmt(tax)}</span>
+    </div>
+    <div class="tot-row grand">
+      <span>TOTAL</span>
+      <span>$${fmt(total)}</span>
+    </div>
+  </div>
+
+
+  <div class="payment">
+    <div class="sec-head" style="padding:0 0 5pt;border:none;">Payment</div>
+    ${paymentRows}
+    ${changeRow}
+  </div>
+
+  
+  <div class="barcode-wrap">
+    <div class="barcode-bars">${barcodeStripes}</div>
+    <div class="barcode-num">${receiptNo}</div>
+  </div>
+
+
+  <div class="footer">
+    <hr class="footer-rule"/>
+    <div class="footer-thanks">Thank you for your visit!</div>
+    <div class="footer-sub">Please keep this receipt for your records.</div>
+    <div class="footer-sub">${shopPhone} &middot; ${shopName}</div>
+    <hr class="footer-rule"/>
+  </div>
+
+</div>
+</body>
+</html>`;
 }
 
+// ─── Print Hook ────────────────────────────────────────────────────────────
+interface UsePrintReceiptOptions {
+  cart:         CartItem[];
+  customer:     Customer | null;
+  paymentLines: PaymentLine[];
+  odooOrderId?: number;
+  receiptNo:    string;
+}
 
-import html2canvas from "html2canvas-pro";
+export function usePrintReceipt(options: UsePrintReceiptOptions) {
+  const printReceipt = () => {
+    const {
+      cart,
+      customer,
+      paymentLines,
+      odooOrderId,
+      receiptNo,
+    } = options;
 
-export function usePrintReceipt() {
-  const printReceipt = async () => {
-    const receipt = document.getElementById("printable-receipt");
-    if (!receipt) return;
+    const html = buildReceiptHTML(
+      cart,
+      customer,
+      paymentLines,
+      odooOrderId,
+      receiptNo
+    );
 
-    // 1. Temporarily reveal the receipt so html2canvas can read it
-    receipt.style.display = "block";
-    receipt.style.visibility = "visible";
-    receipt.style.position = "fixed";
-    receipt.style.top = "-9999px";
-    receipt.style.left = "0";
-    receipt.style.width = "302px"; // 80mm at 96dpi
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=400,height=800"
+    );
 
-    try {
-      // 2. Capture to canvas at 3× scale for sharp print output
-      const canvas = await html2canvas(receipt, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        width: 302,
-        windowWidth: 302,
-        logging: false,
-      });
+    if (!printWindow) return;
 
-      const imgDataUrl = canvas.toDataURL("image/png");
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
 
-      // 3. Build a minimal iframe that prints just the image
-      const existing = document.getElementById("__print_frame__");
-      if (existing) existing.remove();
+    printWindow.onload = () => {
+      printWindow.focus();
 
-      const iframe = document.createElement("iframe");
-      iframe.id = "__print_frame__";
-      iframe.style.cssText = `
-        position: fixed;
-        top: 0; left: 0;
-        width: 80mm;
-        height: 1px;
-        border: none;
-        opacity: 0;
-        pointer-events: none;
-        z-index: -1;
-      `;
-      document.body.appendChild(iframe);
+      setTimeout(() => {
+        printWindow.print();
 
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return;
-
-      doc.open();
-      doc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8"/>
-            <style>
-              @page {
-                size: 80mm auto;
-                margin: 0;
-              }
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              html, body {
-                width: 80mm;
-                background: #fff;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-              img {
-                width: 80mm;
-                display: block;
-              }
-            </style>
-          </head>
-          <body>
-            <img src="${imgDataUrl}" />
-          </body>
-        </html>
-      `);
-      doc.close();
-
-      iframe.onload = () => {
         setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          setTimeout(() => iframe.remove(), 2000);
-        }, 300);
-      };
-    } finally {
-      // 4. Hide receipt again
-      receipt.style.display = "";
-      receipt.style.visibility = "";
-      receipt.style.position = "";
-      receipt.style.top = "";
-      receipt.style.left = "";
-      receipt.style.width = "";
-    }
+          printWindow.close();
+        }, 500);
+      }, 300);
+    };
   };
 
   return { printReceipt };
-}
+} 
