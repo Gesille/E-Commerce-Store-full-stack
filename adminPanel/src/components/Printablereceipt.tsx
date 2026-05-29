@@ -138,7 +138,7 @@ function buildReceiptHTML(
       display: block;
       max-width: 44mm;
       height: auto;
-     align-self: center;
+     alignment: center;
     
     }
 
@@ -155,7 +155,7 @@ function buildReceiptHTML(
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
-      margin-right: -4mm;
+      margin-right: 2mm;
     }
 
   
