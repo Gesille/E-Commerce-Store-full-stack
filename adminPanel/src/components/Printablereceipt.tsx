@@ -138,7 +138,7 @@ function buildReceiptHTML(
       display: block;
       max-width: 44mm;
       height: auto;
-     alignment: center;
+    
     
     }
 
@@ -146,7 +146,7 @@ function buildReceiptHTML(
       border: none;
       border-top: 0.75pt dashed #000;
       width: 70%;
-      margin: 5pt 0 6pt;
+    
     }
 
     .header-line {
@@ -155,12 +155,12 @@ function buildReceiptHTML(
       text-transform: uppercase;
       line-height: 1.9;
       color: #000;
-      margin-right: 2mm;
+      
     }
 
   
     .meta {
-      padding: 6pt 4pt;
+      padding: 6pt 6pt;
       border-bottom: 1pt solid #000;
     }
 
