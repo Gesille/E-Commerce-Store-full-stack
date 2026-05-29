@@ -5,7 +5,7 @@ import {
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
 import { useState } from "react";
-import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
+import {  PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
