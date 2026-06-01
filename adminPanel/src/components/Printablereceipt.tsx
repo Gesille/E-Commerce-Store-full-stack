@@ -1,8 +1,8 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
 const shopName    = "CHEF'S WORLD";
-const shopTagline = "Restaurant · Bar · Kitchen";
-const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
+const shopTagline = "RESTAURANT &middot; BAR &middot; KITCHEN";
+const shopAddress = "123 Culinary Ave, Foodie City FL";
 const shopPhone   = "(555) 123-4567";
 
 const fmt = (n: number) => n.toFixed(2);
@@ -49,33 +49,52 @@ function buildReceiptHTML(
     minute: "2-digit",
   }).replace(/,/g, "");
 
+  // ── Line items (table rows only, no flex/grid) ──────────────────────────
   const lineItems = cart.map((item) => {
-    const lineTotal    = calcLineTotal(item);
-    const discountAmt  = item.price * item.qty * ((item.discount ?? 0) / 100);
-    const discStr      = item.discount
-      ? ` &nbsp;(-${item.discount}% disc → -$${fmt(discountAmt)})`
-      : "";
+    const lineTotal   = calcLineTotal(item);
+    const discountAmt = item.price * item.qty * ((item.discount ?? 0) / 100);
+    const discRow     = (item.discount ?? 0) > 0 ? `
+      <tr>
+        <td colspan="3" style="font-size:7.5pt;color:#888;padding-bottom:4px;padding-left:4px;">Discount ${item.discount}%</td>
+        <td align="right" style="font-size:7.5pt;color:#888;padding-bottom:4px;">-$${fmt(discountAmt)}</td>
+      </tr>` : "";
+
     return `
-      <div class="item">
-        <div class="item-top">
-          <span>${item.name}</span>
-          <span>$${fmt(lineTotal)}</span>
-        </div>
-        <div class="item-sub">${item.qty} x $${fmt(item.price)}${discStr}</div>
-      </div>`;
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-bottom:1px dashed #ccc;">
+        <tr>
+          <td width="52%" style="font-size:9.5pt;font-weight:700;padding:5px 0 2px;">${item.name}</td>
+          <td width="13%" align="center" style="font-size:9pt;padding:5px 0 2px;">${item.qty}</td>
+          <td width="17%" align="right" style="font-size:8.5pt;color:#555;padding:5px 0 2px;">$${fmt(item.price)}</td>
+          <td width="18%" align="right" style="font-size:9.5pt;font-weight:700;padding:5px 0 2px;">$${fmt(lineTotal)}</td>
+        </tr>
+        ${discRow}
+      </table>`;
   }).join("");
 
+  // ── Payment rows ────────────────────────────────────────────────────────
   const paymentRows = paymentLines.map((l) => `
-    <div class="pay-row">
-      <span style="text-transform:capitalize;">${l.method}</span>
-      <b>$${fmt(l.amount)}</b>
-    </div>`).join("");
+    <tr>
+      <td style="font-size:9pt;color:#555;padding:2px 0;text-transform:capitalize;">${l.method}</td>
+      <td align="right" style="font-size:9pt;font-weight:700;padding:2px 0;">$${fmt(l.amount)}</td>
+    </tr>`).join("");
 
   const changeRow = change > 0.005 ? `
-    <div class="chg-row">
-      <span>Change</span>
-      <span>$${fmt(change)}</span>
-    </div>` : "";
+    <tr>
+      <td style="font-size:9pt;color:#555;padding:2px 0;">Change</td>
+      <td align="right" style="font-size:9pt;font-weight:700;padding:2px 0;">$${fmt(change)}</td>
+    </tr>` : "";
+
+  const odooRow = odooOrderId ? `
+    <tr>
+      <td width="45%" style="font-size:8.5pt;color:#555;padding:1.5px 0;">Order ID</td>
+      <td width="55%" align="right" style="font-size:8.5pt;font-weight:700;padding:1.5px 0;">#${odooOrderId}</td>
+    </tr>` : "";
+
+  const customerRow = customer ? `
+    <tr>
+      <td style="font-size:8.5pt;color:#555;padding:1.5px 0;">Customer</td>
+      <td align="right" style="font-size:8.5pt;font-weight:700;padding:1.5px 0;">${customer.name}</td>
+    </tr>` : "";
 
   return `<!DOCTYPE html>
 <html>
@@ -84,78 +103,116 @@ function buildReceiptHTML(
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
     @page { size: 72mm auto; margin: 0; }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    html, body { width: 72mm; background: #fff; font-family: 'Courier Prime', monospace; font-size: 10pt; color: #000; }
-    .rcpt { width: 72mm; padding: 14px 12px 18px; }
-    .hdr { text-align: center; margin-bottom: 12px; }
-    .hdr-name { font-size: 22pt; font-weight: 700; letter-spacing: 4px; line-height: 1; margin-bottom: 5px; }
-    .hdr-tag { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 3px 0; margin: 5px 0; }
-    .hdr-info { font-size: 8pt; line-height: 1.7; }
-    .div  { border: none; border-top: 1px dashed #000; margin: 10px 0; }
-    .divd { border: none; border-top: 2px solid #000; margin: 10px 0; }
-    .meta { font-size: 9pt; line-height: 1.8; }
-    .meta-row { display: flex; justify-content: space-between; }
-    .meta-key { color: #555; }
-    .meta-val { font-weight: 700; }
-    .sec-lbl { font-size: 7pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; text-align: center; margin: 8px 0 6px; }
-    .item { margin-bottom: 8px; }
-    .item-top { display: flex; justify-content: space-between; font-size: 10.5pt; font-weight: 700; }
-    .item-sub { font-size: 8.5pt; color: #444; margin-top: 1px; }
-    .tot-row { display: flex; justify-content: space-between; font-size: 9.5pt; line-height: 1.9; }
-    .tot-row .k { color: #444; }
-    .grand { display: flex; justify-content: space-between; font-size: 16pt; font-weight: 700; letter-spacing: 1px; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 6px 0; margin: 6px 0; }
-    .pay-row { display: flex; justify-content: space-between; font-size: 9.5pt; line-height: 1.9; color: #333; }
-    .pay-row b { color: #000; }
-    .chg-row { display: flex; justify-content: space-between; font-size: 9.5pt; font-weight: 700; margin-top: 2px; }
-    .footer { text-align: center; margin-top: 10px; }
-    .footer-thanks { font-size: 12pt; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
-    .footer-sub { font-size: 8pt; color: #444; line-height: 1.8; }
-    .footer-rcpt { font-size: 8pt; letter-spacing: 4px; margin-top: 8px; color: #888; }
-    .stars { text-align: center; font-size: 8pt; letter-spacing: 4px; margin: 4px 0; color: #aaa; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0; padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    html, body {
+      width: 72mm;
+      background: #ffffff;
+      font-family: 'Courier Prime', 'Courier New', monospace;
+      font-size: 10pt;
+      color: #000000;
+    }
+    .wrap { width: 72mm; padding: 10px 8px 16px; }
+    .divider-solid { border-top: 2px solid #000; font-size: 1pt; }
+    .divider-dash  { border-top: 1px dashed #000; font-size: 1pt; }
   </style>
 </head>
 <body>
-<div class="rcpt">
+<div class="wrap">
 
-  <div class="hdr">
-    <div class="hdr-name">CHEF'S<br>WORLD</div>
-    <div class="hdr-tag">${shopTagline}</div>
-    <div class="hdr-info">${shopAddress}<br>${shopPhone}</div>
-  </div>
+  <!-- HEADER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr><td align="center" style="font-size:20pt;font-weight:700;letter-spacing:4px;padding-bottom:3px;">CHEF'S</td></tr>
+    <tr><td align="center" style="font-size:20pt;font-weight:700;letter-spacing:4px;padding-bottom:6px;">WORLD</td></tr>
+    <tr><td align="center" style="font-size:7pt;letter-spacing:2px;border-top:1px solid #000;border-bottom:1px solid #000;padding:3px 0;">${shopTagline}</td></tr>
+    <tr><td align="center" style="font-size:8pt;padding-top:4px;line-height:1.6;">${shopAddress}</td></tr>
+    <tr><td align="center" style="font-size:8pt;padding-bottom:6px;">${shopPhone}</td></tr>
+  </table>
 
-  <hr class="divd"/>
+  <table width="100%" cellpadding="0" cellspacing="0"><tr><td class="divider-solid">&nbsp;</td></tr></table>
 
-  <div class="meta">
-    <div class="meta-row"><span class="meta-key">Receipt</span><span class="meta-val">#${receiptNo}</span></div>
-    <div class="meta-row"><span class="meta-key">Date</span><span class="meta-val">${dateStr}</span></div>
-    ${odooOrderId ? `<div class="meta-row"><span class="meta-key">Order ID</span><span class="meta-val">#${odooOrderId}</span></div>` : ""}
-    ${customer    ? `<div class="meta-row"><span class="meta-key">Customer</span><span class="meta-val">${customer.name}</span></div>` : ""}
-  </div>
+  <!-- META -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;">
+    <tr>
+      <td width="45%" style="font-size:8.5pt;color:#555;padding:1.5px 0;">Receipt</td>
+      <td width="55%" align="right" style="font-size:8.5pt;font-weight:700;padding:1.5px 0;">#${receiptNo}</td>
+    </tr>
+    <tr>
+      <td style="font-size:8.5pt;color:#555;padding:1.5px 0;">Date</td>
+      <td align="right" style="font-size:8.5pt;font-weight:700;padding:1.5px 0;">${dateStr}</td>
+    </tr>
+    ${odooRow}
+    ${customerRow}
+  </table>
 
-  <hr class="div"/>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;"><tr><td class="divider-dash">&nbsp;</td></tr></table>
 
-  <div class="sec-lbl">— Items —</div>
+  <!-- ITEMS LABEL -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr><td align="center" style="font-size:7pt;font-weight:700;letter-spacing:3px;padding-bottom:5px;">--- ITEMS ---</td></tr>
+  </table>
+
+  <!-- COLUMN HEADERS -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #000;border-bottom:1px solid #000;">
+    <tr>
+      <td width="52%" style="font-size:7pt;font-weight:700;letter-spacing:1px;padding:3px 0;">DESCRIPTION</td>
+      <td width="13%" align="center" style="font-size:7pt;font-weight:700;letter-spacing:1px;padding:3px 0;">QTY</td>
+      <td width="17%" align="right" style="font-size:7pt;font-weight:700;letter-spacing:1px;padding:3px 0;">PRICE</td>
+      <td width="18%" align="right" style="font-size:7pt;font-weight:700;letter-spacing:1px;padding:3px 0;">TOTAL</td>
+    </tr>
+  </table>
+
+  <!-- ITEMS -->
   ${lineItems}
 
-  <hr class="div"/>
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0;"><tr><td class="divider-dash">&nbsp;</td></tr></table>
 
-  <div class="tot-row"><span class="k">Subtotal</span><span>$${fmt(subtotal)}</span></div>
-  <div class="tot-row"><span class="k">Tax (10%)</span><span>$${fmt(tax)}</span></div>
-  <div class="grand"><span>TOTAL</span><span>$${fmt(total)}</span></div>
+  <!-- TOTALS -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td style="font-size:9pt;color:#555;padding:2px 0;">Subtotal</td>
+      <td align="right" style="font-size:9pt;padding:2px 0;">$${fmt(subtotal)}</td>
+    </tr>
+    <tr>
+      <td style="font-size:9pt;color:#555;padding:2px 0;">Tax (10%)</td>
+      <td align="right" style="font-size:9pt;padding:2px 0;">$${fmt(tax)}</td>
+    </tr>
+  </table>
 
-  <div class="sec-lbl">— Payment —</div>
-  ${paymentRows}
-  ${changeRow}
+  <!-- GRAND TOTAL -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:2px solid #000;border-bottom:2px solid #000;margin:6px 0;">
+    <tr>
+      <td style="font-size:15pt;font-weight:700;letter-spacing:1px;padding:5px 0;">TOTAL</td>
+      <td align="right" style="font-size:15pt;font-weight:700;letter-spacing:1px;padding:5px 0;">$${fmt(total)}</td>
+    </tr>
+  </table>
 
-  <hr class="divd"/>
+  <!-- PAYMENT LABEL -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr><td align="center" style="font-size:7pt;font-weight:700;letter-spacing:3px;padding:4px 0;">--- PAYMENT ---</td></tr>
+  </table>
 
-  <div class="stars">* * * * * * * * * *</div>
-  <div class="footer">
-    <div class="footer-thanks">Thank You!</div>
-    <div class="footer-sub">Please keep this receipt for your records.<br>${shopPhone}</div>
-    <div class="footer-rcpt">* ${receiptNo} *</div>
-  </div>
-  <div class="stars">* * * * * * * * * *</div>
+  <!-- PAYMENT ROWS -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    ${paymentRows}
+    ${changeRow}
+  </table>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;"><tr><td class="divider-solid">&nbsp;</td></tr></table>
+
+  <!-- FOOTER -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr><td align="center" style="font-size:8pt;letter-spacing:3px;color:#aaa;padding:2px 0;">* * * * * * * * * *</td></tr>
+    <tr><td align="center" style="font-size:11pt;font-weight:700;letter-spacing:1px;padding:4px 0;">Thank You!</td></tr>
+    <tr><td align="center" style="font-size:8pt;color:#555;padding:1px 0;">Please keep this for your records.</td></tr>
+    <tr><td align="center" style="font-size:8pt;color:#555;padding:1px 0;">${shopPhone}</td></tr>
+    <tr><td align="center" style="font-size:8pt;letter-spacing:4px;color:#aaa;padding:6px 0;">* ${receiptNo} *</td></tr>
+    <tr><td align="center" style="font-size:8pt;letter-spacing:3px;color:#aaa;padding:2px 0;">* * * * * * * * * *</td></tr>
+  </table>
 
 </div>
 </body>
@@ -171,7 +228,8 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:72mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    iframe.style.cssText =
+      "position:fixed;top:0;left:0;width:72mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
