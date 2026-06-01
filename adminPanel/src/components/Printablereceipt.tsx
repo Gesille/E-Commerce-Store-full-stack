@@ -3,7 +3,7 @@ import { CartItem, Customer, PaymentLine } from "@/types/pos";
 // ─── Shop Text Configuration ───────────────────────────────────────────────
 const shopName    = "CHEF'S WORLD";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
-const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
+const shopAddress = "Epicurean Drive ,Saint John ";
 const shopPhone   = "(555) 123-4567";
 
 const fmt = (n: number) => n.toFixed(2);
