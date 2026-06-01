@@ -1,8 +1,7 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
-// ─── إعدادات المتجر النصية ──────────────────────────────────────────────────
 const shopName    = "CHEF'S WORLD";
-const shopTagline = "RESTAURANT, BAR & KITCHEN SUPPLIES";
+const shopTagline = "Restaurant · Bar · Kitchen";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
 
@@ -31,7 +30,6 @@ export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
 }
 
-// بناء التصميم العصري المحمي هيدروليكياً عبر الجداول المستقرة
 function buildReceiptHTML(
   cart: CartItem[],
   customer: Customer | null,
@@ -44,209 +42,122 @@ function buildReceiptHTML(
   const change = paid - total;
 
   const dateStr = new Date().toLocaleString("en-US", {
-    month:   "short",
-    day:     "2-digit",
-    year:    "numeric",
-    hour:    "2-digit",
-    minute:  "2-digit",
+    month:  "short",
+    day:    "2-digit",
+    year:   "numeric",
+    hour:   "2-digit",
+    minute: "2-digit",
   }).replace(/,/g, "");
 
-  // سطر المنتجات العصري: اسم المادة بارز وبجانبه الإجمالي، وتحته التفاصيل متباعدة
   const lineItems = cart.map((item) => {
-    const lineTotal = calcLineTotal(item);
+    const lineTotal    = calcLineTotal(item);
+    const discountAmt  = item.price * item.qty * ((item.discount ?? 0) / 100);
+    const discStr      = item.discount
+      ? ` &nbsp;(-${item.discount}% disc → -$${fmt(discountAmt)})`
+      : "";
     return `
-      <table class="item-table">
-        <tr>
-          <td class="text-left font-bold" style="font-size: 11pt; letter-spacing: 0.3px;">${item.name}</td>
-          <td class="text-right font-bold" style="font-size: 11pt;">$${fmt(lineTotal)}</td>
-        </tr>
-        <tr>
-          <td class="text-left text-light" style="font-size: 8.5pt; padding-top: 1px; letter-spacing: 0.5px;">
-            ${item.qty} Qty  x  $${fmt(item.price)} ${item.discount ? ` [Disc ${item.discount}%]` : ""}
-          </td>
-          <td></td>
-        </tr>
-      </table>`;
+      <div class="item">
+        <div class="item-top">
+          <span>${item.name}</span>
+          <span>$${fmt(lineTotal)}</span>
+        </div>
+        <div class="item-sub">${item.qty} x $${fmt(item.price)}${discStr}</div>
+      </div>`;
   }).join("");
 
   const paymentRows = paymentLines.map((l) => `
-    <tr>
-      <td class="text-left text-light" style="text-transform: uppercase; font-size: 9pt; padding: 2px 0;">${l.method}</td>
-      <td class="text-right font-medium" style="font-size: 10pt;">$${fmt(l.amount)}</td>
-    </tr>`).join("");
+    <div class="pay-row">
+      <span style="text-transform:capitalize;">${l.method}</span>
+      <b>$${fmt(l.amount)}</b>
+    </div>`).join("");
+
+  const changeRow = change > 0.005 ? `
+    <div class="chg-row">
+      <span>Change</span>
+      <span>$${fmt(change)}</span>
+    </div>` : "";
 
   return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="ascii"/>
-  <title>Receipt</title>
+  <meta charset="utf-8"/>
   <style>
-    @page {
-      size: 80mm auto;
-      margin: 0mm;
-    }
-    *, *:before, *:after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    body {
-      width: 66mm; /* العرض الذهبي لمنع خروج الأحرف وحقن الرموز */
-      margin: 0 auto;
-      padding: 5mm 1mm;
-      font-family: "Courier New", Courier, monospace !important;
-      color: #000000;
-      background: #ffffff;
-      font-size: 9.5pt;
-      line-height: 1.35;
-    }
-    
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .text-left { text-align: left; }
-    .font-medium { font-weight: 600; }
-    .font-bold { font-weight: 700; }
-    .text-light { color: #000000; font-weight: normal; }
-
-    /* ════════ HEADER STYLE ════════ */
-    .header-block {
-      margin-bottom: 12px;
-      padding-bottom: 2px;
-    }
-    .shop-name { 
-      font-size: 16pt; 
-      font-weight: 700; 
-      letter-spacing: 1px;
-      margin-bottom: 4px;
-    }
-    .shop-sub { 
-      font-size: 8.5pt; 
-      letter-spacing: 0.2px;
-      margin-bottom: 2px;
-    }
-    
-    /* فواصل خطية مستمرة وأنيقة بدلاً من النقاط العشوائية */
-    .line-divider {
-      border-top: 1px solid #000000;
-      margin: 8px 0;
-      width: 100%;
-    }
-    .double-divider {
-      border-top: 1px dashed #000000;
-      margin: 8px 0;
-      width: 100%;
-    }
-
-    /* ════════ TABLES ════════ */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    td {
-      padding: 3px 0;
-      font-size: 9.5pt;
-      vertical-align: middle;
-    }
-    
-    .item-table {
-      margin-bottom: 8px;
-    }
-    
-    .total-label {
-      font-size: 13pt;
-      font-weight: 700;
-      padding-top: 8px;
-    }
-    .total-value {
-      font-size: 14pt;
-      font-weight: 700;
-      padding-top: 8px;
-    }
-
-    .footer {
-      font-size: 9pt;
-      margin-top: 16px;
-      line-height: 1.4;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+    @page { size: 72mm auto; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { width: 72mm; background: #fff; font-family: 'Courier Prime', monospace; font-size: 10pt; color: #000; }
+    .rcpt { width: 72mm; padding: 14px 12px 18px; }
+    .hdr { text-align: center; margin-bottom: 12px; }
+    .hdr-name { font-size: 22pt; font-weight: 700; letter-spacing: 4px; line-height: 1; margin-bottom: 5px; }
+    .hdr-tag { font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 3px 0; margin: 5px 0; }
+    .hdr-info { font-size: 8pt; line-height: 1.7; }
+    .div  { border: none; border-top: 1px dashed #000; margin: 10px 0; }
+    .divd { border: none; border-top: 2px solid #000; margin: 10px 0; }
+    .meta { font-size: 9pt; line-height: 1.8; }
+    .meta-row { display: flex; justify-content: space-between; }
+    .meta-key { color: #555; }
+    .meta-val { font-weight: 700; }
+    .sec-lbl { font-size: 7pt; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; text-align: center; margin: 8px 0 6px; }
+    .item { margin-bottom: 8px; }
+    .item-top { display: flex; justify-content: space-between; font-size: 10.5pt; font-weight: 700; }
+    .item-sub { font-size: 8.5pt; color: #444; margin-top: 1px; }
+    .tot-row { display: flex; justify-content: space-between; font-size: 9.5pt; line-height: 1.9; }
+    .tot-row .k { color: #444; }
+    .grand { display: flex; justify-content: space-between; font-size: 16pt; font-weight: 700; letter-spacing: 1px; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 6px 0; margin: 6px 0; }
+    .pay-row { display: flex; justify-content: space-between; font-size: 9.5pt; line-height: 1.9; color: #333; }
+    .pay-row b { color: #000; }
+    .chg-row { display: flex; justify-content: space-between; font-size: 9.5pt; font-weight: 700; margin-top: 2px; }
+    .footer { text-align: center; margin-top: 10px; }
+    .footer-thanks { font-size: 12pt; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+    .footer-sub { font-size: 8pt; color: #444; line-height: 1.8; }
+    .footer-rcpt { font-size: 8pt; letter-spacing: 4px; margin-top: 8px; color: #888; }
+    .stars { text-align: center; font-size: 8pt; letter-spacing: 4px; margin: 4px 0; color: #aaa; }
   </style>
 </head>
 <body>
+<div class="rcpt">
 
-  <div class="header-block text-left">
-    <div class="shop-name">${shopName}</div>
-    <div class="shop-sub font-bold">${shopTagline}</div>
-    <div class="shop-sub">${shopAddress}</div>
-    <div class="shop-sub">TEL: ${shopPhone}</div>
+  <div class="hdr">
+    <div class="hdr-name">CHEF'S<br>WORLD</div>
+    <div class="hdr-tag">${shopTagline}</div>
+    <div class="hdr-info">${shopAddress}<br>${shopPhone}</div>
   </div>
 
-  <div class="line-divider"></div>
+  <hr class="divd"/>
 
-  <table style="margin-bottom: 2px;">
-    <tr>
-      <td class="text-left text-light">RECEIPT NO:</td>
-      <td class="text-right font-bold">#${receiptNo}</td>
-    </tr>
-    <tr>
-      <td class="text-left text-light">DATE:</td>
-      <td class="text-right">${dateStr}</td>
-    </tr>
-    ${odooOrderId ? `<tr><td class="text-left text-light">ORDER ID:</td><td class="text-right font-bold">#${odooOrderId}</td></tr>` : ""}
-    ${customer ? `<tr><td class="text-left text-light">CUSTOMER:</td><td class="text-right font-bold">${customer.name}</td></tr>` : ""}
-  </table>
-
-  <div class="line-divider"></div>
-
-  <table>
-    <tr>
-      <td class="text-left font-bold" style="font-size: 9pt; letter-spacing: 0.8px;">ITEMS / DESCRIPTION</td>
-      <td class="text-right font-bold" style="font-size: 9pt; letter-spacing: 0.8px;">TOTAL</td>
-    </tr>
-  </table>
-
-  <div class="line-divider"></div>
-
-  <div style="padding: 2px 0;">
-    ${lineItems}
+  <div class="meta">
+    <div class="meta-row"><span class="meta-key">Receipt</span><span class="meta-val">#${receiptNo}</span></div>
+    <div class="meta-row"><span class="meta-key">Date</span><span class="meta-val">${dateStr}</span></div>
+    ${odooOrderId ? `<div class="meta-row"><span class="meta-key">Order ID</span><span class="meta-val">#${odooOrderId}</span></div>` : ""}
+    ${customer    ? `<div class="meta-row"><span class="meta-key">Customer</span><span class="meta-val">${customer.name}</span></div>` : ""}
   </div>
 
-  <div class="double-divider"></div>
+  <hr class="div"/>
 
-  <table>
-    <tr>
-      <td class="text-left text-light" style="padding: 2px 0; font-size: 9.5pt;">Subtotal</td>
-      <td class="text-right" style="padding: 2px 0; font-size: 9.5pt;">$${fmt(subtotal)}</td>
-    </tr>
-    <tr>
-      <td class="text-left text-light" style="padding: 2px 0; font-size: 9.5pt;">Tax (10%)</td>
-      <td class="text-right" style="padding: 2px 0; font-size: 9.5pt;">$${fmt(tax)}</td>
-    </tr>
-    <tr>
-      <td class="text-left total-label" style="border-top: 1px solid #000000;">TOTAL</td>
-      <td class="text-right total-value" style="border-top: 1px solid #000000;">$${fmt(total)}</td>
-    </tr>
-  </table>
+  <div class="sec-lbl">— Items —</div>
+  ${lineItems}
 
-  <div class="double-divider"></div>
+  <hr class="div"/>
 
-  <table style="margin-top: 2px;">
-    <tbody>
-      ${paymentRows}
-      ${change > 0.005 ? `
-      <tr>
-        <td class="text-left font-bold" style="font-size: 10pt; padding-top: 4px;">CHANGE DUE</td>
-        <td class="text-right font-bold" style="font-size: 11pt; padding-top: 4px;">$${fmt(change)}</td>
-      </tr>` : ""}
-    </tbody>
-  </table>
+  <div class="tot-row"><span class="k">Subtotal</span><span>$${fmt(subtotal)}</span></div>
+  <div class="tot-row"><span class="k">Tax (10%)</span><span>$${fmt(tax)}</span></div>
+  <div class="grand"><span>TOTAL</span><span>$${fmt(total)}</span></div>
 
-  <div class="line-divider" style="margin-top: 12px;"></div>
+  <div class="sec-lbl">— Payment —</div>
+  ${paymentRows}
+  ${changeRow}
 
-  <div class="text-left footer">
-    <div class="font-bold" style="font-size: 10pt; margin-bottom: 3px; letter-spacing: 0.3px;">THANK YOU FOR YOUR VISIT!</div>
-    <div class="text-light" style="font-size: 8.5pt; color: #111;">Please keep this receipt for your records.</div>
-    <div style="margin-top: 10px; font-size: 8pt; text-align: center; letter-spacing: 1px;">* ${receiptNo} *</div>
+  <hr class="divd"/>
+
+  <div class="stars">* * * * * * * * * *</div>
+  <div class="footer">
+    <div class="footer-thanks">Thank You!</div>
+    <div class="footer-sub">Please keep this receipt for your records.<br>${shopPhone}</div>
+    <div class="footer-rcpt">* ${receiptNo} *</div>
   </div>
+  <div class="stars">* * * * * * * * * *</div>
 
+</div>
 </body>
 </html>`;
 }
@@ -260,7 +171,7 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:72mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -272,10 +183,11 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     iframe.onload = () => {
       setTimeout(() => {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
+        if (!iframe.contentWindow) return;
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
         setTimeout(() => iframe.remove(), 2000);
-      }, 300);
+      }, 500);
     };
   };
 
