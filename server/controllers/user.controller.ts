@@ -5,7 +5,7 @@ import jwt, { JwtPayload, Secret } from "jsonwebtoken";
 import ejs from "ejs";
 import path from "path";
 import sendMail from "../utils/sendMail.js";
-import cloudinary from "cloudinary";
+
 import {
  
   accessTokenOptions,
@@ -24,6 +24,7 @@ import userModel, { IUser } from "../models/user.model.js";
 import { odooRequest } from "../odoo/odoo.client.js";
 import mongoose from "mongoose";
 import orderModel from "../models/order.model.js";
+import cloudinary from "../utils/uploadImages.js";
 
 dotenv.config();
 
@@ -405,6 +406,8 @@ export const updatePassword = CatchAsyncError(
 
 //update profile picture
 
+
+
 export const updateProfilePicture = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -413,33 +416,24 @@ export const updateProfilePicture = CatchAsyncError(
       const user = await userModel.findById(userId);
 
       if (avatar && user) {
-        //if user have an avatar then call this
+        // Delete old avatar if exists
         if (user?.avatar?.public_id) {
-          //first delete the old image
-          await cloudinary.v2.uploader.destroy(user?.avatar?.public_id);
-          const myCloud = await cloudinary.v2.uploader.upload(avatar, {
-            folder: "avatars",
-            width: 150,
-          });
-          user.avatar = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url,
-          };
-        } else {
-          const myCloud = await cloudinary.v2.uploader.upload(avatar, {
-            folder: "avatars",
-            width: 150,
-          });
-          user.avatar = {
-            public_id: myCloud.public_id,
-            url: myCloud.secure_url,
-          };
+          await cloudinary.v2.uploader.destroy(user.avatar.public_id);
         }
+
+        // Upload new avatar
+        const myCloud = await cloudinary.v2.uploader.upload(avatar, {
+          folder: "avatars",
+          width: 150,
+        });
+
+        user.avatar = {
+          public_id: myCloud.public_id,
+          url: myCloud.secure_url,
+        };
       }
 
       await user?.save();
-
-      await userModel.findByIdAndUpdate(userId, { user });
 
       res.status(201).json({
         success: true,
