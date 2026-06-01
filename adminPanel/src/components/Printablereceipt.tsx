@@ -104,7 +104,7 @@ function buildReceiptHTML(
     .text-lg { font-size: 12pt; }
 
     .shop-name { 
-      font-size: 18pt; 
+      font-size: 24pt; 
       font-weight: 700; 
       letter-spacing: 0.5px;
       margin-bottom: 4px;
