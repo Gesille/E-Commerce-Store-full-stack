@@ -1,8 +1,7 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
-// ─── Shop Config ───────────────────────────────────────────────────────────
-
-const shopLogoUrl = "/chefworldlogo1.png"; 
+// ─── إعدادات المتجر النصية ──────────────────────────────────────────────────
+const shopName    = "CHEF'S WORLD";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
@@ -12,6 +11,7 @@ const fmt = (n: number) => n.toFixed(2);
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
 }
+
 function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
   const tax      = subtotal * 0.1;
@@ -49,204 +49,210 @@ function buildReceiptHTML(
     year:    "numeric",
     hour:    "2-digit",
     minute:  "2-digit",
-  });
+  }).replace(/,/g, ""); // إزالة الفواصل لمنع أخطاء الترميز
 
+  // بناء سطور المنتجات (كل مادة في جدول مستقل لضمان عدم تداخل السعر مع الاسم)
   const lineItems = cart.map((item) => {
-    const lineTotal  = calcLineTotal(item);
+    const lineTotal = calcLineTotal(item);
     return `
-      <tr class="item-row">
-        <td class="text-left font-medium">${item.name}<br><small class="text-gray">${item.qty} x $${fmt(item.price)}</small></td>
-        <td class="text-right valign-bottom font-medium">$${fmt(lineTotal)}</td>
-      </tr>`;
+      <table class="item-table">
+        <tr>
+          <td class="text-left font-bold" style="font-size: 11pt;">${item.name}</td>
+          <td class="text-right font-bold" style="font-size: 11pt;">$${fmt(lineTotal)}</td>
+        </tr>
+        <tr>
+          <td class="text-left text-gray" style="font-size: 9pt; padding-top: 2px;">
+            ${item.qty} x $${fmt(item.price)} ${item.discount ? `(-${item.discount}%)` : ""}
+          </td>
+          <td></td>
+        </tr>
+      </table>`;
   }).join("");
 
   const paymentRows = paymentLines.map((l) => `
-    <div class="flex-row text-sm">
-      <span class="text-gray capitalize">${l.method}</span>
-      <span class="font-medium">$${fmt(l.amount)}</span>
-    </div>`).join("");
+    <tr>
+      <td class="text-left text-gray" style="text-transform: capitalize;">${l.method}</td>
+      <td class="text-right font-medium">$${fmt(l.amount)}</td>
+    </tr>`).join("");
 
   return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="ascii"/>
+  <title>Receipt</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    * {
+    @page {
+      size: 80mm auto;
+      margin: 0mm;
+    }
+    *, *:before, *:after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
     body {
-      width: 76mm; 
+      width: 68mm; /* عرض آمن يمنع خروج النصوص للهوامش الحرجة */
+      margin: 0 auto;
+      padding: 4mm 2mm;
+      font-family: "Courier New", Courier, monospace !important;
+      color: #000000;
       background: #ffffff;
-      font-family: 'Inter', sans-serif;
-      color: #111111;
-      padding: 15px;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+      font-size: 10pt;
+      line-height: 1.3;
     }
+    
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .text-left { text-align: left; }
-    .font-medium { font-weight: 500; }
+    .font-medium { font-weight: 600; }
     .font-bold { font-weight: 700; }
-    .text-gray { color: #666666; }
-    .text-sm { font-size: 12px; }
-    .valign-bottom { vertical-align: bottom; }
+    .text-gray { color: #333333; }
 
-    /* ════════ LOGO & HEADER ════════ */
-    .logo-container {
-      margin: 5px auto 12px;
-      text-align: center;
+    /* ════════ HEADER ════════ */
+    .header-block {
+      margin-bottom: 8px;
     }
-    .logo {
-      max-width: 180px;
-      height: auto;
-      object-fit: contain;
-      filter: grayscale(100%) brightness(0.9) contrast(200%);
+    .shop-name { 
+      font-size: 15pt; 
+      font-weight: 700; 
+      margin-bottom: 4px;
     }
-    .shop-tagline { font-size: 11px; color: #555; margin-top: 4px; }
-    .shop-details { font-size: 11px; color: #777; margin-top: 2px; line-height: 1.4; }
-
+    .shop-sub { 
+      font-size: 9pt; 
+      margin-bottom: 2px;
+    }
+    
     .divider {
-      border-top: 1px dashed #dddddd;
-      margin: 12px 0;
+      border-top: 1px dashed #000000;
+      margin: 8px 0;
+      width: 100%;
     }
     .thick-divider {
-      border-top: 2px solid #111111;
-      margin: 12px 0;
+      border-top: 2px solid #000000;
+      margin: 10px 0;
+      width: 100%;
     }
 
-    /* ════════ META INFO ════════ */
-    .meta-grid {
-      font-size: 12px;
-      line-height: 1.6;
-      margin-bottom: 10px;
-    }
-    .flex-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 3px;
-    }
-
-    /* ════════ ITEMS TABLE ════════ */
-    table.items-table {
+    /* ════════ TABLES ════════ */
+    table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 5px;
     }
-    table.items-table th {
-      font-size: 11px;
-      text-transform: uppercase;
-      color: #666666;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #111111;
-      font-weight: 600;
+    td {
+      padding: 2px 0;
+      font-size: 10pt;
+      vertical-align: top;
     }
-    table.items-table td {
-      padding: 10px 0;
-      font-size: 13px;
-      border-bottom: 1px solid #f0f0f0;
-      line-height: 1.4;
+    
+    .item-table {
+      margin-bottom: 6px;
     }
-
-    /* ════════ TOTALS SECTION ════════ */
-    .totals-container {
-      margin-top: 10px;
-      width: 100%;
+    
+    .total-title {
+      font-size: 13pt;
+      font-weight: 700;
+      padding-top: 4px;
     }
-    .grand-total-row {
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid #111111;
-      font-size: 16px;
+    .total-amount {
+      font-size: 14pt;
+      font-weight: 700;
+      padding-top: 4px;
     }
 
     .footer {
-      font-size: 11px;
-      color: #777777;
-      margin-top: 20px;
-      line-height: 1.5;
+      font-size: 9.5pt;
+      margin-top: 12px;
+      line-height: 1.4;
     }
   </style>
 </head>
 <body>
 
-  <div class="logo-container">
-    <img src="${shopLogoUrl}" class="logo" alt="Shop Logo" />
-    <div class="shop-tagline font-medium">${shopTagline}</div>
-    <div class="shop-details">${shopAddress}<br>${shopPhone}</div>
+  <!-- ══ HEADER SECTION ══ -->
+  <div class="header-block text-left">
+    <div class="shop-name">${shopName}</div>
+    <div class="shop-sub">${shopTagline}</div>
+    <div class="shop-sub">${shopAddress}</div>
+    <div class="shop-sub">${shopPhone}</div>
   </div>
 
   <div class="divider"></div>
 
-  <div class="meta-grid">
-    <div class="flex-row">
-      <span class="text-gray">Receipt No:</span>
-      <span class="font-bold">#${receiptNo}</span>
-    </div>
-    <div class="flex-row">
-      <span class="text-gray">Date:</span>
-      <span>${dateStr}</span>
-    </div>
-    ${odooOrderId ? `<div class="flex-row"><span class="text-gray">Order ID:</span><span class="font-medium">#${odooOrderId}</span></div>` : ""}
-    ${customer ? `<div class="flex-row"><span class="text-gray">Customer:</span><span class="font-medium">${customer.name}</span></div>` : ""}
-  </div>
+  <!-- ══ META INFO ══ -->
+  <table>
+    <tr>
+      <td class="text-left text-gray">Receipt No:</td>
+      <td class="text-right font-medium">#${receiptNo}</td>
+    </tr>
+    <tr>
+      <td class="text-left text-gray">Date:</td>
+      <td class="text-right">${dateStr}</td>
+    </tr>
+    ${odooOrderId ? `<tr><td class="text-left text-gray">Order ID:</td><td class="text-right font-medium">#${odooOrderId}</td></tr>` : ""}
+    ${customer ? `<tr><td class="text-left text-gray">Customer:</td><td class="text-right font-medium">${customer.name}</td></tr>` : ""}
+  </table>
 
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th class="text-left">Description</th>
-        <th class="text-right">Total</th>
-      </tr>
-    </thead>
+  <div class="divider"></div>
+
+  <!-- ══ LABELS ══ -->
+  <table>
+    <tr>
+      <td class="text-left font-bold" style="font-size: 9.5pt; letter-spacing: 0.5px;">DESCRIPTION</td>
+      <td class="text-right font-bold" style="font-size: 9.5pt; letter-spacing: 0.5px;">TOTAL</td>
+    </tr>
+  </table>
+
+  <div class="divider"></div>
+
+  <!-- ══ ITEMS LIST ══ -->
+  ${lineItems}
+
+  <div class="divider"></div>
+
+  <!-- ══ TOTALS ══ -->
+  <table>
+    <tr>
+      <td class="text-left text-gray">Subtotal</td>
+      <td class="text-right">$${fmt(subtotal)}</td>
+    </tr>
+    <tr>
+      <td class="text-left text-gray">Tax (10%)</td>
+      <td class="text-right">$${fmt(tax)}</td>
+    </tr>
+    <tr>
+      <td class="text-left total-title" style="border-top: 1px solid #000;">TOTAL</td>
+      <td class="text-right total-amount" style="border-top: 1px solid #000;">$${fmt(total)}</td>
+    </tr>
+  </table>
+
+  <div class="divider"></div>
+
+  <!-- ══ PAYMENTS ══ -->
+  <table>
     <tbody>
-      ${lineItems}
+      ${paymentRows}
+      ${change > 0.005 ? `
+      <tr>
+        <td class="text-left font-bold">Change</td>
+        <td class="text-right font-bold">$${fmt(change)}</td>
+      </tr>` : ""}
     </tbody>
   </table>
 
-  <div class="totals-container">
-    <div class="flex-row text-sm">
-      <span class="text-gray">Subtotal</span>
-      <span class="font-medium">$${fmt(subtotal)}</span>
-    </div>
-    <div class="flex-row text-sm" style="margin-top: 4px;">
-      <span class="text-gray">Tax (10%)</span>
-      <span class="font-medium">$${fmt(tax)}</span>
-    </div>
-    <div class="flex-row grand-total-row font-bold">
-      <span>TOTAL</span>
-      <span>$${fmt(total)}</span>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <div style="margin-top: 5px;">
-    ${paymentRows}
-    ${change > 0.005 ? `
-    <div class="flex-row text-sm" style="margin-top: 4px;">
-      <span class="text-gray">Change</span>
-      <span class="font-bold" style="color: #10b981;">$${fmt(change)}</span>
-    </div>` : ""}
-  </div>
-
   <div class="thick-divider"></div>
 
-  <div class="text-center footer">
-    <div class="font-medium" style="color: #111111; font-size: 12px; margin-bottom: 4px;">Thank you for your visit!</div>
-    <div>Please keep this receipt for your records.</div>
-    <div style="margin-top: 8px; font-size: 10px; letter-spacing: 1px; color: #999;">* ${receiptNo} *</div>
+  <!-- ══ FOOTER ══ -->
+  <div class="text-left footer">
+    <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
+    <div class="text-gray">Please keep this receipt for your records.</div>
+    <div style="margin-top: 6px; font-size: 8pt; color: #444;">* ${receiptNo} *</div>
   </div>
 
 </body>
 </html>`;
 }
 
-// الهوك الذكي المحدث الذي ينتظر تحميل الصور والخطوط بالكامل قبل إطلاق أمر الطباعة المباشر
+// الـ Hook المسؤول عن الطباعة المستقرة ونظيفة
 export function usePrintReceipt(options: PrintableReceiptProps) {
   const printReceipt = async () => {
     const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
@@ -256,9 +262,7 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    // جعل العرض الخارجي متطابقاً وثابتاً تماماً لمنع أي تلاعب بالهوامش
-    iframe.style.cssText =
-      "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -268,13 +272,12 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
     doc.write(html);
     doc.close();
 
-    // ننتظر حتى يقوم المتصفح بتحميل صورة اللوجو والخطوط بنسبة 100% ليظهر الإيصال فخماً كاملاً
     iframe.onload = () => {
       setTimeout(() => {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
-        setTimeout(() => iframe.remove(), 3000);
-      }, 600); // مهلة زمنية آمنة لضمان اكتمال الرندر الداخلي
+        setTimeout(() => iframe.remove(), 2000);
+      }, 300);
     };
   };
 
