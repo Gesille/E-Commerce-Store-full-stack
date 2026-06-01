@@ -244,20 +244,23 @@ export function PaymentModal({
             </span>
           </div>
 
-          {isComplete && change > 0.005 && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 13,
-                color: "#10b981",
-                fontWeight: 600,
-              }}
-            >
-              <span>Change</span>
-              <span>${fmt(change)}</span>
-            </div>
-          )}
+        {isComplete && change > 0.005 && (
+  <div style={{
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 15,        
+    color: "#10b981",
+    fontWeight: 700,     
+    background: "#f0fdf4",   
+    padding: "6px 10px",
+    borderRadius: 8,
+    marginTop: 4,
+  }}>
+    <span>💵 Change to return</span>
+    <span>${fmt(change)}</span>
+  </div>
+)}
+          
           {!isComplete && (
             <div
               style={{
@@ -324,7 +327,10 @@ export function PaymentModal({
                   fontFamily: "'DM Mono', monospace",
                   color: "#0f172a",
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#3b82f6")}
+               onFocus={(e) => {
+  e.currentTarget.style.borderColor = "#3b82f6";
+  e.currentTarget.select(); // ← auto-selects the amount so user just types the new value
+}}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
               />
               {lines.length > 1 && (
