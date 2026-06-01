@@ -232,7 +232,7 @@ export const logoutUser = CatchAsyncError(
 );
 
 //update access token
-export const updateAccessToken = CatchAsyncError(
+export const refreshTokenMiddleware = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const refresh_token = req.cookies.refresh_token as string;
@@ -264,15 +264,22 @@ export const updateAccessToken = CatchAsyncError(
       res.cookie("ACCESS_TOKEN_SECRET", accessToken, accessTokenOptions);
       res.cookie("refresh_token", refreshToken, refreshTokenOptions);
 
-      // ✅ return a response, don't call next()
-      return res.status(200).json({
-        success: true,
-        accessToken,
-      });
+      req.user = user; // ✅ attach user for downstream
+      next(); // ✅ always continue
 
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 401));
     }
+  }
+);
+
+// ✅ standalone route — uses middleware then sends response
+export const updateAccessToken = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    return res.status(200).json({
+      success: true,
+      accessToken: req.cookies.ACCESS_TOKEN_SECRET,
+    });
   }
 );
 // update user info

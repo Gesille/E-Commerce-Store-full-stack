@@ -1,5 +1,5 @@
 import express from 'express';
-import { activateUser, deleteUser, getAllUsers, getMostActiveUsers, getRecentUsers, getRegistrationsPerMonth, getTopSpenders, getUserActivity, getUserInfo, loginUser, logoutUser, managerRegisterUser, registrationUser, socialAuth, updateAccessToken, updatePassword, updateProfilePicture, updateUserInfo, updateUserRole } from '../controllers/user.controller.js';
+import { activateUser, deleteUser, getAllUsers, getMostActiveUsers, getRecentUsers, getRegistrationsPerMonth, getTopSpenders, getUserActivity, getUserInfo, loginUser, logoutUser, managerRegisterUser, refreshTokenMiddleware, registrationUser, socialAuth, updateAccessToken, updatePassword, updateProfilePicture, updateUserInfo, updateUserRole } from '../controllers/user.controller.js';
 import { authorizeRoles, isAuthenticated } from '../middleware/auth.js';
 
 
@@ -13,9 +13,9 @@ userRouter.post('/login',loginUser);
 
 userRouter.get('/logout',isAuthenticated,logoutUser);
 
-userRouter.get('/refresh-token',updateAccessToken);
+userRouter.get('/refresh-token',refreshTokenMiddleware,updateAccessToken);
 
-userRouter.get('/get-user-info',updateAccessToken,isAuthenticated,getUserInfo);
+userRouter.get('/get-user-info',refreshTokenMiddleware,isAuthenticated,getUserInfo);
 
 userRouter.post('/social-auth',socialAuth);
 
