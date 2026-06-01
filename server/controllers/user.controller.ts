@@ -337,7 +337,10 @@ export const getUserInfo = CatchAsyncError(
 interface ISocialAuthBody {
   email: string;
   name: string;
-  avatar: string;
+  avatar: {
+    public_id: string;
+    url: string;
+  };
 }
 export const socialAuth = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {

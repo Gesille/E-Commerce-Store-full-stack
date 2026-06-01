@@ -19,23 +19,23 @@ userRouter.get('/get-user-info',refreshTokenMiddleware,isAuthenticated,getUserIn
 
 userRouter.post('/social-auth',socialAuth);
 
-userRouter.put('/update-user-info',updateAccessToken,isAuthenticated,updateUserInfo);
+userRouter.put('/update-user-info',refreshTokenMiddleware,isAuthenticated,updateUserInfo);
 
-userRouter.put('/update-user-pass',updateAccessToken,isAuthenticated,updatePassword);
+userRouter.put('/update-user-pass',refreshTokenMiddleware,isAuthenticated,updatePassword);
 
-userRouter.put('/update-user-avatar',updateAccessToken,isAuthenticated,updateProfilePicture);
+userRouter.put('/update-user-avatar',refreshTokenMiddleware,isAuthenticated,updateProfilePicture);
 
-userRouter.get('/get-users',updateAccessToken,isAuthenticated,authorizeRoles("admin"),getAllUsers);
+userRouter.get('/get-users',refreshTokenMiddleware,isAuthenticated,authorizeRoles("admin"),getAllUsers);
 
 userRouter.put('/update-user',isAuthenticated,authorizeRoles("admin"),updateUserRole);
 
-userRouter.delete('/delete-user/:id',updateAccessToken,isAuthenticated,authorizeRoles("admin"),deleteUser);
+userRouter.delete('/delete-user/:id',refreshTokenMiddleware,isAuthenticated,authorizeRoles("admin"),deleteUser);
 console.log(userRouter.stack);
 
 
 userRouter.get(
   "/top-spenders",
-  updateAccessToken,
+  refreshTokenMiddleware,
   isAuthenticated,
   authorizeRoles("admin"),
   getTopSpenders,
@@ -43,7 +43,7 @@ userRouter.get(
 
 userRouter.get(
   "/user/most-active-users",
-  updateAccessToken,
+  refreshTokenMiddleware,
   isAuthenticated,
   authorizeRoles("admin"),
   getMostActiveUsers,
@@ -51,7 +51,7 @@ userRouter.get(
 
 userRouter.get(
   "/user/recent-users",
-  updateAccessToken,
+  refreshTokenMiddleware,
   isAuthenticated,
   authorizeRoles("admin"),
   getRecentUsers,
@@ -59,7 +59,7 @@ userRouter.get(
 
 userRouter.get(
   "/user/registrations-per-month",
-  updateAccessToken,
+  refreshTokenMiddleware,
   isAuthenticated,
   authorizeRoles("admin"),
   getRegistrationsPerMonth
