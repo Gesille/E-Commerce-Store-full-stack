@@ -261,13 +261,14 @@ export const updateAccessToken = CatchAsyncError(
         { expiresIn: "3d" }
       );
 
-      // ✅ set both cookies again
       res.cookie("ACCESS_TOKEN_SECRET", accessToken, accessTokenOptions);
       res.cookie("refresh_token", refreshToken, refreshTokenOptions);
 
-      req.user = user; // ✅ set user so next middleware works
-
-      next(); // ✅ IMPORTANT — continue to the actual route handler
+      // ✅ return a response, don't call next()
+      return res.status(200).json({
+        success: true,
+        accessToken,
+      });
 
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 401));
