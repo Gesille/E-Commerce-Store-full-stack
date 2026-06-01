@@ -2,7 +2,7 @@ import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
 // ─── Shop Config ───────────────────────────────────────────────────────────
 
-const shopLogoUrl = "/E-Commerce-Store-Frontend/adminPanel/public/chefworldlogo1.png"; 
+const shopLogoUrl = "/chefworldlogo1.png"; 
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
