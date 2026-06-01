@@ -4,7 +4,7 @@ import {
 } from "@/redux/pos/Posapi";
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
 import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
-import { useState } from "react";
+import { useState, useMemo } from "react"; // أضفنا useMemo لثبات رقم الإيصال
 import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
 
 function calcLineTotal(item: CartItem) {
@@ -36,7 +36,9 @@ export function ReceiptModal({
   const { subtotal, tax, total } = calcOrderTotals(order.cart);
   const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
-  const receiptNo = `RCP-${Date.now().toString().slice(-6)}`;
+
+  // استخدام useMemo لضمان عدم تغير رقم الإيصال عند إعادة رندر الـ Modal
+  const receiptNo = useMemo(() => `RCP-${Date.now().toString().slice(-6)}`, []);
 
   const [fetchPdf, { isLoading: isPdfLoading }] =
     useLazyGetOrderReceiptPdfQuery();
@@ -49,13 +51,15 @@ export function ReceiptModal({
     pdfUrl?: string;
     message?: string;
   }>({ status: "idle" });
-const { printReceipt } = usePrintReceipt({
-  cart: order.cart,
-  customer,
-  paymentLines,
-  odooOrderId,
-  receiptNo,
-});
+
+  // ربط الـ Hook ببيانات الإيصال المحدثة
+  const { printReceipt } = usePrintReceipt({
+    cart: order.cart,
+    customer,
+    paymentLines,
+    odooOrderId,
+    receiptNo,
+  });
 
   const handlePrint = () => printReceipt();
 
@@ -75,6 +79,7 @@ const { printReceipt } = usePrintReceipt({
       });
     }
   };
+
   const [sendReceiptByEmail, { isLoading: isSending }] =
     useSendReceiptByEmailMutation();
 
@@ -101,10 +106,11 @@ const { printReceipt } = usePrintReceipt({
       });
     }
   };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-[360px] flex flex-col overflow-hidden">
-        {/* Receipt */}
+        {/* شاشة العرض المباشرة في الموقع (UI) */}
         <div className="px-6 py-5 border-b border-gray-100">
           <div className="text-center mb-4">
             <div className="text-[16px] font-bold text-gray-900">
@@ -171,7 +177,6 @@ const { printReceipt } = usePrintReceipt({
             )}
           </div>
 
-          {/* Invoice feedback */}
           {invoiceState.status === "success" && (
             <div className="mt-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 flex items-center justify-between">
               <span className="text-[12px] text-emerald-700 font-medium">
@@ -199,7 +204,8 @@ const { printReceipt } = usePrintReceipt({
             Thank you for your purchase!
           </div>
         </div>
-        {/* Actions */}
+
+        {/* Buttons */}
         <div className="flex flex-col gap-2 px-5 py-4">
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -242,6 +248,7 @@ const { printReceipt } = usePrintReceipt({
           </button>
         </div>
       </div>
+
       {/* Email Modal */}
       {emailModal && (
         <div className="absolute inset-0 z-60 flex items-center justify-center bg-black/40">
@@ -261,7 +268,6 @@ const { printReceipt } = usePrintReceipt({
               className="h-10 px-3 rounded-xl border border-gray-200 text-[13px] text-gray-800 outline-none focus:border-blue-400 transition-colors"
             />
 
-            {/* Feedback */}
             {emailState.status === "success" && (
               <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-[12px] text-emerald-700 font-medium">
                 ✅ Receipt sent successfully!
@@ -291,6 +297,8 @@ const { printReceipt } = usePrintReceipt({
           </div>
         </div>
       )}
+
+     
       <PrintableReceipt
         cart={order.cart}
         customer={customer}
