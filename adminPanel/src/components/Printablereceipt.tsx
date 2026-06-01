@@ -1,8 +1,8 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
-// ─── Shop Text Configuration ───────────────────────────────────────────────
+// ─── إعدادات المتجر النصية ──────────────────────────────────────────────────
 const shopName    = "CHEF'S WORLD";
-const shopTagline = "Restaurant, Bar & Kitchen Supplies";
+const shopTagline = "RESTAURANT, BAR & KITCHEN SUPPLIES";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
 const shopPhone   = "(555) 123-4567";
 
@@ -31,7 +31,7 @@ export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
 }
 
-// تصميم فخم جداً، منظم، وعصري، سيعالج كصورة ناعمة وحادة
+// بناء التصميم العصري المحمي هيدروليكياً عبر الجداول المستقرة
 function buildReceiptHTML(
   cart: CartItem[],
   customer: Customer | null,
@@ -51,189 +51,216 @@ function buildReceiptHTML(
     minute:  "2-digit",
   }).replace(/,/g, "");
 
+  // سطر المنتجات العصري: اسم المادة بارز وبجانبه الإجمالي، وتحته التفاصيل متباعدة
   const lineItems = cart.map((item) => {
     const lineTotal = calcLineTotal(item);
     return `
-      <div class="item-block">
-        <div class="flex-row">
-          <span class="font-bold text-lg">${item.name}</span>
-          <span class="font-bold text-lg">$${fmt(lineTotal)}</span>
-        </div>
-        <div class="flex-row text-gray" style="margin-top: 2px;">
-          <span>${item.qty} x $${fmt(item.price)} ${item.discount ? `(-${item.discount}%)` : ""}</span>
-          <span></span>
-        </div>
-      </div>`;
+      <table class="item-table">
+        <tr>
+          <td class="text-left font-bold" style="font-size: 11pt; letter-spacing: 0.3px;">${item.name}</td>
+          <td class="text-right font-bold" style="font-size: 11pt;">$${fmt(lineTotal)}</td>
+        </tr>
+        <tr>
+          <td class="text-left text-light" style="font-size: 8.5pt; padding-top: 1px; letter-spacing: 0.5px;">
+            ${item.qty} Qty  x  $${fmt(item.price)} ${item.discount ? ` [Disc ${item.discount}%]` : ""}
+          </td>
+          <td></td>
+        </tr>
+      </table>`;
   }).join("");
 
   const paymentRows = paymentLines.map((l) => `
-    <div class="flex-row text-gray" style="margin-bottom: 4px;">
-      <span style="text-transform: capitalize;">${l.method}</span>
-      <span class="font-medium">$${fmt(l.amount)}</span>
-    </div>`).join("");
+    <tr>
+      <td class="text-left text-light" style="text-transform: uppercase; font-size: 9pt; padding: 2px 0;">${l.method}</td>
+      <td class="text-right font-medium" style="font-size: 10pt;">$${fmt(l.amount)}</td>
+    </tr>`).join("");
 
   return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="ascii"/>
+  <title>Receipt</title>
   <style>
-    /* استخدام خط ويب احترافي مخصص للأنظمة المعاصرة */
-    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
-    
-    * {
+    @page {
+      size: 80mm auto;
+      margin: 0mm;
+    }
+    *, *:before, *:after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
     body {
-      width: 72mm; /* عرض مثالي لطباعة بكسلية متناسقة دون تشويه الجوانب */
+      width: 66mm; /* العرض الذهبي لمنع خروج الأحرف وحقن الرموز */
       margin: 0 auto;
-      padding: 10px;
-      font-family: 'Courier Prime', monospace !important;
+      padding: 5mm 1mm;
+      font-family: "Courier New", Courier, monospace !important;
       color: #000000;
       background: #ffffff;
-      font-size: 11pt;
+      font-size: 9.5pt;
+      line-height: 1.35;
     }
     
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .text-left { text-align: left; }
-    .font-medium { font-weight: 400; }
+    .font-medium { font-weight: 600; }
     .font-bold { font-weight: 700; }
-    .text-gray { color: #111111; }
-    .text-lg { font-size: 12pt; }
+    .text-light { color: #000000; font-weight: normal; }
 
+    /* ════════ HEADER STYLE ════════ */
+    .header-block {
+      margin-bottom: 12px;
+      padding-bottom: 2px;
+    }
     .shop-name { 
-      font-size: 18pt; 
+      font-size: 16pt; 
       font-weight: 700; 
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
       margin-bottom: 4px;
     }
     .shop-sub { 
-      font-size: 10pt; 
+      font-size: 8.5pt; 
+      letter-spacing: 0.2px;
       margin-bottom: 2px;
     }
     
-    .divider {
-      border-top: 1px dashed #000000;
-      margin: 10px 0;
+    /* فواصل خطية مستمرة وأنيقة بدلاً من النقاط العشوائية */
+    .line-divider {
+      border-top: 1px solid #000000;
+      margin: 8px 0;
+      width: 100%;
     }
-    .thick-divider {
-      border-top: 2px solid #000000;
-      margin: 12px 0;
+    .double-divider {
+      border-top: 1px dashed #000000;
+      margin: 8px 0;
+      width: 100%;
     }
 
-    .flex-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
+    /* ════════ TABLES ════════ */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    td {
+      padding: 3px 0;
+      font-size: 9.5pt;
+      vertical-align: middle;
     }
     
-    .item-block {
-      margin-bottom: 10px;
-      page-break-inside: avoid;
+    .item-table {
+      margin-bottom: 8px;
     }
     
-    .total-row {
+    .total-label {
+      font-size: 13pt;
+      font-weight: 700;
+      padding-top: 8px;
+    }
+    .total-value {
       font-size: 14pt;
       font-weight: 700;
-      margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px solid #000000;
+      padding-top: 8px;
     }
 
     .footer {
-      font-size: 11pt;
-      margin-top: 15px;
+      font-size: 9pt;
+      margin-top: 16px;
       line-height: 1.4;
     }
   </style>
 </head>
 <body>
 
-  <div class="text-left" style="margin-bottom: 12px;">
+  <div class="header-block text-left">
     <div class="shop-name">${shopName}</div>
     <div class="shop-sub font-bold">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
-    <div class="shop-sub">${shopPhone}</div>
+    <div class="shop-sub">TEL: ${shopPhone}</div>
   </div>
 
-  <div class="divider"></div>
+  <div class="line-divider"></div>
 
-  <div style="line-height: 1.5; margin-bottom: 8px;">
-    <div class="flex-row"><span>Receipt No:</span><span class="font-bold">#${receiptNo}</span></div>
-    <div class="flex-row"><span>Date:</span><span>${dateStr}</span></div>
-    ${odooOrderId ? `<div class="flex-row"><span>Order ID:</span><span class="font-bold">#${odooOrderId}</span></div>` : ""}
-    ${customer ? `<div class="flex-row"><span>Customer:</span><span class="font-bold">${customer.name}</span></div>` : ""}
-  </div>
+  <table style="margin-bottom: 2px;">
+    <tr>
+      <td class="text-left text-light">RECEIPT NO:</td>
+      <td class="text-right font-bold">#${receiptNo}</td>
+    </tr>
+    <tr>
+      <td class="text-left text-light">DATE:</td>
+      <td class="text-right">${dateStr}</td>
+    </tr>
+    ${odooOrderId ? `<tr><td class="text-left text-light">ORDER ID:</td><td class="text-right font-bold">#${odooOrderId}</td></tr>` : ""}
+    ${customer ? `<tr><td class="text-left text-light">CUSTOMER:</td><td class="text-right font-bold">${customer.name}</td></tr>` : ""}
+  </table>
 
-  <div class="divider"></div>
+  <div class="line-divider"></div>
 
-  <div class="flex-row font-bold" style="font-size: 10pt; margin-bottom: 5px;">
-    <span>DESCRIPTION</span>
-    <span>TOTAL</span>
-  </div>
+  <table>
+    <tr>
+      <td class="text-left font-bold" style="font-size: 9pt; letter-spacing: 0.8px;">ITEMS / DESCRIPTION</td>
+      <td class="text-right font-bold" style="font-size: 9pt; letter-spacing: 0.8px;">TOTAL</td>
+    </tr>
+  </table>
 
-  <div class="divider"></div>
+  <div class="line-divider"></div>
 
-  <div style="margin-top: 5px;">
+  <div style="padding: 2px 0;">
     ${lineItems}
   </div>
 
-  <div class="divider"></div>
+  <div class="double-divider"></div>
 
-  <div style="line-height: 1.5;">
-    <div class="flex-row">
-      <span>Subtotal</span>
-      <span>$${fmt(subtotal)}</span>
-    </div>
-    <div class="flex-row" style="margin-top: 2px;">
-      <span>Tax (10%)</span>
-      <span>$${fmt(tax)}</span>
-    </div>
-    <div class="flex-row total-row">
-      <span>TOTAL</span>
-      <span>$${fmt(total)}</span>
-    </div>
-  </div>
+  <table>
+    <tr>
+      <td class="text-left text-light" style="padding: 2px 0; font-size: 9.5pt;">Subtotal</td>
+      <td class="text-right" style="padding: 2px 0; font-size: 9.5pt;">$${fmt(subtotal)}</td>
+    </tr>
+    <tr>
+      <td class="text-left text-light" style="padding: 2px 0; font-size: 9.5pt;">Tax (10%)</td>
+      <td class="text-right" style="padding: 2px 0; font-size: 9.5pt;">$${fmt(tax)}</td>
+    </tr>
+    <tr>
+      <td class="text-left total-label" style="border-top: 1px solid #000000;">TOTAL</td>
+      <td class="text-right total-value" style="border-top: 1px solid #000000;">$${fmt(total)}</td>
+    </tr>
+  </table>
 
-  <div class="divider"></div>
+  <div class="double-divider"></div>
 
-  <div style="margin-top: 5px;">
-    ${paymentRows}
-    ${change > 0.005 ? `
-    <div class="flex-row font-bold" style="margin-top: 4px;">
-      <span>Change</span>
-      <span>$${fmt(change)}</span>
-    </div>` : ""}
-  </div>
+  <table style="margin-top: 2px;">
+    <tbody>
+      ${paymentRows}
+      ${change > 0.005 ? `
+      <tr>
+        <td class="text-left font-bold" style="font-size: 10pt; padding-top: 4px;">CHANGE DUE</td>
+        <td class="text-right font-bold" style="font-size: 11pt; padding-top: 4px;">$${fmt(change)}</td>
+      </tr>` : ""}
+    </tbody>
+  </table>
 
-  <div class="thick-divider"></div>
+  <div class="line-divider" style="margin-top: 12px;"></div>
 
   <div class="text-left footer">
-    <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
-    <div style="color: #222;">Please keep this receipt for your records.</div>
-    <div style="margin-top: 10px; font-size: 9pt; color: #555;">* ${receiptNo} *</div>
+    <div class="font-bold" style="font-size: 10pt; margin-bottom: 3px; letter-spacing: 0.3px;">THANK YOU FOR YOUR VISIT!</div>
+    <div class="text-light" style="font-size: 8.5pt; color: #111;">Please keep this receipt for your records.</div>
+    <div style="margin-top: 10px; font-size: 8pt; text-align: center; letter-spacing: 1px;">* ${receiptNo} *</div>
   </div>
 
 </body>
 </html>`;
 }
 
-// الـ Hook المطور الذي يجبر المتصفح على معالجة المستند وطباعته ببروتوكول رسومي آمن ونظيف
 export function usePrintReceipt(options: PrintableReceiptProps) {
   const printReceipt = async () => {
     const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
     const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
-    // تنظيف أي فريمات سابقة
     document.getElementById("__print_frame__")?.remove();
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    
-    // إعداد حجم مخصص للفريم يطابق تماماً بيئة الرسوميات للطابعة
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:72mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -245,15 +272,10 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     iframe.onload = () => {
       setTimeout(() => {
-        if (!iframe.contentWindow) return;
-
-        // إطلاق أمر الطباعة المباشر للمتصفح
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-        
-        // مسح الفريم بعد انتهاء العملية الآمنة
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
         setTimeout(() => iframe.remove(), 2000);
-      }, 500);
+      }, 300);
     };
   };
 
