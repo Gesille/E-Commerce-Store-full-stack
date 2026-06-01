@@ -158,7 +158,7 @@ function buildReceiptHTML(
     <div class="shop-sub">${shopPhone}</div>
   </div>
 
-  <div class="divider"></div>
+  <div class="thick-divider"></div>
 
   <div style="line-height: 1.5; margin-bottom: 8px;">
     <div class="flex-row"><span>Receipt No:</span><span class="font-bold">#${receiptNo}</span></div>
@@ -167,7 +167,7 @@ function buildReceiptHTML(
     ${customer ? `<div class="flex-row"><span>Customer:</span><span class="font-bold">${customer.name}</span></div>` : ""}
   </div>
 
-  <div class="divider"></div>
+  <div class="thick-divider"></div>
 
   <div class="flex-row font-bold" style="font-size: 10pt; margin-bottom: 5px;">
     <span>DESCRIPTION</span>
