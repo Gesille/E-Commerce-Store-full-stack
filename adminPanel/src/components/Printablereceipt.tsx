@@ -45,7 +45,7 @@ function buildReceiptHTML(
   const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
 
-  // استخدام صيغة تاريخ مبسطة خالية من أي رموز معقدة
+  // صيغة تاريخ خام ومبسطة جداً بدون أي فواصل أو رموز
   const dateStr = new Date().toLocaleString("en-US", {
     year:    "numeric",
     month:   "short",
@@ -53,7 +53,7 @@ function buildReceiptHTML(
     hour:    "2-digit",
     minute:  "2-digit",
     hour12:  true
-  }).replace(/,/g, ""); // إزالة الفواصل لتفادي أخطاء الترميز
+  }).replace(/,/g, "");
 
   // ── Line items ────────────────────────────────────────────────────────────
   const lineItems = cart.map((item) => {
@@ -77,7 +77,6 @@ function buildReceiptHTML(
       </tr>` : ""}`;
   }).join("");
 
-  // ── Payment rows ──────────────────────────────────────────────────────────
   const paymentRows = paymentLines.map((l) => `
     <tr>
       <td style="text-align: left;">${l.method}</td>
@@ -91,41 +90,43 @@ function buildReceiptHTML(
     </tr>` : "";
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8"/>
-  <title>Receipt</title>
+  <meta charset="ascii"/> <title>Receipt</title>
   <style>
     @page {
       size: 80mm auto;
       margin: 0mm;
     }
-    /* إلغاء الـ Bold تماماً لتجنب الحروف المتداخلة والممسوحة */
     *, *:before, *:after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-weight: normal !important; 
+      font-weight: normal !important;
+      font-family: "Courier New", Courier, monospace !important;
     }
     body {
-      width: 68mm; /* تصغير العرض لتفادي الحروف الغريبة في الهوامش */
+      width: 64mm; /* تصغير العرض لمنع الطابعة من توليد رموز حماية هوامش */
       margin: 0 auto;
-      padding: 4mm 1mm;
-      font-family: "Courier New", Courier, monospace; /* الخط الافتراضي الآمن للطابعة */
+      padding: 6mm 0mm;
       font-size: 10pt;
-      line-height: 1.3;
+      line-height: 1.4;
       color: #000000;
       background: #ffffff;
     }
-    .text-center { text-align: center; }
     
-    /* استخدام تكبير حجم الخط بدلاً من الـ Bold لإبراز العناوين */
-    .shop-name { font-size: 15pt; margin-bottom: 4px; text-transform: uppercase; }
-    .shop-sub { font-size: 8.5pt; margin-bottom: 2px; }
+    /* استبدال التوسط بـ الإزاحة الآمنة لمنع إرباك معالج الطابعة القديم */
+    .header-block {
+      padding-left: 4mm;
+      margin-bottom: 6px;
+    }
+    .shop-name { font-size: 14pt; text-transform: uppercase; margin-bottom: 2px; }
+    .shop-sub { font-size: 8.5pt; margin-bottom: 1px; }
     
     .divider {
       border-top: 1px dashed #000000;
       margin: 6px 0;
+      width: 100%;
     }
 
     table {
@@ -144,14 +145,19 @@ function buildReceiptHTML(
     }
     
     .grand-total td {
-      font-size: 13pt; /* تكبير الخط بدلاً من جعلة عريضاً */
-      padding-top: 4px;
+      font-size: 12pt;
+      padding-top: 5px;
+    }
+    .footer-block {
+      padding-left: 4mm;
+      font-size: 9pt;
+      margin-top: 8px;
     }
   </style>
 </head>
 <body>
 
-  <div class="text-center">
+  <div class="header-block">
     <div class="shop-name">${shopName}</div>
     <div class="shop-sub">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
@@ -160,7 +166,7 @@ function buildReceiptHTML(
 
   <div class="divider"></div>
 
-  <table>
+  <table style="width: 100%;">
     <tr>
       <td style="text-align: left;">RECEIPT:</td>
       <td style="text-align: right;">${receiptNo}</td>
@@ -170,6 +176,7 @@ function buildReceiptHTML(
       <td style="text-align: right;">${dateStr}</td>
     </tr>
     ${odooOrderId ? `<tr><td style="text-align: left;">ORDER ID:</td><td style="text-align: right;">#${odooOrderId}</td></tr>` : ""}
+    ${customer ? `<tr><td style="text-align: left;">CUSTOMER:</td><td style="text-align: right;">${customer.name}</td></tr>` : ""}
   </table>
 
   <div class="divider"></div>
@@ -216,8 +223,8 @@ function buildReceiptHTML(
 
   <div class="divider"></div>
 
-  <div class="text-center" style="font-size: 9pt; margin-top: 5px;">
-    <div style="margin-bottom: 4px;">Thank you for your visit!</div>
+  <div class="footer-block">
+    <div style="margin-bottom: 3px;">Thank you for your visit!</div>
     <div style="font-size: 8pt;">* ${receiptNo} *</div>
   </div>
 
