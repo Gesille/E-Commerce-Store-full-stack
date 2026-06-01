@@ -1,6 +1,6 @@
 import { CartItem, Customer, PaymentLine } from "@/types/pos";
 
-// ─── إعدادات المتجر النصية ──────────────────────────────────────────────────
+// ─── Shop Text Configuration ───────────────────────────────────────────────
 const shopName    = "CHEF'S WORLD";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "123 Culinary Ave, Foodie City, FL 12345";
@@ -31,7 +31,7 @@ export function PrintableReceipt(_props: PrintableReceiptProps) {
   return null;
 }
 
-
+// تصميم فخم جداً، منظم، وعصري، سيعالج كصورة ناعمة وحادة
 function buildReceiptHTML(
   cart: CartItem[],
   customer: Customer | null,
@@ -49,220 +49,191 @@ function buildReceiptHTML(
     year:    "numeric",
     hour:    "2-digit",
     minute:  "2-digit",
-  }).replace(/,/g, ""); // إزالة الفواصل لمنع أخطاء الترميز
+  }).replace(/,/g, "");
 
-  // بناء سطور المنتجات (كل مادة في جدول مستقل لضمان عدم تداخل السعر مع الاسم)
   const lineItems = cart.map((item) => {
     const lineTotal = calcLineTotal(item);
     return `
-      <table class="item-table">
-        <tr>
-          <td class="text-left font-bold" style="font-size: 11pt;">${item.name}</td>
-          <td class="text-right font-bold" style="font-size: 11pt;">$${fmt(lineTotal)}</td>
-        </tr>
-        <tr>
-          <td class="text-left text-gray" style="font-size: 9pt; padding-top: 2px;">
-            ${item.qty} x $${fmt(item.price)} ${item.discount ? `(-${item.discount}%)` : ""}
-          </td>
-          <td></td>
-        </tr>
-      </table>`;
+      <div class="item-block">
+        <div class="flex-row">
+          <span class="font-bold text-lg">${item.name}</span>
+          <span class="font-bold text-lg">$${fmt(lineTotal)}</span>
+        </div>
+        <div class="flex-row text-gray" style="margin-top: 2px;">
+          <span>${item.qty} x $${fmt(item.price)} ${item.discount ? `(-${item.discount}%)` : ""}</span>
+          <span></span>
+        </div>
+      </div>`;
   }).join("");
 
   const paymentRows = paymentLines.map((l) => `
-    <tr>
-      <td class="text-left text-gray" style="text-transform: capitalize;">${l.method}</td>
-      <td class="text-right font-medium">$${fmt(l.amount)}</td>
-    </tr>`).join("");
+    <div class="flex-row text-gray" style="margin-bottom: 4px;">
+      <span style="text-transform: capitalize;">${l.method}</span>
+      <span class="font-medium">$${fmt(l.amount)}</span>
+    </div>`).join("");
 
   return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="ascii"/>
-  <title>Receipt</title>
+  <meta charset="utf-8"/>
   <style>
-    @page {
-      size: 80mm auto;
-      margin: 0mm;
-    }
-    *, *:before, *:after {
+    /* استخدام خط ويب احترافي مخصص للأنظمة المعاصرة */
+    @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+    
+    * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
     body {
-      width: 68mm; /* عرض آمن يمنع خروج النصوص للهوامش الحرجة */
+      width: 72mm; /* عرض مثالي لطباعة بكسلية متناسقة دون تشويه الجوانب */
       margin: 0 auto;
-      padding: 4mm 2mm;
-      font-family: "Courier New", Courier, monospace !important;
+      padding: 10px;
+      font-family: 'Courier Prime', monospace !important;
       color: #000000;
       background: #ffffff;
-      font-size: 10pt;
-      line-height: 1.3;
+      font-size: 11pt;
     }
     
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .text-left { text-align: left; }
-    .font-medium { font-weight: 600; }
+    .font-medium { font-weight: 400; }
     .font-bold { font-weight: 700; }
-    .text-gray { color: #333333; }
+    .text-gray { color: #111111; }
+    .text-lg { font-size: 12pt; }
 
-    /* ════════ HEADER ════════ */
-    .header-block {
-      margin-bottom: 8px;
-    }
     .shop-name { 
-      font-size: 15pt; 
+      font-size: 18pt; 
       font-weight: 700; 
+      letter-spacing: 0.5px;
       margin-bottom: 4px;
     }
     .shop-sub { 
-      font-size: 9pt; 
+      font-size: 10pt; 
       margin-bottom: 2px;
     }
     
     .divider {
       border-top: 1px dashed #000000;
-      margin: 8px 0;
-      width: 100%;
+      margin: 10px 0;
     }
     .thick-divider {
       border-top: 2px solid #000000;
-      margin: 10px 0;
-      width: 100%;
+      margin: 12px 0;
     }
 
-    /* ════════ TABLES ════════ */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    td {
-      padding: 2px 0;
-      font-size: 10pt;
-      vertical-align: top;
+    .flex-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
     }
     
-    .item-table {
-      margin-bottom: 6px;
+    .item-block {
+      margin-bottom: 10px;
+      page-break-inside: avoid;
     }
     
-    .total-title {
-      font-size: 13pt;
-      font-weight: 700;
-      padding-top: 4px;
-    }
-    .total-amount {
+    .total-row {
       font-size: 14pt;
       font-weight: 700;
-      padding-top: 4px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #000000;
     }
 
     .footer {
-      font-size: 9.5pt;
-      margin-top: 12px;
+      font-size: 11pt;
+      margin-top: 15px;
       line-height: 1.4;
     }
   </style>
 </head>
 <body>
 
-  <!-- ══ HEADER SECTION ══ -->
-  <div class="header-block text-left">
+  <div class="text-left" style="margin-bottom: 12px;">
     <div class="shop-name">${shopName}</div>
-    <div class="shop-sub">${shopTagline}</div>
+    <div class="shop-sub font-bold">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
     <div class="shop-sub">${shopPhone}</div>
   </div>
 
   <div class="divider"></div>
 
-  <!-- ══ META INFO ══ -->
-  <table>
-    <tr>
-      <td class="text-left text-gray">Receipt No:</td>
-      <td class="text-right font-medium">#${receiptNo}</td>
-    </tr>
-    <tr>
-      <td class="text-left text-gray">Date:</td>
-      <td class="text-right">${dateStr}</td>
-    </tr>
-    ${odooOrderId ? `<tr><td class="text-left text-gray">Order ID:</td><td class="text-right font-medium">#${odooOrderId}</td></tr>` : ""}
-    ${customer ? `<tr><td class="text-left text-gray">Customer:</td><td class="text-right font-medium">${customer.name}</td></tr>` : ""}
-  </table>
+  <div style="line-height: 1.5; margin-bottom: 8px;">
+    <div class="flex-row"><span>Receipt No:</span><span class="font-bold">#${receiptNo}</span></div>
+    <div class="flex-row"><span>Date:</span><span>${dateStr}</span></div>
+    ${odooOrderId ? `<div class="flex-row"><span>Order ID:</span><span class="font-bold">#${odooOrderId}</span></div>` : ""}
+    ${customer ? `<div class="flex-row"><span>Customer:</span><span class="font-bold">${customer.name}</span></div>` : ""}
+  </div>
 
   <div class="divider"></div>
 
-  <!-- ══ LABELS ══ -->
-  <table>
-    <tr>
-      <td class="text-left font-bold" style="font-size: 9.5pt; letter-spacing: 0.5px;">DESCRIPTION</td>
-      <td class="text-right font-bold" style="font-size: 9.5pt; letter-spacing: 0.5px;">TOTAL</td>
-    </tr>
-  </table>
+  <div class="flex-row font-bold" style="font-size: 10pt; margin-bottom: 5px;">
+    <span>DESCRIPTION</span>
+    <span>TOTAL</span>
+  </div>
 
   <div class="divider"></div>
 
-  <!-- ══ ITEMS LIST ══ -->
-  ${lineItems}
+  <div style="margin-top: 5px;">
+    ${lineItems}
+  </div>
 
   <div class="divider"></div>
 
-  <!-- ══ TOTALS ══ -->
-  <table>
-    <tr>
-      <td class="text-left text-gray">Subtotal</td>
-      <td class="text-right">$${fmt(subtotal)}</td>
-    </tr>
-    <tr>
-      <td class="text-left text-gray">Tax (10%)</td>
-      <td class="text-right">$${fmt(tax)}</td>
-    </tr>
-    <tr>
-      <td class="text-left total-title" style="border-top: 1px solid #000;">TOTAL</td>
-      <td class="text-right total-amount" style="border-top: 1px solid #000;">$${fmt(total)}</td>
-    </tr>
-  </table>
+  <div style="line-height: 1.5;">
+    <div class="flex-row">
+      <span>Subtotal</span>
+      <span>$${fmt(subtotal)}</span>
+    </div>
+    <div class="flex-row" style="margin-top: 2px;">
+      <span>Tax (10%)</span>
+      <span>$${fmt(tax)}</span>
+    </div>
+    <div class="flex-row total-row">
+      <span>TOTAL</span>
+      <span>$${fmt(total)}</span>
+    </div>
+  </div>
 
   <div class="divider"></div>
 
-  <!-- ══ PAYMENTS ══ -->
-  <table>
-    <tbody>
-      ${paymentRows}
-      ${change > 0.005 ? `
-      <tr>
-        <td class="text-left font-bold">Change</td>
-        <td class="text-right font-bold">$${fmt(change)}</td>
-      </tr>` : ""}
-    </tbody>
-  </table>
+  <div style="margin-top: 5px;">
+    ${paymentRows}
+    ${change > 0.005 ? `
+    <div class="flex-row font-bold" style="margin-top: 4px;">
+      <span>Change</span>
+      <span>$${fmt(change)}</span>
+    </div>` : ""}
+  </div>
 
   <div class="thick-divider"></div>
 
-  <!-- ══ FOOTER ══ -->
   <div class="text-left footer">
     <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
-    <div class="text-gray">Please keep this receipt for your records.</div>
-    <div style="margin-top: 6px; font-size: 8pt; color: #444;">* ${receiptNo} *</div>
+    <div style="color: #222;">Please keep this receipt for your records.</div>
+    <div style="margin-top: 10px; font-size: 9pt; color: #555;">* ${receiptNo} *</div>
   </div>
 
 </body>
 </html>`;
 }
 
-// الـ Hook المسؤول عن الطباعة المستقرة ونظيفة
+// الـ Hook المطور الذي يجبر المتصفح على معالجة المستند وطباعته ببروتوكول رسومي آمن ونظيف
 export function usePrintReceipt(options: PrintableReceiptProps) {
   const printReceipt = async () => {
     const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
     const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
 
+    // تنظيف أي فريمات سابقة
     document.getElementById("__print_frame__")?.remove();
 
     const iframe = document.createElement("iframe");
     iframe.id = "__print_frame__";
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:76mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
+    
+    // إعداد حجم مخصص للفريم يطابق تماماً بيئة الرسوميات للطابعة
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:72mm;height:0;border:none;opacity:0;pointer-events:none;z-index:-1;";
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
@@ -274,10 +245,15 @@ export function usePrintReceipt(options: PrintableReceiptProps) {
 
     iframe.onload = () => {
       setTimeout(() => {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
+        if (!iframe.contentWindow) return;
+
+        // إطلاق أمر الطباعة المباشر للمتصفح
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        
+        // مسح الفريم بعد انتهاء العملية الآمنة
         setTimeout(() => iframe.remove(), 2000);
-      }, 300);
+      }, 500);
     };
   };
 
