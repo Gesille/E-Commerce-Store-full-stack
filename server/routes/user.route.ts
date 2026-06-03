@@ -30,7 +30,7 @@ userRouter.get('/get-users',refreshTokenMiddleware,isAuthenticated,authorizeRole
 userRouter.put('/update-user',isAuthenticated,authorizeRoles("admin"),updateUserRole);
 
 userRouter.delete('/delete-user/:id',refreshTokenMiddleware,isAuthenticated,authorizeRoles("admin"),deleteUser);
-console.log(userRouter.stack);
+
 
 
 userRouter.get(

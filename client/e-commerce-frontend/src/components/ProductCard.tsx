@@ -59,7 +59,7 @@ const ProductCard = ({
             src={imageUrl}
             alt={product.name}
             fill
-            className="object-contain p-4 bg-neutral-100"
+            className="object-contain p-4 bg-white"
             sizes="(max-width: 768px) 100vw, 33vw"
           />
            {/* Stock badge */}
