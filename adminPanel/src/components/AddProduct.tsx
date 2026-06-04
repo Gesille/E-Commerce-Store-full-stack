@@ -60,7 +60,7 @@ const AddProduct = () => {
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
   const [createProduct, { isLoading }] = useCreateProductMutation();
   const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
-
+console.log("categories", categories);
   const toBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
