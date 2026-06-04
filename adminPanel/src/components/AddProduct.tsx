@@ -13,7 +13,7 @@ import { Button } from "./ui/button";
 import { DollarSign, Edit3, Grid3X3, Hash, Layers, Package, Palette, User } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCreateProductMutation } from "@/redux/product/productApi";
 import toast from "react-hot-toast";
 import { useGetCategoriesQuery } from "@/redux/category/categoryApi";
@@ -101,6 +101,43 @@ const AddProduct = () => {
       toast.error(err?.data?.message ?? "Failed to create product");
     }
   };
+  const barcodeRef = useRef<HTMLInputElement>(null);
+const barcodeBufferRef = useRef("");
+const barcodeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    // Only capture when barcode field is focused OR when it's scanner-speed input
+    const now = Date.now();
+   const timeSinceLast = now - ((barcodeRef.current as any)?._lastKey ?? 0);
+    if (barcodeRef.current) (barcodeRef.current as any)._lastKey = now;
+
+    if (document.activeElement === barcodeRef.current) return; // let the input handle it naturally
+
+    const isScannerSpeed = timeSinceLast < 50 && barcodeBufferRef.current.length > 0;
+ 
+    if (e.key === "Enter" && barcodeBufferRef.current.length > 2) {
+      const code = barcodeBufferRef.current.trim();
+      barcodeBufferRef.current = "";
+      clearTimeout(barcodeTimerRef.current);
+      form.setValue("barcode", code);
+      barcodeRef.current?.focus();
+      return;
+    }
+
+    if (e.key.length === 1 && isScannerSpeed) {
+      e.preventDefault();
+      barcodeBufferRef.current += e.key;
+      clearTimeout(barcodeTimerRef.current);
+      barcodeTimerRef.current = setTimeout(() => {
+        barcodeBufferRef.current = "";
+      }, 100);
+    }
+  };
+
+  window.addEventListener("keydown", handler, true);
+  return () => window.removeEventListener("keydown", handler, true);
+}, [form]);
 
   return (
     <SheetContent className="w-[420px] sm:w-[500px] p-0 bg-gradient-to-b from-indigo-50 via-white to-purple-50 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
@@ -135,7 +172,6 @@ const AddProduct = () => {
                 <FormMessage />
               </FormItem>
             )} />
-            {/* Add this field block after the reference field */}
 <FormField control={form.control} name="barcode" render={({ field }) => (
   <FormItem>
     <FormLabel className="flex items-center gap-2 text-indigo-700">
@@ -147,15 +183,41 @@ const AddProduct = () => {
       </svg>
       Barcode
     </FormLabel>
-    <FormControl>
-      <Input
-        {...field}
-        placeholder="Scan or type barcode"
-        className="bg-white border-indigo-200 rounded-lg font-mono"
-      />
-    </FormControl>
+    <div className="flex gap-2">
+      <FormControl>
+        <Input
+          {...field}
+          ref={(el) => {
+            field.ref(el);
+            (barcodeRef as any).current = el;
+          }}
+          placeholder="Scan or type barcode"
+          className="bg-white border-indigo-200 rounded-lg font-mono flex-1"
+        />
+      </FormControl>
+      <Button
+        type="button"
+        variant="outline"
+        className="shrink-0 text-xs px-3"
+        onClick={async () => {
+          // Generate EAN-13 style barcode
+          const digits = Array.from({ length: 12 }, () =>
+            Math.floor(Math.random() * 10)
+          );
+          // EAN-13 check digit
+          const check =
+            (10 -
+              (digits.reduce((sum, d, i) =>
+                sum + d * (i % 2 === 0 ? 1 : 3), 0) % 10)) % 10;
+          const barcode = [...digits, check].join("");
+          form.setValue("barcode", barcode);
+        }}
+      >
+        Generate
+      </Button>
+    </div>
     <FormDescription>
-      Used by the POS scanner to find this product instantly
+      Scan with a barcode scanner, type manually, or auto-generate
     </FormDescription>
     <FormMessage />
   </FormItem>

@@ -287,7 +287,7 @@ export const decreaseStock = async (productId: number, qty: number) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, price, stock, colors, sizes, materials,reference  } = req.body;
+    const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
 const exists = await odooRequest(
       "product.template",
       "search_read",
@@ -321,6 +321,7 @@ const exists = await odooRequest(
         list_price: Number(price),
         qty_available: stock,
          default_code: reference || false,
+         barcode: barcode || false, 
         ...(base64Image && { image_1920: base64Image }),
       },
     ]);
@@ -331,6 +332,7 @@ const exists = await odooRequest(
       {
         name,
         reference: reference || "", 
+        barcode: barcode || false, 
         price,
         stock,
         ...(imageUrl && { image: imageUrl }),

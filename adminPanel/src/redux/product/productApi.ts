@@ -26,6 +26,7 @@ export const productApi = apiSlice.injectEndpoints({
           sizes: p.sizes ?? [],
           colors: p.colors ?? [],
           materials: p.materials ?? [],
+          barcode: p.barcode ?? "",
         })),
         
     }),
@@ -39,6 +40,7 @@ export const productApi = apiSlice.injectEndpoints({
         name: string;
         price: number;
         stock: number;
+        barcode?: string;
         image?: string | null;
         colors: string[];
         sizes: string[];
