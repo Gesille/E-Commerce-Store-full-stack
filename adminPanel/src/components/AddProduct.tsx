@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { useCreateProductMutation } from "@/redux/product/productApi";
 import toast from "react-hot-toast";
 import { useGetCategoriesQuery } from "@/redux/category/categoryApi";
+import { BarcodeSticker } from "./BarcodeSticker";
 
 const colors = ["red", "orange", "amber", "yellow", "blue", "purple", "cyan", "black", "white", "gray"] as const;
 const sizes = ["Small", "Medium", "Large", "Industrial"] as const;
@@ -102,36 +103,41 @@ const AddProduct = () => {
     }
   };
   const barcodeRef = useRef<HTMLInputElement>(null);
-const barcodeBufferRef = useRef("");
-const barcodeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
+const watchedBarcode = form.watch("barcode");
 useEffect(() => {
+  let buffer = "";
+  let lastKeyTime = 0;
+  let timer: ReturnType<typeof setTimeout>;
+
   const handler = (e: KeyboardEvent) => {
-    // Only capture when barcode field is focused OR when it's scanner-speed input
+    // Don't intercept if user is typing in any input except barcode field
+    const active = document.activeElement;
+    const isBarcodeField = active === barcodeRef.current;
+    const isOtherInput = active?.tagName === "INPUT" || active?.tagName === "TEXTAREA";
+
+    if (isOtherInput && !isBarcodeField) return;
+
     const now = Date.now();
-   const timeSinceLast = now - ((barcodeRef.current as any)?._lastKey ?? 0);
-    if (barcodeRef.current) (barcodeRef.current as any)._lastKey = now;
+    const gap = now - lastKeyTime;
+    lastKeyTime = now;
 
-    if (document.activeElement === barcodeRef.current) return; // let the input handle it naturally
-
-    const isScannerSpeed = timeSinceLast < 50 && barcodeBufferRef.current.length > 0;
- 
-    if (e.key === "Enter" && barcodeBufferRef.current.length > 2) {
-      const code = barcodeBufferRef.current.trim();
-      barcodeBufferRef.current = "";
-      clearTimeout(barcodeTimerRef.current);
-      form.setValue("barcode", code);
+    if (e.key === "Enter" && buffer.length > 2) {
+      e.preventDefault();
+      form.setValue("barcode", buffer.trim());
       barcodeRef.current?.focus();
+      buffer = "";
+      clearTimeout(timer);
       return;
     }
 
-    if (e.key.length === 1 && isScannerSpeed) {
-      e.preventDefault();
-      barcodeBufferRef.current += e.key;
-      clearTimeout(barcodeTimerRef.current);
-      barcodeTimerRef.current = setTimeout(() => {
-        barcodeBufferRef.current = "";
-      }, 100);
+    if (e.key.length === 1) {
+      // Accept if scanner speed OR if barcode field is focused
+      if (gap < 50 || isBarcodeField) {
+        if (!isBarcodeField) e.preventDefault();
+        buffer += e.key;
+        clearTimeout(timer);
+        timer = setTimeout(() => { buffer = ""; }, 150);
+      }
     }
   };
 
@@ -216,9 +222,15 @@ useEffect(() => {
         Generate
       </Button>
     </div>
-    <FormDescription>
-      Scan with a barcode scanner, type manually, or auto-generate
-    </FormDescription>
+    {watchedBarcode && (
+  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+    <p className="text-xs font-semibold text-gray-500 mb-2">Sticker Preview</p>
+    <BarcodeSticker
+      productName={form.watch("name") || "Product"}
+      barcode={watchedBarcode}
+    />
+  </div>
+)}
     <FormMessage />
   </FormItem>
 )} />

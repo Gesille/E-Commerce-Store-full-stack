@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Product } from "@/app/(dashboard)/products/columns";
 import { useUpdateProductMutation } from "@/redux/product/productApi";
 import toast from "react-hot-toast";
+import { BarcodeSticker } from "../BarcodeSticker";
 
 interface Props {
   product: Product | null;
@@ -150,6 +151,12 @@ const [barcode, setBarcode] = useState("");
       placeholder="Scan or type barcode"
       className="font-mono flex-1"
     />
+    {barcode && (
+  <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+    <p className="text-xs font-semibold text-gray-500 mb-2">Sticker</p>
+    <BarcodeSticker productName={name} barcode={barcode} />
+  </div>
+)}
     <Button
       type="button"
       variant="outline"

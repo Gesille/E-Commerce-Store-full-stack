@@ -27,6 +27,7 @@ export type Product = {
  category: string; 
   sizes: string[];
   colors: string[];
+  barcode?: string;
 };
 
 export const getColumns = (
@@ -99,6 +100,20 @@ export const getColumns = (
     accessorKey: "shortDescription",
     header: "Code",
   },
+  {
+  accessorKey: "barcode",
+  header: "Barcode",
+  cell: ({ row }) => {
+    const b = row.original.barcode;
+    if (b) return <span className="font-mono text-xs text-gray-600">{b}</span>;
+    return (
+      <span className="text-[10px] bg-amber-100 text-amber-700 
+                       font-semibold px-2 py-0.5 rounded-full">
+        ⚠ No barcode
+      </span>
+    );
+  },
+},
   {
     id: "actions",
     cell: ({ row }) => {
