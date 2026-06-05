@@ -218,7 +218,7 @@ useEffect(() => {
 
     // If a character arrives suspiciously fast (< 50 ms), it's a scanner —
     // prevent it from landing in whatever input has focus.
-    const isScannerSpeed = timeSinceLast < 50;
+    const isScannerSpeed = timeSinceLast < 80;
 
     if (e.key === "Enter") {
       if (barcodeBuffer.length > 2) {
@@ -232,7 +232,7 @@ useEffect(() => {
         try {
           const result = await triggerGetProductByBarcode(code).unwrap();
           if (result) {
-            addScannedProductToCart(result);
+            addScannedProductToCart(result.product ?? result);
           } else {
             showToastFor(
               { status: "error", message: `No product found for: ${code}` },
@@ -250,19 +250,22 @@ useEffect(() => {
       return;
     }
 
-    if (e.key.length === 1) {
-      if (isScannerSpeed || barcodeBuffer.length > 0) {
-        // We're in a scan sequence — grab the char and block it from inputs
-        e.preventDefault();
-        barcodeBuffer += e.key;
+   if (e.key.length === 1) {
+  // AFTER: always start buffer on first char if nothing is focused,
+  // then use speed to continue
+  const isInInput = document.activeElement?.tagName === "INPUT" ||
+                    document.activeElement?.tagName === "TEXTAREA";
 
-        clearTimeout(barcodeTimer);
-        barcodeTimer = setTimeout(() => {
-          barcodeBuffer = "";
-        }, 100);
-      }
-      // If it's the very first slow keystroke (manual typing), leave it alone
-    }
+  if (!isInInput && (isScannerSpeed || barcodeBuffer.length > 0)) {
+    e.preventDefault();
+    barcodeBuffer += e.key;
+
+    clearTimeout(barcodeTimer);
+    barcodeTimer = setTimeout(() => {
+      barcodeBuffer = "";
+    }, 150); // increased from 100ms to 150ms
+  }
+}
   };
 
   window.addEventListener("keydown", handler, true); // ← capture phase
