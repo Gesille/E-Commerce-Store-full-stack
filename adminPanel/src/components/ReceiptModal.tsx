@@ -37,7 +37,7 @@ export function ReceiptModal({
   const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
 
-  // استخدام useMemo لضمان عدم تغير رقم الإيصال عند إعادة رندر الـ Modal
+
   const receiptNo = useMemo(() => `RCP-${Date.now().toString().slice(-6)}`, []);
 
   const [fetchPdf, { isLoading: isPdfLoading }] =
@@ -52,7 +52,7 @@ export function ReceiptModal({
     message?: string;
   }>({ status: "idle" });
 
-  // ربط الـ Hook ببيانات الإيصال المحدثة
+  
   const { printReceipt } = usePrintReceipt({
     cart: order.cart,
     customer,

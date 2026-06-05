@@ -269,7 +269,7 @@ export async function sendReceiptByEmailService(
     change: Number(change),
     paymentMethod,
 
-    shopName: process.env.SHOP_NAME ?? "My Shop",
+    shopName: process.env.SHOP_NAME ?? "Chef's World",
     shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
     shopAddress: process.env.SHOP_ADDRESS ?? "",
     shopPhone: process.env.SHOP_PHONE ?? "",
