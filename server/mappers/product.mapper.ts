@@ -32,6 +32,7 @@ export const toCleanProduct = (
   return {
     id: product.id,
     reference: product.default_code || null,
+    barcode: product.barcode || null, 
     name: product.display_name,
     price: product.lst_price,
     stock: product.qty_available,

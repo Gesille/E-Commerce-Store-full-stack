@@ -18,6 +18,7 @@ export const getAllProductsService = async (category?: number) => {
       fields: [
         "id",
          "default_code",
+         "barcode",
         "name",
         "list_price",
         "qty_available",
