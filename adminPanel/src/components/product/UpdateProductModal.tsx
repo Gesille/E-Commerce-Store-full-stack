@@ -87,7 +87,8 @@ export const UpdateProductModal = ({
   const handleSubmit = async () => {
     if (!product) return;
     try {
-      await updateProduct({
+      console.log("Sending barcode:", barcode);
+      const result = await updateProduct({
         id: product.id,
         name,
         price,
@@ -98,10 +99,11 @@ export const UpdateProductModal = ({
         sizes: sizes.split(",").map((s) => s.trim()).filter(Boolean),
         materials: materials.split(",").map((m) => m.trim()).filter(Boolean),
       }).unwrap();
-
+console.log("Response:", result);
       toast.success("Product updated successfully");
       onSuccess();
       onClose();
+      
     } catch (err: any) {
       toast.error(err?.data?.message ?? "Failed to update product");
     }
