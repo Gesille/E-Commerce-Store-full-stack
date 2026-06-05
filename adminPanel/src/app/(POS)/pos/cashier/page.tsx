@@ -206,6 +206,7 @@ export default function CashierPage() {
   );
 
   // ── Barcode scanner ────────────────────────────────────────────────────────
+// ── Barcode scanner ────────────────────────────────────────────────────────
 useEffect(() => {
   let barcodeBuffer = "";
   let lastKeyTime = 0;
@@ -215,10 +216,6 @@ useEffect(() => {
     const now = Date.now();
     const timeSinceLast = now - lastKeyTime;
     lastKeyTime = now;
-
-    // If a character arrives suspiciously fast (< 50 ms), it's a scanner —
-    // prevent it from landing in whatever input has focus.
-    const isScannerSpeed = timeSinceLast < 80;
 
     if (e.key === "Enter") {
       if (barcodeBuffer.length > 2) {
@@ -234,41 +231,41 @@ useEffect(() => {
           if (result) {
             addScannedProductToCart(result.product ?? result);
           } else {
-            showToastFor(
-              { status: "error", message: `No product found for: ${code}` },
-              3000,
-            );
+            showToastFor({ status: "error", message: `No product found for: ${code}` }, 3000);
           }
         } catch {
-          showToastFor(
-            { status: "error", message: `Product not found: ${code}` },
-            3000,
-          );
+          showToastFor({ status: "error", message: `Product not found: ${code}` }, 3000);
         }
       }
       barcodeBuffer = "";
       return;
     }
 
-   if (e.key.length === 1) {
-  // AFTER: always start buffer on first char if nothing is focused,
-  // then use speed to continue
-  const isInInput = document.activeElement?.tagName === "INPUT" ||
-                    document.activeElement?.tagName === "TEXTAREA";
+    if (e.key.length === 1) {
+      const isInInput =
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA";
 
-  if (!isInInput && (isScannerSpeed || barcodeBuffer.length > 0)) {
-    e.preventDefault();
-    barcodeBuffer += e.key;
+      if (isInInput) return; // let normal typing through
 
-    clearTimeout(barcodeTimer);
-    barcodeTimer = setTimeout(() => {
-      barcodeBuffer = "";
-    }, 150); // increased from 100ms to 150ms
-  }
-}
+      const isScannerSpeed = timeSinceLast < 80;
+      const isFirstChar = barcodeBuffer.length === 0; // ← KEY FIX
+
+      // Capture if: it's the first char of a scan OR continuing at scanner speed
+      if (isFirstChar || isScannerSpeed) {
+        e.preventDefault();
+        barcodeBuffer += e.key;
+
+        clearTimeout(barcodeTimer);
+        barcodeTimer = setTimeout(() => {
+          // If buffer collected but no Enter came, discard
+          barcodeBuffer = "";
+        }, 200);
+      }
+    }
   };
 
-  window.addEventListener("keydown", handler, true); // ← capture phase
+  window.addEventListener("keydown", handler, true);
   return () => window.removeEventListener("keydown", handler, true);
 }, [triggerGetProductByBarcode, addScannedProductToCart, showToastFor]);
 
