@@ -223,6 +223,7 @@ useEffect(() => {
     if (e.key === "Enter") {
       if (barcodeBuffer.length > 2) {
         const code = barcodeBuffer.trim();
+        console.log("🔍 Scanned barcode:", code, "| length:", code.length);
         barcodeBuffer = "";
         clearTimeout(barcodeTimer);
 
