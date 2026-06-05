@@ -17,8 +17,8 @@ export const getAllProductsService = async (category?: number) => {
     {
       fields: [
         "id",
-         "default_code",
-         "barcode",
+        "default_code",
+        "barcode",
         "name",
         "list_price",
         "qty_available",
@@ -44,6 +44,7 @@ export const getAllProductsService = async (category?: number) => {
       {
         id: p.id,
         default_code:p.default_code,
+        barcode: p.barcode,
         display_name: p.name,
         lst_price: p.list_price,
         qty_available: p.qty_available,
@@ -70,6 +71,7 @@ export const getProductByIdService = async (id: number) => {
       fields: [
         "id",
         "default_code",
+        "barcode",
         "name",
         "list_price",
         "qty_available",
@@ -97,6 +99,7 @@ export const getProductByIdService = async (id: number) => {
     {
       id: product[0].id,
       default_code :product[0].default_code,
+      barcode: product[0].barcode,
       display_name: product[0].name,
       lst_price: product[0].list_price,
       qty_available: product[0].qty_available,
