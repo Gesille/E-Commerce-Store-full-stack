@@ -656,7 +656,7 @@ export const getUserActivity = async (req:Request, res:Response) => {
     const data = await orderModel.aggregate([
       {
         $match: {
-          userId: new mongoose.Types.ObjectId(id),
+          userId: new mongoose.Types.ObjectId(id as string),
         },
       },
       {

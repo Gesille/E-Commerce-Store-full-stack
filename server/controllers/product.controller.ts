@@ -9,10 +9,9 @@ import {
 import { odooRequest } from "../odoo/odoo.client.js";
 import Product from "../models/product.model.js";
 import axios from "axios"
-import cloudinary from "cloudinary";
-import { uploadImage } from "../utils/uploadImages.js";
-import userModel from "../models/user.model.js";
+
 import Order from "../models/order.model.js";
+import cloudinary from "../utils/uploadImages.js";
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -228,7 +227,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
     const productId = variant[0].id;
 
-    // تحديد الـ location
+    
     let resolvedLocationId = locationId;
     if (!resolvedLocationId) {
       const locations = await odooRequest(
@@ -264,9 +263,9 @@ export const createProduct = async (req: Request, res: Response) => {
         materials: attributes?.materials ?? [],
       },
       location: {
-        shelfId: locationId || null,
+        
         shelfName: shelfName || "",
-        warehouseId: warehouseId || null,
+    
         warehouseName: warehouseName || "",
       },
       supplierPrice: Number(supplierPrice) || 0,
