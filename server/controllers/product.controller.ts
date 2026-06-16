@@ -385,7 +385,7 @@ const exists = await odooRequest(
           materials: materials ?? [],
         },
       },
-      { new: true, upsert: true }
+      { new: true }
     );
 
     res.json({
