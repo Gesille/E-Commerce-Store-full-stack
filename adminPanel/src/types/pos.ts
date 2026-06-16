@@ -17,6 +17,8 @@ export interface Order {
   name: string;
   cart: CartItem[];
   createdAt: Date;
+   customerId?: number;     
+  odooOrderId?: number; 
 }
 
 export interface Product {
@@ -46,6 +48,10 @@ export interface Customer {
   name: string;
   email?: string;
   phone?: string;
+   street?: string;       
+  city?: string;         
+  country?: string;    
+  company?: string;  
 }
 
 export function fmt(n: number) {

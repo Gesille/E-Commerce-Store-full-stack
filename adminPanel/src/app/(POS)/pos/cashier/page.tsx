@@ -487,6 +487,7 @@ useEffect(() => {
             setOrders={handleSetOrders}
             activeOrderId={activeOrderId}
             setActiveOrderId={setActiveOrderId}
+             getCustomerForOrder={(orderId) => orderMeta[orderId]?.customer ?? null} 
           />
         </div>
       </div>

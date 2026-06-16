@@ -20,6 +20,7 @@ import {
 } from "@/types/session";
 import { apiSlice } from "../api/apiSlice";
 import { CreateCustomerResponse } from "@/types/pos";
+import { Sacramento } from "next/font/google";
 
 export const posApi = apiSlice.injectEndpoints({
   overrideExisting: true,
@@ -242,6 +243,43 @@ export const posApi = apiSlice.injectEndpoints({
 
       transformResponse: (res: any) => res.order,
     }),
+    holdOrder: builder.mutation({
+  query: (body: {
+    cart: {
+      productId: number;
+      qty: number;
+      price: number;
+      discount?: number;
+      note?: string;
+      name?: string;
+    }[];
+    customerId: number;
+    orderName: string;
+  }) => ({
+    url: "pos/hold-order",
+    method: "POST",
+    body,
+    credentials: "include" as const,
+  }),
+}),
+
+createOrGetCustomer: builder.mutation({
+  query: (body: {
+    name: string;
+    email?: string;
+    phone?: string;
+    street?: string;
+    city?: string;
+    country?: string;
+    company?: string;
+  }) => ({
+    url: "pos/customer",
+    method: "POST",
+    body,
+    credentials: "include" as const,
+  }),
+  invalidatesTags: ["Customers"],
+}),
   }),
 });
 
@@ -263,10 +301,10 @@ export const {
   useGetPosOrdersQuery,
   useGetPosOrderByIdQuery,
   useGetProductsQuery,
-
+useHoldOrderMutation,
   useGetCustomersQuery,
   useCreateCustomerMutation,
-
+useCreateOrGetCustomerMutation,
   useGetPaymentMethodsQuery,
 
   useGetPOSConfigsQuery,

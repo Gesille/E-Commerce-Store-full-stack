@@ -1,18 +1,24 @@
+"use client";
 import { Order, calcLineTotal, fmt } from "@/types/pos";
 import { useState } from "react";
+import { useHoldOrderMutation } from "@/redux/pos/Posapi";
 
 export function HoldOrdersPanel({
   orders,
   setOrders,
   activeOrderId,
   setActiveOrderId,
+  getCustomerForOrder,  // ✅ new prop
 }: {
   orders: Order[];
   setOrders: (orders: Order[]) => void;
   activeOrderId: number;
   setActiveOrderId: (id: number) => void;
+  getCustomerForOrder: (orderId: number) => { id: number; name: string } | null;
 }) {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [holdingId, setHoldingId] = useState<number | null>(null);
+  const [holdOrder] = useHoldOrderMutation();
 
   const addOrder = () => {
     const newId = Date.now();
@@ -33,6 +39,54 @@ export function HoldOrdersPanel({
       setConfirmDelete(order.id);
     } else {
       deleteOrder(order.id);
+    }
+  };
+
+  const handleHoldInOdoo = async (e: React.MouseEvent, order: Order) => {
+    e.stopPropagation();
+    const customer = getCustomerForOrder(order.id);
+
+    if (!customer) {
+      alert("Please assign a customer to this order before holding it in Odoo.\n\nClick 'Add customer' in the cart panel.");
+      return;
+    }
+
+    if (!order.cart.length) {
+      alert("Cannot hold an empty order.");
+      return;
+    }
+
+    // Already held
+    if (order.odooOrderId) {
+      alert(`Already held in Odoo as quotation #${order.odooOrderId}`);
+      return;
+    }
+
+    setHoldingId(order.id);
+    try {
+      const result = await holdOrder({
+        cart: order.cart.map((item) => ({
+          productId: item.productId,
+          qty: item.qty,
+          price: item.price,
+          discount: item.discount ?? 0,
+          note: item.note ?? "",
+          name: item.name,
+        })),
+        customerId: customer.id,
+        orderName: order.name,
+      }).unwrap();
+
+      // Save odooOrderId back to the order
+      setOrders(orders.map((o) =>
+        o.id === order.id ? { ...o, odooOrderId: result.odooOrderId } : o
+      ));
+
+      alert(`✅ Order held in Odoo as draft quotation #${result.odooOrderId}`);
+    } catch (err: any) {
+      alert(`Failed to hold order: ${err?.data?.message ?? "Unknown error"}`);
+    } finally {
+      setHoldingId(null);
     }
   };
 
@@ -58,6 +112,9 @@ export function HoldOrdersPanel({
         {orders.map((order) => {
           const isActive = order.id === activeOrderId;
           const tot = orderTotal(order);
+          const customer = getCustomerForOrder(order.id);
+          const isHeld = !!order.odooOrderId;
+          const isHolding = holdingId === order.id;
 
           return (
             <div key={order.id}>
@@ -81,6 +138,14 @@ export function HoldOrdersPanel({
                     </button>
                   )}
                 </div>
+
+                {/* Customer badge */}
+                {customer && (
+                  <div className="text-[10px] mt-0.5 text-indigo-500 truncate">
+                    👤 {customer.name}
+                  </div>
+                )}
+
                 <div className={`text-[10px] mt-0.5 ${isActive ? "text-blue-400" : "text-gray-400"}`}>
                   {order.cart.length} item{order.cart.length !== 1 ? "s" : ""}
                   {tot > 0 ? ` · $${fmt(tot)}` : ""}
@@ -88,6 +153,23 @@ export function HoldOrdersPanel({
                 <div className={`text-[10px] mt-0.5 ${isActive ? "text-blue-300" : "text-gray-300"}`}>
                   {order.createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </div>
+
+                {/* Hold in Odoo button */}
+                {order.cart.length > 0 && isActive && (
+                  <button
+                    onClick={(e) => handleHoldInOdoo(e, order)}
+                    disabled={isHolding || isHeld}
+                    className={`mt-1.5 w-full text-[9px] font-semibold py-1 rounded border transition-colors ${
+                      isHeld
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default"
+                        : isHolding
+                          ? "bg-gray-100 text-gray-400 border-gray-200 cursor-wait"
+                          : "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 cursor-pointer"
+                    }`}
+                  >
+                    {isHeld ? `✓ In Odoo #${order.odooOrderId}` : isHolding ? "Saving…" : "Hold in Odoo"}
+                  </button>
+                )}
               </div>
 
               {/* Confirm delete */}

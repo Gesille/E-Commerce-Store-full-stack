@@ -1494,3 +1494,78 @@ export const getPosOrderById = CatchAsyncError(
     });
   },
 );
+
+
+
+// create or get customer in odoo
+// Create or get customer in Odoo
+export const createOrGetCustomer = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { name, email, phone, street, city, country, company } = req.body;
+
+    // Search if customer exists
+    const existing = await odooRequest("res.partner", "search_read", [
+      [["email", "=", email]],
+    ], { fields: ["id", "name", "email", "phone", "street", "city", "country_id", "company_name"], limit: 1 });
+
+    if (existing.length) {
+      return res.json({ success: true, customer: existing[0] });
+    }
+
+    // Create new customer
+    const customerId = await odooRequest("res.partner", "create", [{
+      name,
+      email: email || false,
+      phone: phone || false,
+      street: street || false,
+      city: city || false,
+      company_name: company || false,
+      customer_rank: 1,
+    }]);
+
+    res.json({ success: true, customerId });
+  }
+);
+
+// Save held order to Odoo as draft quotation
+export const holdOrderToOdoo = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { cart, customerId, orderName, discount } = req.body;
+
+    if (!customerId) return next(new ErrorHandler("Customer required to hold order", 400));
+    if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
+
+    // 1. Create draft sale order
+    const saleOrderId = await odooRequest("sale.order", "create", [{
+      partner_id: customerId,
+      state: "draft",          // quotation = unpaid held order
+      origin: orderName || "POS_HOLD",
+      note: `Held POS order: ${orderName}`,
+    }]);
+
+    // 2. Add lines
+    for (const item of cart) {
+      // get variant
+      const variant = await odooRequest("product.product", "search_read", [
+        [["product_tmpl_id", "=", item.productId]],
+      ], { fields: ["id"], limit: 1 });
+
+      if (!variant[0]) continue;
+
+      await odooRequest("sale.order.line", "create", [{
+        order_id: saleOrderId,
+        product_id: variant[0].id,
+        product_uom_qty: item.qty,
+        price_unit: item.price,
+        discount: item.discount || 0,
+        name: item.note ? `${item.name} - ${item.note}` : item.name,
+      }]);
+    }
+
+    res.json({
+      success: true,
+      message: "Order held in Odoo",
+      odooOrderId: saleOrderId,
+    });
+  }
+);

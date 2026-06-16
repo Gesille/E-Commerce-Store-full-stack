@@ -24,6 +24,7 @@ import {
   getPosOrders,
  
   getPosOrderById,
+  holdOrderToOdoo,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -133,4 +134,8 @@ POSRouter.get(
   authorizeRoles("admin", "cashier"),
   getPosOrderById,
 );
+
+// pos.routes.ts
+POSRouter.post("/pos-customer", isAuthenticated,authorizeRoles("admin","cashier"), createCustomer);
+POSRouter.post("/pos-hold-order", isAuthenticated,authorizeRoles("admin","cashier"), holdOrderToOdoo);
 export default POSRouter;
