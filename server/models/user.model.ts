@@ -97,11 +97,12 @@ const userSchema: Schema<IUser> = new mongoose.Schema(
 );
 
 //Mash Password before saving
-userSchema.pre("save", async function () {
+userSchema.pre<IUser>("save", async function (next) {
   if (!this.isModified("password")) {
-    return;
+    return next();
   }
   this.password = await bcrypt.hash(this.password, 10);
+  next();
 });
 
 //sign access token
