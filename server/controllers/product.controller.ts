@@ -332,71 +332,78 @@ export const decreaseStock = async (productId: number, qty: number) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
-const exists = await odooRequest(
-      "product.template",
-      "search_read",
-      [[["id", "=", Number(id)]]],
-      { fields: ["id", "name"] }
-    );
-    console.log("Found in Odoo:", exists); 
+    const { name, price, stock, barcode, image, attributes } = req.body;
 
-    let imageUrl = null;
-    let base64Image = null;
-
-    if (req.body.image) {
-      // 1. Upload to Cloudinary
-      const uploaded = await uploadImage(req.body.image);
-
-      imageUrl = uploaded.url;
-
-      // 2. Convert to base64 for Odoo
-      const response = await axios.get(imageUrl, {
-        responseType: "arraybuffer",
-      });
-
-      base64Image = Buffer.from(response.data, "binary").toString("base64");
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    // ✅ Update in Odoo
-    await odooRequest("product.template", "write", [
-      [Number(id)],
-      {
-        name,
-        list_price: Number(price),
-        qty_available: stock,
-         default_code: reference || false,
-         barcode: barcode || false, 
-        ...(base64Image && { image_1920: base64Image }),
-      },
-    ]);
+    const odooUpdate: any = {};
+    if (name !== undefined) odooUpdate.name = name;
+    if (price !== undefined) odooUpdate.list_price = price;
+    if (barcode !== undefined) odooUpdate.barcode = barcode || false;
+    if (image) odooUpdate.image_1920 = await toBase64(image);
 
-    // ✅ Update MongoDB
-    const updated = await Product.findOneAndUpdate(
-      { odooProductId: Number(id) },
-      {
-        name,
-        reference: reference || "", 
-        barcode: barcode || false, 
-        price,
-        stock,
-        ...(imageUrl && { image: imageUrl }),
+    if (Object.keys(odooUpdate).length > 0) {
+      await odooRequest("product.template", "write", [
+        [product.odooProductId],
+        odooUpdate,
+      ]);
+    }
+
+  
+    if (stock !== undefined && Number(stock) !== product.stock) {
+      const variant = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["product_tmpl_id", "=", product.odooProductId]]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (variant?.length) {
+        const quants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [[["product_id", "=", variant[0].id], ["location_id.usage", "=", "internal"]]],
+          { fields: ["id"], limit: 1 }
+        );
+
+        if (quants?.length) {
+          await odooRequest("stock.quant", "write", [
+            [quants[0].id],
+            { inventory_quantity: Number(stock) },
+          ]);
+          await odooRequest("stock.quant", "action_apply_inventory", [[quants[0].id]]);
+        }
+      }
+    }
+
+  
+    const updateFields: any = {
+      ...(name !== undefined && { name }),
+      ...(price !== undefined && { price: Number(price) }),
+      ...(stock !== undefined && { stock: Number(stock) }),
+      ...(barcode !== undefined && { barcode }),
+      ...(image && { image }), 
+      ...(attributes && {
         attributes: {
-          colors: colors ?? [],
-          sizes: sizes ?? [],
-          materials: materials ?? [],
+          colors: attributes.colors ?? product.attributes.colors,
+          sizes: attributes.sizes ?? product.attributes.sizes,
+          materials: attributes.materials ?? product.attributes.materials,
         },
-      },
-      { new: true, upsert: true }
-    );
+      }),
+    };
 
-    res.json({
-      success: true,
-      message: "Product updated successfully",
-      product: updated,
-    });
+    const updated = await Product.findByIdAndUpdate(id, updateFields, { new: true });
+
+    res.json({ success: true, product: updated });
   } catch (err: any) {
-    res.status(500).json({ message: err.message });
+    console.error("Update Product Failed:", err.message);
+    res.status(500).json({
+      success: false,
+      message: `Failed to update product: ${err.message}`,
+    });
   }
 };
 

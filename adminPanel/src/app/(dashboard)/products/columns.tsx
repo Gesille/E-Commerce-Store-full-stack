@@ -27,6 +27,7 @@ export type Product = {
  category: string; 
   sizes: string[];
   colors: string[];
+  materials: string[];
   barcode?: string;
 };
 

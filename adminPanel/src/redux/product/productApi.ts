@@ -12,7 +12,7 @@ export const productApi = apiSlice.injectEndpoints({
         method: "GET",
         credentials: "include" as const,
       }),
-      providesTags: ["Products"], 
+      providesTags: ["Products"],
       transformResponse: (response: { success: boolean; products: any[] }) =>
         response.products.map((p) => ({
           id: p.id,
@@ -23,12 +23,17 @@ export const productApi = apiSlice.injectEndpoints({
           qty_available: p.stock ?? 0,
           image_1920: p.image ?? false,
           category: p.category ?? "",
-          sizes: p.sizes ?? [],
-          colors: p.colors ?? [],
-          materials: p.materials ?? [],
+          sizes: p.attributes?.sizes ?? [],
+          colors: p.attributes?.colors ?? [],
+          materials: p.attributes?.materials ?? [],
           barcode: p.barcode ?? "",
+          supplierPrice: p.supplierPrice ?? 0,
+          shippingCost: p.shippingCost ?? 0,
+          currency: p.currency ?? "USD",
+          finalPriceXCD: p.finalPriceXCD ?? 0,
+          supplier: p.supplier ?? "",
+          location: p.location ?? null,
         })),
-        
     }),
 
     updateProduct: builder.mutation({
@@ -42,16 +47,18 @@ export const productApi = apiSlice.injectEndpoints({
         stock: number;
         barcode?: string;
         image?: string | null;
-        colors: string[];
-        sizes: string[];
-        materials: string[];
+        attributes: {
+          colors: string[];
+          sizes: string[];
+          materials: string[];
+        };
       }) => ({
         url: `update-product/${id}`,
         method: "POST",
         credentials: "include" as const,
         body,
       }),
-      invalidatesTags: ["Products"], 
+      invalidatesTags: ["Products"],
     }),
 
     deleteProduct: builder.mutation({
@@ -60,16 +67,38 @@ export const productApi = apiSlice.injectEndpoints({
         method: "DELETE",
         credentials: "include" as const,
       }),
-      invalidatesTags: ["Products"], 
+      invalidatesTags: ["Products"],
     }),
+
     createProduct: builder.mutation({
       query: (body: {
+        // Core identity
         name: string;
         reference: string;
+        itemNumber?: string;
         barcode?: string;
+
+        // Pricing
         price: number;
+        supplierPrice?: number;
+        shippingCost?: number;
+        currency?: "USD" | "EUR";
+
+        // Inventory
         stock: number;
         categoryId: number;
+
+        // Location
+        locationId?: number;
+        warehouseId?: number;
+        warehouseName?: string;
+        shelfName?: string;
+
+        // Supplier
+        supplierId?: number;
+        supplierName?: string;
+
+        // Media & attributes
         image?: string;
         attributes: {
           colors: string[];
@@ -84,6 +113,7 @@ export const productApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Products"],
     }),
+
     getTopSellingProducts: builder.query({
       query: () => ({
         url: "dashboard/top-products",
@@ -93,7 +123,6 @@ export const productApi = apiSlice.injectEndpoints({
       transformResponse: (res: any) => res.topProducts,
     }),
 
-    // productApi.ts
     getLowStockAlerts: builder.query({
       query: (threshold = 5) => ({
         url: `low-stock?threshold=${threshold}`,
@@ -102,6 +131,7 @@ export const productApi = apiSlice.injectEndpoints({
       }),
       transformResponse: (res: any) => res.products,
     }),
+
     getProductByBarcode: builder.query<any, string>({
       query: (code) => ({
         url: `barcode/${code}`,
@@ -121,5 +151,5 @@ export const {
   useCreateProductMutation,
   useGetLowStockAlertsQuery,
   useGetTopSellingProductsQuery,
-  useLazyGetProductByBarcodeQuery
+  useLazyGetProductByBarcodeQuery,
 } = productApi;

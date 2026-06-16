@@ -85,29 +85,34 @@ export const UpdateProductModal = ({
   }, [product]);
 
   const handleSubmit = async () => {
-    if (!product) return;
-    try {
-      console.log("Sending barcode:", barcode);
-      const result = await updateProduct({
-        id: product.id,
-        name,
-        price,
-        stock,
-        barcode: barcode || undefined,
-        image: imageChanged ? image : null,
+  if (!product) return;
+  try {
+    const payload: any = {
+      id: product.id,
+      name,
+      price,
+      stock,
+      barcode: barcode || undefined,
+      attributes: {
         colors: colors.split(",").map((c) => c.trim()).filter(Boolean),
         sizes: sizes.split(",").map((s) => s.trim()).filter(Boolean),
         materials: materials.split(",").map((m) => m.trim()).filter(Boolean),
-      }).unwrap();
-console.log("Response:", result);
-      toast.success("Product updated successfully");
-      onSuccess();
-      onClose();
-      
-    } catch (err: any) {
-      toast.error(err?.data?.message ?? "Failed to update product");
+      },
+    };
+
+
+    if (imageChanged) {
+      payload.image = image;
     }
-  };
+
+    const result = await updateProduct(payload).unwrap();
+    toast.success("Product updated successfully");
+    onSuccess();
+    onClose();
+  } catch (err: any) {
+    toast.error(err?.data?.message ?? "Failed to update product");
+  }
+};
 
   const fieldClass = "bg-white border rounded-lg focus-visible:ring-2 focus-visible:ring-offset-0";
 
