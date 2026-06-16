@@ -79,7 +79,7 @@ app.get("/test", (req: Request, res: Response) => {
 });
 
 
-app.all("*", (req: Request, res: Response, next: NextFunction) => {
+app.all("*path", (req, res, next) => {
   const err = new Error(`Route ${req.originalUrl} not found`) as any;
   err.statusCode = 404;
   next(err);
