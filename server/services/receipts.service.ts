@@ -1,3 +1,9 @@
+import { odooRequest } from "../odoo/odoo.client.js";
+import path from "path";
+import ejs from "ejs";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 export async function sendReceiptByEmailService(
   orderId: number,
   email: string
@@ -240,12 +246,12 @@ export async function sendReceiptByEmailService(
       __dirname,
       "../mails/receiptEmail.ejs"
     );
-
+console.log("EJS PATH:", templatePath);
     const htmlBody = await ejs.renderFile(
       templatePath,
       templateData
     );
-
+console.log(htmlBody.substring(0, 1000));
     // ─────────────────────────────────────────
     // 8. Create email in Odoo
     // ─────────────────────────────────────────
