@@ -185,7 +185,7 @@ export async function sendReceiptByEmailService(
       servedBy:
         order.user_id?.[1] ?? "Staff",
 
-      orderType: "Dine In",
+      orderType: "In Store",
 
       sessionId:
         order.session_id?.[1] ?? "",

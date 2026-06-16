@@ -8,9 +8,13 @@ type SortKey = "name" | "qty_available" | "virtual_available" | "list_price" | "
 type SortDir = "asc" | "desc";
 type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 
-const LOW_STOCK_THRESHOLD = 10;
+const getLowStockThreshold = (qty: number) => {
+  return Math.ceil(qty * 0.5); 
+};
 
 function StockBadge({ qty }: { qty: number }) {
+  const lowThreshold = getLowStockThreshold(qty);
+
   if (qty <= 0) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-100">
@@ -18,16 +22,18 @@ function StockBadge({ qty }: { qty: number }) {
       </span>
     );
   }
-  if (qty <= LOW_STOCK_THRESHOLD) {
+
+  if (qty <= lowThreshold) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100">
         Low stock
       </span>
     );
   }
+
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-      In stock
+        In stock
     </span>
   );
 }
@@ -54,8 +60,19 @@ export default function InventoryPage() {
   // Stats
   const stats = useMemo(() => {
     const total = inventory.length;
-    const inStock = inventory.filter((p) => p.qty_available > LOW_STOCK_THRESHOLD).length;
-    const lowStock = inventory.filter((p) => p.qty_available > 0 && p.qty_available <= LOW_STOCK_THRESHOLD).length;
+   const inStock = inventory.filter((p) => {
+  const threshold = getLowStockThreshold(p.qty_available);
+  return p.qty_available > threshold;
+}).length;
+
+const lowStock = inventory.filter((p) => {
+  const threshold = getLowStockThreshold(p.qty_available);
+  return (
+    p.qty_available > 0 &&
+    p.qty_available <= threshold
+  );
+}).length;
+   
     const outOfStock = inventory.filter((p) => p.qty_available <= 0).length;
     const totalValue = inventory.reduce((acc, p) => acc + p.qty_available * p.standard_price, 0);
     return { total, inStock, lowStock, outOfStock, totalValue };
@@ -73,9 +90,27 @@ export default function InventoryPage() {
           (p.default_code && String(p.default_code).toLowerCase().includes(q))
       );
     }
+if (stockFilter === "in_stock") {
+  result = result.filter((p) => {
+    const threshold = getLowStockThreshold(
+      p.qty_available
+    );
+    return p.qty_available > threshold;
+  });
+}
 
-    if (stockFilter === "in_stock") result = result.filter((p) => p.qty_available > LOW_STOCK_THRESHOLD);
-    if (stockFilter === "low_stock") result = result.filter((p) => p.qty_available > 0 && p.qty_available <= LOW_STOCK_THRESHOLD);
+if (stockFilter === "low_stock") {
+  result = result.filter((p) => {
+    const threshold = getLowStockThreshold(
+      p.qty_available
+    );
+
+    return (
+      p.qty_available > 0 &&
+      p.qty_available <= threshold
+    );
+  });
+}
     if (stockFilter === "out_of_stock") result = result.filter((p) => p.qty_available <= 0);
 
     result.sort((a, b) => {
@@ -287,7 +322,16 @@ export default function InventoryPage() {
                             {product.default_code || <span className="text-gray-300">—</span>}
                           </td>
                           <td className={tdClass}>
-                            <span className={product.qty_available <= 0 ? "text-red-600 font-medium" : product.qty_available <= LOW_STOCK_THRESHOLD ? "text-amber-600 font-medium" : "text-gray-700"}>
+                           <span
+  className={
+    product.qty_available <= 0
+      ? "text-red-600 font-medium"
+      : product.qty_available <=
+        getLowStockThreshold(product.qty_available)
+      ? "text-amber-600 font-medium"
+      : "text-gray-700"
+  }
+>
                               {product.qty_available.toLocaleString()}
                             </span>
                           </td>

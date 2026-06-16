@@ -4,7 +4,7 @@ import {
   Inbox,
   Calendar,
   Search,
-  Settings,
+ 
   User2,
   ChevronUp,
   Plus,
@@ -72,11 +72,7 @@ const items = [
     icon: Calendar,
   },
 
-  {
-    title: "Settings",
-    url: "#",
-    icon: Settings,
-  },
+ 
    {
     title: "POS",
     url: "/pos",
