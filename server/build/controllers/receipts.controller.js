@@ -1,0 +1,85 @@
+import { getReceiptsService, getReceiptByIdService, sendReceiptByEmailService, } from "../services/receipts.service.js";
+// ─────────────────────────────────────────────────────────
+// GET /receipts
+// ─────────────────────────────────────────────────────────
+export const getReceipts = async (req, res, next) => {
+    try {
+        const { page, limit, search, dateFrom, dateTo, state } = req.query;
+        const result = await getReceiptsService({
+            page: Number(page) || 1,
+            limit: Number(limit) || 20,
+            search: String(search || ""),
+            dateFrom: dateFrom,
+            dateTo: dateTo,
+            state: state,
+        });
+        return res.status(200).json({
+            success: true,
+            ...result,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+// ─────────────────────────────────────────────────────────
+// GET /receipts/:receiptId
+// ─────────────────────────────────────────────────────────
+export const getReceiptById = async (req, res, next) => {
+    try {
+        const receiptId = Number(req.params.receiptId);
+        if (!receiptId || isNaN(receiptId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid receipt id",
+            });
+        }
+        const receipt = await getReceiptByIdService(receiptId);
+        return res.status(200).json({
+            success: true,
+            receipt,
+        });
+    }
+    catch (error) {
+        if (error?.message === "Receipt not found") {
+            return res.status(404).json({
+                success: false,
+                message: "Receipt not found",
+            });
+        }
+        next(error);
+    }
+};
+export const sendReceiptByEmail = async (req, res, next) => {
+    try {
+        const orderId = Number(req.params.receiptId);
+        const { email } = req.body;
+        if (!orderId || isNaN(orderId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid order id",
+            });
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid email address",
+            });
+        }
+        await sendReceiptByEmailService(orderId, email);
+        return res.status(200).json({
+            success: true,
+            message: `Receipt sent to ${email}`,
+        });
+    }
+    catch (error) {
+        if (error?.message === "Order not found") {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found",
+            });
+        }
+        next(error);
+    }
+};

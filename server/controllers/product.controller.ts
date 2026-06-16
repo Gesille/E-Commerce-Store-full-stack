@@ -330,6 +330,10 @@ export const decreaseStock = async (productId: number, qty: number) => {
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+      console.log("Schema paths:", Object.keys(Product.schema.paths));
+    console.log("odooProductId type:", Product.schema.path("odooProductId"));
+  const raw = await Product.collection.findOne({ odooProductId: Number(id) });
+    console.log("Raw result:", raw);
     const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
 const exists = await odooRequest(
       "product.template",
@@ -337,7 +341,7 @@ const exists = await odooRequest(
       [[["id", "=", Number(id)]]],
       { fields: ["id", "name"] }
     );
-    console.log("Found in Odoo:", exists); 
+    
 
     let imageUrl = null;
     let base64Image = null;

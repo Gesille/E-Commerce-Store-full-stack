@@ -1,0 +1,10 @@
+import express from "express";
+import { isAuthenticated } from "../middleware/auth.js";
+import { createAddress, deleteAddress, getAddress, updateAddress } from "../controllers/address.controller.js";
+import { refreshTokenMiddleware } from "../controllers/user.controller.js";
+const addressRouter = express.Router();
+addressRouter.post("/create-address", refreshTokenMiddleware, isAuthenticated, createAddress);
+addressRouter.get("/get-all-address", refreshTokenMiddleware, isAuthenticated, getAddress);
+addressRouter.patch("/update-address/:addressId", refreshTokenMiddleware, isAuthenticated, updateAddress);
+addressRouter.delete("/delete-address/:addressId", refreshTokenMiddleware, isAuthenticated, deleteAddress);
+export default addressRouter;

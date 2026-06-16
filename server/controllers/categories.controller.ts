@@ -161,7 +161,7 @@ export const getCategoryById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   // التحقق من صحة معرف التصنيف
-  if (!mongoose.Types.ObjectId.isValid(id)) {
+  if (!mongoose.Types.ObjectId.isValid(id as string)) {
     return res.status(400).json({ message: "Invalid category ID" });
   }
 
