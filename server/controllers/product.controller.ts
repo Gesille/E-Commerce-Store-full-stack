@@ -327,118 +327,77 @@ export const decreaseStock = async (productId: number, qty: number) => {
 
 
 // update product 
-// export const updateProduct = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params;
-//     const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
-// const exists = await odooRequest(
-//       "product.template",
-//       "search_read",
-//       [[["id", "=", Number(id)]]],
-//       { fields: ["id", "name"] }
-//     );
-//     console.log("Found in Odoo:", exists); 
-
-//     let imageUrl = null;
-//     let base64Image = null;
-
-//     if (req.body.image) {
-//       // 1. Upload to Cloudinary
-//       const uploaded = await uploadImage(req.body.image);
-
-//       imageUrl = uploaded.url;
-
-//       // 2. Convert to base64 for Odoo
-//       const response = await axios.get(imageUrl, {
-//         responseType: "arraybuffer",
-//       });
-
-//       base64Image = Buffer.from(response.data, "binary").toString("base64");
-//     }
-
-//     // ✅ Update in Odoo
-//     await odooRequest("product.template", "write", [
-//       [Number(id)],
-//       {
-//         name,
-//         list_price: Number(price),
-//         qty_available: stock,
-//          default_code: reference || false,
-//          barcode: barcode || false, 
-//         ...(base64Image && { image_1920: base64Image }),
-//       },
-//     ]);
-
-//     // ✅ Update MongoDB
-//     const updated = await Product.findOneAndUpdate(
-//       { odooProductId: Number(id) },
-//       {
-//         name,
-//         reference: reference || "", 
-//         barcode: barcode || false, 
-//         price,
-//         stock,
-//         ...(imageUrl && { image: imageUrl }),
-//         attributes: {
-//           colors: colors ?? [],
-//           sizes: sizes ?? [],
-//           materials: materials ?? [],
-//         },
-//       },
-//       { new: true, upsert: true }
-//     );
-
-//     res.json({
-//       success: true,
-//       message: "Product updated successfully",
-//       product: updated,
-//     });
-//   } catch (err: any) {
-//     res.status(500).json({ message: err.message });
-//   }
-// };
 export const updateProduct = async (req: Request, res: Response) => {
   try {
-
-    console.log("STEP 1");
-
     const { id } = req.params;
+    const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
+const exists = await odooRequest(
+      "product.template",
+      "search_read",
+      [[["id", "=", Number(id)]]],
+      { fields: ["id", "name"] }
+    );
+    console.log("Found in Odoo:", exists); 
 
-    console.log("ID =", id);
+    let imageUrl = null;
+    let base64Image = null;
 
-    const product = await Product.findOne({
-      odooProductId: Number(id)
-    });
+    if (req.body.image) {
+      // 1. Upload to Cloudinary
+      const uploaded = await uploadImage(req.body.image);
 
-    console.log("STEP 2 PRODUCT =", product?._id);
+      imageUrl = uploaded.url;
 
+      // 2. Convert to base64 for Odoo
+      const response = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+      });
 
+      base64Image = Buffer.from(response.data, "binary").toString("base64");
+    }
+
+    // ✅ Update in Odoo
+    await odooRequest("product.template", "write", [
+      [Number(id)],
+      {
+        name,
+        list_price: Number(price),
+        qty_available: stock,
+         default_code: reference || false,
+         barcode: barcode || false, 
+        ...(base64Image && { image_1920: base64Image }),
+      },
+    ]);
+
+    // ✅ Update MongoDB
     const updated = await Product.findOneAndUpdate(
       { odooProductId: Number(id) },
       {
-        name: req.body.name
+        name,
+        reference: reference || "", 
+        barcode: barcode || false, 
+        price,
+        stock,
+        ...(imageUrl && { image: imageUrl }),
+        attributes: {
+          colors: colors ?? [],
+          sizes: sizes ?? [],
+          materials: materials ?? [],
+        },
       },
-      { new:true }
+      { new: true, upsert: true }
     );
 
-    console.log("STEP 3 UPDATED");
-
-
     res.json({
-      success:true,
-      product:updated
+      success: true,
+      message: "Product updated successfully",
+      product: updated,
     });
-
-  } catch(err:any) {
-
-    console.log("FAILED HERE");
-    console.log(err);
-
-    res.status(500).json({
-      message:err.message
-    });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 };
+
 
 
 
