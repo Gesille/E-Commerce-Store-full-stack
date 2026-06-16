@@ -38,7 +38,7 @@ const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
 
   return {
     id: product.id,
-    itemNumber: product.default_code || null,
+    itemNumber: product.item_number || null,
     reference: product.default_code || null,
     barcode: product.barcode || null, 
     name: product.display_name,

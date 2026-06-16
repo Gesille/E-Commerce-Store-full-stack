@@ -50,8 +50,6 @@ const formSchema = z.object({
   category:         z.coerce.number().min(1, { message: "Category is required" }),
 
   // Location
-  locationId:       z.coerce.number().optional(),
-  warehouseId:      z.coerce.number().optional(),
   warehouseName:    z.string().optional(),
   shelfName:        z.string().optional(),
 
@@ -88,7 +86,7 @@ const AddProduct = () => {
       shortDescription: "", description: "",
       price: 0, supplierPrice: 0, shippingCost: 0, currency: "USD",
       quantity: 0, category: 0,
-      locationId: undefined, warehouseId: undefined, warehouseName: "", shelfName: "",
+    
       supplierId: undefined, supplierName: "",
       sizes: [], colors: [], images: {},
     },
@@ -178,8 +176,7 @@ const AddProduct = () => {
         shippingCost:  data.shippingCost,
         currency:      data.currency,
 
-        locationId:    data.locationId,
-        warehouseId:   data.warehouseId,
+   
         warehouseName: data.warehouseName,
         shelfName:     data.shelfName,
 
@@ -403,17 +400,7 @@ const AddProduct = () => {
 
             {/* ── 4. Location ─────────────────────────────────────────── */}
             <Section title="Storage Location">
-              {/* Location ID */}
-              <FormField control={form.control} name="locationId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2 text-sky-700"><MapPin size={14} /> Location ID</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} placeholder="Odoo stock.location ID" {...field} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} className="bg-white border-sky-200 rounded-lg" />
-                  </FormControl>
-                  <FormDescription>Leave empty to use default internal location</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
+        
 
               {/* Shelf Name */}
               <FormField control={form.control} name="shelfName" render={({ field }) => (
@@ -424,16 +411,7 @@ const AddProduct = () => {
                 </FormItem>
               )} />
 
-              {/* Warehouse ID */}
-              <FormField control={form.control} name="warehouseId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2 text-sky-700"><Building2 size={14} /> Warehouse ID</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} placeholder="Odoo warehouse ID" {...field} onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)} className="bg-white border-sky-200 rounded-lg" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+             
 
               {/* Warehouse Name */}
               <FormField control={form.control} name="warehouseName" render={({ field }) => (

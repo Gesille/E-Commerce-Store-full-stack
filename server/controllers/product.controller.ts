@@ -145,8 +145,7 @@ export const createProduct = async (req: Request, res: Response) => {
     const {
       name, price, stock, categoryId, image, attributes, reference, barcode,
       itemNumber,
-      locationId,
-      warehouseId,
+     
       warehouseName,
       shelfName,
       supplierPrice,

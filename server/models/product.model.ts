@@ -14,9 +14,9 @@ export interface IProduct extends Document {
     materials: string[];
   };
   location: {
-    warehouseId?: number;
+  
     warehouseName?: string;
-    shelfId?: number;
+   
     shelfName?: string;
   };
   supplierPrice?: number;
@@ -43,9 +43,9 @@ const productSchema: Schema<IProduct> = new Schema(
       materials: [{ type: String }],
     },
     location: {
-      warehouseId: { type: Number },
+     
       warehouseName: { type: String },
-      shelfId: { type: Number },
+      
       shelfName: { type: String },
     },
     supplierPrice: { type: Number },
