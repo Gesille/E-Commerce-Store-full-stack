@@ -332,7 +332,9 @@ export const updateProduct = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, price, stock, barcode, image, attributes } = req.body;
 
-    const product = await Product.findById(id);
+   const product = await Product.findOne({
+  odooProductId: Number(id)
+});
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
@@ -393,7 +395,11 @@ export const updateProduct = async (req: Request, res: Response) => {
       }),
     };
 
-    const updated = await Product.findByIdAndUpdate(id, updateFields, { new: true });
+  const updated = await Product.findOneAndUpdate(
+  { odooProductId: Number(id) },
+  updateFields,
+  { new: true }
+);
 
     res.json({ success: true, product: updated });
   } catch (err: any) {
