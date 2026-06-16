@@ -180,7 +180,7 @@ const AddProduct = () => {
         warehouseName: data.warehouseName,
         shelfName:     data.shelfName,
 
-        supplierId:    data.supplierId,
+        
         supplierName:  data.supplierName,
 
         attributes: {
