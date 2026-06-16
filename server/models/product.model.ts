@@ -3,36 +3,57 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface IProduct extends Document {
   name: string;
   reference: string;
+  itemNumber: string;
   price: number;
   stock: number;
   image?: string;
-barcode: String
+  barcode: string;
   attributes: {
     colors: string[];
     sizes: string[];
     materials: string[];
   };
-
-
+  location: {
+    warehouseId?: number;
+    warehouseName?: string;
+    shelfId?: number;
+    shelfName?: string;
+  };
+  supplierPrice?: number;
+  shippingCost?: number;
+  currency?: string;
+  finalPriceXCD?: number;
+  supplierId?: number;
+  supplierName?: string;
   odooProductId: number;
   odooCategoryId?: number;
 }
-
 const productSchema: Schema<IProduct> = new Schema(
   {
     name: { type: String, required: true },
-     reference: { type: String, default: "" },
-    price: { type: Number, required: true },
+    reference: { type: String, default: "" },
+    itemNumber: { type: String, default: "" },
+    price: { type: Number, required: true },        
     stock: { type: Number, required: true },
-
     image: { type: String },
-
+    barcode: { type: String },
     attributes: {
       colors: [{ type: String }],
       sizes: [{ type: String }],
       materials: [{ type: String }],
     },
-barcode:{type:String},
+    location: {
+      warehouseId: { type: Number },
+      warehouseName: { type: String },
+      shelfId: { type: Number },
+      shelfName: { type: String },
+    },
+    supplierPrice: { type: Number },
+    shippingCost: { type: Number, default: 0 },
+    currency: { type: String, default: "USD" },
+    finalPriceXCD: { type: Number },
+    supplierId: { type: Number },
+    supplierName: { type: String },
     odooProductId: { type: Number, required: true },
     odooCategoryId: { type: Number },
   },

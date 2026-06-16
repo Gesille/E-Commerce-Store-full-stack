@@ -142,7 +142,24 @@ export const createProduct = async (req: Request, res: Response) => {
   let createdProductTemplateId: number | null = null;
 
   try {
-    const { name, price, stock, categoryId, image, attributes, reference , barcode} = req.body; // ✅ add reference
+    const {
+      name, price, stock, categoryId, image, attributes, reference, barcode,
+      itemNumber,
+      locationId,
+      warehouseId,
+      warehouseName,
+      shelfName,
+      supplierPrice,
+      shippingCost,
+      currency,
+      supplierId,
+      supplierName,
+    } = req.body;
+
+ 
+    const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+    const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
+    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
     let base64Image = null;
     if (image) {
@@ -156,8 +173,9 @@ export const createProduct = async (req: Request, res: Response) => {
         {
           name,
           list_price: price,
-          default_code: reference || false,  // ✅ Odoo field for reference/SKU
-          barcode: barcode || false,  
+          default_code: itemNumber || reference || false,
+          barcode: barcode || false,
+          standard_price: Number(supplierPrice) || 0,
           type: "consu",
           is_storable: true,
           active: true,
@@ -173,6 +191,18 @@ export const createProduct = async (req: Request, res: Response) => {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
     }
 
+    // ربط الـ supplier
+    if (supplierId) {
+      await odooRequest("product.supplierinfo", "create", [
+        {
+          product_tmpl_id: createdProductTemplateId,
+          partner_id: supplierId,
+          price: Number(supplierPrice) || 0,
+        },
+      ]);
+    }
+
+    // attributes
     if (attributes) {
       for (const key in attributes) {
         const attributeId = await createOrGetAttribute(key);
@@ -199,29 +229,32 @@ export const createProduct = async (req: Request, res: Response) => {
 
     const productId = variant[0].id;
 
-    const locations = await odooRequest(
-      "stock.location",
-      "search_read",
-      [[["usage", "=", "internal"]]],
-      { fields: ["id"], limit: 1 }
-    );
-
-    const locationId = locations[0].id;
+    // تحديد الـ location
+    let resolvedLocationId = locationId;
+    if (!resolvedLocationId) {
+      const locations = await odooRequest(
+        "stock.location",
+        "search_read",
+        [[["usage", "=", "internal"]]],
+        { fields: ["id"], limit: 1 }
+      );
+      resolvedLocationId = locations[0].id;
+    }
 
     const quantId = await odooRequest("stock.quant", "create", [
       {
         product_id: productId,
-        location_id: locationId,
+        location_id: resolvedLocationId,
         inventory_quantity: Number(stock),
       },
     ]);
 
     await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
-    // ✅ Save to MongoDB with reference
     await Product.create({
       name,
       reference: reference || "",
+      itemNumber: itemNumber || "",
       barcode: barcode || "",
       price: Number(price),
       stock: Number(stock),
@@ -231,6 +264,18 @@ export const createProduct = async (req: Request, res: Response) => {
         sizes: attributes?.sizes ?? [],
         materials: attributes?.materials ?? [],
       },
+      location: {
+        shelfId: locationId || null,
+        shelfName: shelfName || "",
+        warehouseId: warehouseId || null,
+        warehouseName: warehouseName || "",
+      },
+      supplierPrice: Number(supplierPrice) || 0,
+      shippingCost: Number(shippingCost) || 0,
+      currency: currency || "USD",
+      finalPriceXCD,
+      supplierId: supplierId || null,
+      supplierName: supplierName || "",
       odooProductId: createdProductTemplateId,
       odooCategoryId: categoryId,
     });

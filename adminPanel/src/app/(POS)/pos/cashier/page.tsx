@@ -246,12 +246,12 @@ useEffect(() => {
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA";
 
-      if (isInInput) return; // let normal typing through
+      if (isInInput) return; 
 
       const isScannerSpeed = timeSinceLast < 80;
-      const isFirstChar = barcodeBuffer.length === 0; // ← KEY FIX
+      const isFirstChar = barcodeBuffer.length === 0; 
 
-      // Capture if: it's the first char of a scan OR continuing at scanner speed
+     
       if (isFirstChar || isScannerSpeed) {
         e.preventDefault();
         barcodeBuffer += e.key;

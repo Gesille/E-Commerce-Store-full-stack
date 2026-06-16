@@ -28,9 +28,17 @@ export const toCleanProduct = (
     );
     return match?.name || null;
   };
+const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+  const currencyName: string = product.currency_id?.[1] || "USD";
+  const detectedCurrency = Object.keys(XCD_RATES).find((k) =>
+    currencyName.toUpperCase().includes(k)
+  ) || "USD";
+  const rate = XCD_RATES[detectedCurrency];
+  const finalPriceXCD = parseFloat(((product.standard_price || 0) * rate).toFixed(2));
 
   return {
     id: product.id,
+    itemNumber: product.default_code || null,
     reference: product.default_code || null,
     barcode: product.barcode || null, 
     name: product.display_name,
@@ -39,7 +47,11 @@ export const toCleanProduct = (
     image: product.image_1920 || false,
 
     category: product.categ_id?.[1] || null,
-
+supplierPrice: product.standard_price || 0,
+    currency: detectedCurrency,
+    finalPriceXCD,
+     supplier: product.supplier_name || null,
+     location: product.location || null,
     taxes: {
       sales: product.taxes_id || [],
       purchase: product.supplier_taxes_id || [],
