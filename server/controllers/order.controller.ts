@@ -884,61 +884,55 @@ export const managerCreateOrder = CatchAsyncError(
     if (!items?.length) return next(new ErrorHandler("Cart is empty", 400));
 
     const targetUser = await userModel.findOne({ email });
-    if (!targetUser)
-      return next(new ErrorHandler("Target user not found", 404));
+    if (!targetUser) return next(new ErrorHandler("Target user not found", 404));
 
-    // 1. Validate + check stock for all items BEFORE creating the order
-    const resolvedItems = await Promise.all(
-      items.map(async (item: any) => {
-        const product = await odooRequest(
-          "product.template",
-          "search_read",
-          [[["default_code", "=", item.reference]]],
-          { fields: ["id", "name", "default_code", "qty_available"], limit: 1 },
-        );
+    // ✅ for loop instead of Promise.all to avoid 'never' type
+    const resolvedItems: {
+      productId: number;
+      name: string;
+      reference: string;
+      price: number;
+      quantity: number;
+    }[] = [];
 
-        // 2. Check reference exists
-        if (!product[0])
-          return next(
-            new ErrorHandler(
-              `Reference "${item.reference}" not found in Odoo`,
-              404,
-            ),
-          );
+    for (const item of items) {
+      const product = await odooRequest(
+        "product.template",
+        "search_read",
+        [[["default_code", "=", item.reference]]],
+        { fields: ["id", "name", "default_code", "qty_available"], limit: 1 }
+      );
 
-        // 3. Validate name matches
-        const odooName = product[0].name?.trim().toLowerCase();
-        const inputName = item.name?.trim().toLowerCase();
-        if (odooName !== inputName)
-          return next(
-            new ErrorHandler(
-              `Product name mismatch for "${item.reference}": expected "${product[0].name}", got "${item.name}"`,
-              400,
-            ),
-          );
+      if (!product[0]) {
+        return next(new ErrorHandler(`Reference "${item.reference}" not found in Odoo`, 404));
+      }
 
-        // 4. Check sufficient stock
-        if (product[0].qty_available < item.quantity)
-          return next(
-            new ErrorHandler(
-              `Insufficient stock for "${product[0].name}": available ${product[0].qty_available}, requested ${item.quantity}`,
-              400,
-            ),
-          );
+      const odooName = product[0].name?.trim().toLowerCase();
+      const inputName = item.name?.trim().toLowerCase();
+      if (odooName !== inputName) {
+        return next(new ErrorHandler(
+          `Product name mismatch for "${item.reference}": expected "${product[0].name}", got "${item.name}"`, 400
+        ));
+      }
 
-        return {
-          productId: product[0].id,
-          name: product[0].name,
-          reference: product[0].default_code,
-          price: item.price,
-          quantity: item.quantity,
-        };
-      }),
-    );
+      if (product[0].qty_available < item.quantity) {
+        return next(new ErrorHandler(
+          `Insufficient stock for "${product[0].name}": available ${product[0].qty_available}, requested ${item.quantity}`, 400
+        ));
+      }
+
+      resolvedItems.push({
+        productId: product[0].id,
+        name: product[0].name,
+        reference: product[0].default_code,
+        price: item.price,
+        quantity: item.quantity,
+      });
+    }
 
     const total = resolvedItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0,
+      0
     );
 
     const order = await Order.create({
@@ -948,30 +942,27 @@ export const managerCreateOrder = CatchAsyncError(
       shippingAddress,
       total,
       status: "pending",
-      createdByManager: req.user?._id,
     });
 
     await userModel.findByIdAndUpdate(targetUser._id, {
       $push: { orders: order._id },
     });
 
-    // 5. Decrease stock in Odoo for each item
+    // ✅ Decrease stock in Odoo
     for (const item of resolvedItems) {
-      // Get the product.product id (variant) from product.template id
       const variant = await odooRequest(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", item.productId]]],
-        { fields: ["id"], limit: 1 },
+        { fields: ["id"], limit: 1 }
       );
 
       if (variant[0]) {
-        // Create an inventory adjustment (stock.quant) to decrease qty
         await odooRequest("stock.quant", "create", [
           {
             product_id: variant[0].id,
-            location_id: 8, // your Odoo stock location ID (usually 8 = Virtual Locations/WH/Stock)
-            quantity: -item.quantity, // negative = decrease
+            location_id: 8,
+            quantity: -item.quantity,
           },
         ]);
       }
@@ -981,10 +972,12 @@ export const managerCreateOrder = CatchAsyncError(
     const confirmUrl = `${baseUrl}/api/v1/manager-confirm/${order._id}`;
     const cancelUrl = `${baseUrl}/api/v1/manager-cancel/${order._id}`;
 
+    // ✅ now properly typed
     const itemsWithNames = order.items.map((item: any) => item.toObject());
 
     const adminUser = await userModel.findOne({ role: "admin" });
     if (!adminUser) return next(new ErrorHandler("No admin found", 404));
+
     await sendMail({
       email: adminUser.email,
       subject: `🔔 New Order #${order._id} (Created by Manager)`,
@@ -1008,5 +1001,5 @@ export const managerCreateOrder = CatchAsyncError(
       message: "Order created on behalf of user. Waiting for approval.",
       order,
     });
-  },
+  }
 );

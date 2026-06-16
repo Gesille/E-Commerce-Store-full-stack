@@ -75,13 +75,12 @@ const ReturnSchema = new Schema<IReturn>(
 );
 
 
-ReturnSchema.pre("save", async function (next) {
+ReturnSchema.pre("save", async function () {
   if (this.isNew && !this.returnNumber) {
     const count = await mongoose.models.Return.countDocuments();
     const year = new Date().getFullYear();
     this.returnNumber = `RET-${year}-${String(count + 1).padStart(4, "0")}`;
   }
-  next();
 });
 
 

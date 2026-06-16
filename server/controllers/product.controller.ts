@@ -2,13 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import {
-    checkOdooConnection,
+  checkOdooConnection,
   getAllProductsService,
   getProductByIdService,
 } from "../services/product.service.js";
 import { odooRequest } from "../odoo/odoo.client.js";
 import Product from "../models/product.model.js";
-import axios from "axios"
+import axios from "axios";
 
 import Order from "../models/order.model.js";
 import cloudinary, { uploadImage } from "../utils/uploadImages.js";
@@ -32,7 +32,7 @@ export const testOdooConnection = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 400));
     }
-  }
+  },
 );
 
 // GET ALL
@@ -46,10 +46,14 @@ export const getAllProductsFromOdoo = CatchAsyncError(
     const products = await getAllProductsService(category);
 
     res.status(200).json({ success: true, products });
-  }
+  },
 );
 
-export const getProductByIdFromOdoo = async (req:Request, res:Response, next:NextFunction) => {
+export const getProductByIdFromOdoo = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const id = Number(req.params.id);
 
@@ -81,7 +85,6 @@ export const getProductByIdFromOdoo = async (req:Request, res:Response, next:Nex
   }
 };
 
-
 // create products
 
 const toBase64 = async (url: string) => {
@@ -100,9 +103,7 @@ const createOrGetAttribute = async (name: string) => {
   if (result.length) return result[0].id;
 
   return await odooRequest("product.attribute", "create", [
-    { name,
-      create_variant: "always", 
-     },
+    { name, create_variant: "always" },
   ]);
 };
 
@@ -124,14 +125,14 @@ const createAttributeValue = async (attributeId: number, value: string) => {
 const createAttributeLines = async (
   productTemplateId: number,
   attributeId: number,
-  valueIds: number[]
+  valueIds: number[],
 ) => {
   for (const valId of valueIds) {
     await odooRequest("product.template.attribute.line", "create", [
       {
         product_tmpl_id: productTemplateId,
         attribute_id: attributeId,
-        value_ids: [[6, 0, [valId]]], 
+        value_ids: [[6, 0, [valId]]],
       },
     ]);
   }
@@ -142,9 +143,16 @@ export const createProduct = async (req: Request, res: Response) => {
 
   try {
     const {
-      name, price, stock, categoryId, image, attributes, reference, barcode,
+      name,
+      price,
+      stock,
+      categoryId,
+      image,
+      attributes,
+      reference,
+      barcode,
       itemNumber,
-     
+      locationId,
       warehouseName,
       shelfName,
       supplierPrice,
@@ -154,36 +162,32 @@ export const createProduct = async (req: Request, res: Response) => {
       supplierName,
     } = req.body;
 
- 
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
-    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+    const finalPriceXCD =
+      ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
     let base64Image = null;
     if (image) {
       base64Image = await toBase64(image);
     }
 
-    createdProductTemplateId = await odooRequest(
-      "product.template",
-      "create",
-      [
-        {
-          name,
-          list_price: price,
-          default_code: itemNumber || reference || false,
-          barcode: barcode || false,
-          standard_price: Number(supplierPrice) || 0,
-          type: "consu",
-          is_storable: true,
-          active: true,
-          sale_ok: true,
-          purchase_ok: true,
-          categ_id: categoryId,
-          image_1920: base64Image || false,
-        },
-      ]
-    );
+    createdProductTemplateId = await odooRequest("product.template", "create", [
+      {
+        name,
+        list_price: price,
+        default_code: itemNumber || reference || false,
+        barcode: barcode || false,
+        standard_price: Number(supplierPrice) || 0,
+        type: "consu",
+        is_storable: true,
+        active: true,
+        sale_ok: true,
+        purchase_ok: true,
+        categ_id: categoryId,
+        image_1920: base64Image || false,
+      },
+    ]);
 
     if (!createdProductTemplateId) {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
@@ -204,13 +208,19 @@ export const createProduct = async (req: Request, res: Response) => {
     if (attributes) {
       for (const key in attributes) {
         const attributeId = await createOrGetAttribute(key);
-        const values = Array.isArray(attributes[key]) ? attributes[key] : [attributes[key]];
+        const values = Array.isArray(attributes[key])
+          ? attributes[key]
+          : [attributes[key]];
         const valueIds = [];
         for (const val of values) {
           const id = await createAttributeValue(attributeId, val);
           valueIds.push(id);
         }
-        await createAttributeLines(createdProductTemplateId!, attributeId, valueIds);
+        await createAttributeLines(
+          createdProductTemplateId!,
+          attributeId,
+          valueIds,
+        );
       }
     }
 
@@ -218,7 +228,7 @@ export const createProduct = async (req: Request, res: Response) => {
       "product.product",
       "search_read",
       [[["product_tmpl_id", "=", createdProductTemplateId]]],
-      { fields: ["id"], limit: 1 }
+      { fields: ["id"], limit: 1 },
     );
 
     if (!variant || variant.length === 0) {
@@ -227,14 +237,13 @@ export const createProduct = async (req: Request, res: Response) => {
 
     const productId = variant[0].id;
 
-    
     let resolvedLocationId = locationId;
     if (!resolvedLocationId) {
       const locations = await odooRequest(
         "stock.location",
         "search_read",
         [[["usage", "=", "internal"]]],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
       resolvedLocationId = locations[0].id;
     }
@@ -263,9 +272,8 @@ export const createProduct = async (req: Request, res: Response) => {
         materials: attributes?.materials ?? [],
       },
       location: {
-        
         shelfName: shelfName || "",
-    
+
         warehouseName: warehouseName || "",
       },
       supplierPrice: Number(supplierPrice) || 0,
@@ -283,12 +291,13 @@ export const createProduct = async (req: Request, res: Response) => {
       productTemplateId: createdProductTemplateId,
       productId,
     });
-
   } catch (err: any) {
     console.error("Odoo Logic Failed:", err.message);
 
     if (createdProductTemplateId) {
-      await odooRequest("product.template", "unlink", [[createdProductTemplateId]]).catch(e => {
+      await odooRequest("product.template", "unlink", [
+        [createdProductTemplateId],
+      ]).catch((e) => {
         console.error("Critical: Cleanup failed!", e.message);
       });
     }
@@ -302,12 +311,9 @@ export const createProduct = async (req: Request, res: Response) => {
 // decrease strock
 export const decreaseStock = async (productId: number, qty: number) => {
   // get locations
-  const locations = await odooRequest(
-    "stock.location",
-    "search_read",
-    [],
-    { fields: ["id", "usage"] }
-  );
+  const locations = await odooRequest("stock.location", "search_read", [], {
+    fields: ["id", "usage"],
+  });
 
   const source = locations.find((l: any) => l.usage === "internal");
   const dest = locations.find((l: any) => l.usage === "customer");
@@ -325,23 +331,22 @@ export const decreaseStock = async (productId: number, qty: number) => {
   ]);
 };
 
-
-// update product 
+// update product
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-      console.log("Schema paths:", Object.keys(Product.schema.paths));
+    console.log("Schema paths:", Object.keys(Product.schema.paths));
     console.log("odooProductId type:", Product.schema.path("odooProductId"));
-  const raw = await Product.collection.findOne({ odooProductId: Number(id) });
+    const raw = await Product.collection.findOne({ odooProductId: Number(id) });
     console.log("Raw result:", raw);
-    const { name, price, stock, colors, sizes, materials,reference,barcode   } = req.body;
-const exists = await odooRequest(
+    const { name, price, stock, colors, sizes, materials, reference, barcode } =
+      req.body;
+    const exists = await odooRequest(
       "product.template",
       "search_read",
       [[["id", "=", Number(id)]]],
-      { fields: ["id", "name"] }
+      { fields: ["id", "name"] },
     );
-    
 
     let imageUrl = null;
     let base64Image = null;
@@ -367,31 +372,31 @@ const exists = await odooRequest(
         name,
         list_price: Number(price),
         qty_available: stock,
-         default_code: reference || false,
-         barcode: barcode || false, 
+        default_code: reference || false,
+        barcode: barcode || false,
         ...(base64Image && { image_1920: base64Image }),
       },
     ]);
 
-   const updated = await Product.findOneAndUpdate(
-  { odooProductId: Number(id) },
-  {
-    $set: {
-      name,
-      reference: reference || "",
-      barcode: barcode || false,
-      price: Number(price),
-      stock: Number(stock),
-      ...(imageUrl && { image: imageUrl }),
-      attributes: {
-        colors: colors ?? [],
-        sizes: sizes ?? [],
-        materials: materials ?? [],
+    const updated = await Product.findOneAndUpdate(
+      { odooProductId: Number(id) },
+      {
+        $set: {
+          name,
+          reference: reference || "",
+          barcode: barcode || false,
+          price: Number(price),
+          stock: Number(stock),
+          ...(imageUrl && { image: imageUrl }),
+          attributes: {
+            colors: colors ?? [],
+            sizes: sizes ?? [],
+            materials: materials ?? [],
+          },
+        },
       },
-    },
-  },
-  { new: true }
-);
+      { new: true },
+    );
 
     res.json({
       success: true,
@@ -402,9 +407,6 @@ const exists = await odooRequest(
     res.status(500).json({ message: err.message });
   }
 };
-
-
-
 
 // delete product
 export const deleteProduct = async (req: Request, res: Response) => {
@@ -428,7 +430,6 @@ export const deleteProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 export const getPurchasedProducts = async (req: Request, res: Response) => {
   try {
@@ -458,7 +459,7 @@ export const getPurchasedProducts = async (req: Request, res: Response) => {
           [[["id", "=", item.productId]]],
           {
             fields: ["id", "name", "image_1920", "list_price"],
-          }
+          },
         );
 
         const prod = product?.[0];
@@ -466,7 +467,7 @@ export const getPurchasedProducts = async (req: Request, res: Response) => {
         result.push({
           orderId: order._id,
           status: order.status,
-          
+
           quantity: item.quantity,
           price: item.price,
           variant: item.variantInfo,
@@ -494,9 +495,6 @@ export const getPurchasedProducts = async (req: Request, res: Response) => {
   }
 };
 
-
-
-
 // order.controller.ts
 export const getTopSellingProducts = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -507,7 +505,7 @@ export const getTopSellingProducts = CatchAsyncError(
         [[["order_id.state", "in", ["sale", "done"]]]],
         {
           fields: ["product_id", "product_uom_qty", "price_subtotal"],
-        }
+        },
       );
 
       // Group by product
@@ -544,10 +542,8 @@ export const getTopSellingProducts = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo error: ${error.message}`, 500));
     }
-  }
+  },
 );
-
-
 
 // product.controller.ts
 export const getLowStockAlerts = CatchAsyncError(
@@ -558,11 +554,16 @@ export const getLowStockAlerts = CatchAsyncError(
       const products = await odooRequest(
         "product.template",
         "search_read",
-        [[["qty_available", "<=", threshold], ["active", "=", true]]],
+        [
+          [
+            ["qty_available", "<=", threshold],
+            ["active", "=", true],
+          ],
+        ],
         {
           fields: ["name", "default_code", "qty_available", "list_price"],
           order: "qty_available asc",
-        }
+        },
       );
 
       res.status(200).json({
@@ -573,9 +574,8 @@ export const getLowStockAlerts = CatchAsyncError(
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 500));
     }
-  }
+  },
 );
-
 
 // Barcode
 export const getProductByBarcode = CatchAsyncError(
@@ -587,9 +587,16 @@ export const getProductByBarcode = CatchAsyncError(
       "search_read",
       [["|", ["barcode", "=", code], ["default_code", "=", code]]], // ✅ OR condition
       {
-        fields: ["id", "name", "list_price", "barcode", "default_code", "qty_available"],
+        fields: [
+          "id",
+          "name",
+          "list_price",
+          "barcode",
+          "default_code",
+          "qty_available",
+        ],
         limit: 1,
-      }
+      },
     );
 
     if (!product.length) {
@@ -597,5 +604,5 @@ export const getProductByBarcode = CatchAsyncError(
     }
 
     res.status(200).json({ success: true, product: product[0] });
-  }
+  },
 );
