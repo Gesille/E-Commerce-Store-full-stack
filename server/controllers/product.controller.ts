@@ -369,24 +369,25 @@ const exists = await odooRequest(
       },
     ]);
 
-    // ✅ Update MongoDB
-    const updated = await Product.findOneAndUpdate(
-      { odooProductId: Number(id) },
-      {
-        name,
-        reference: reference || "", 
-        barcode: barcode || false, 
-        price,
-        stock,
-        ...(imageUrl && { image: imageUrl }),
-        attributes: {
-          colors: colors ?? [],
-          sizes: sizes ?? [],
-          materials: materials ?? [],
-        },
+   const updated = await Product.findOneAndUpdate(
+  { odooProductId: Number(id) },
+  {
+    $set: {
+      name,
+      reference: reference || "",
+      barcode: barcode || false,
+      price: Number(price),
+      stock: Number(stock),
+      ...(imageUrl && { image: imageUrl }),
+      attributes: {
+        colors: colors ?? [],
+        sizes: sizes ?? [],
+        materials: materials ?? [],
       },
-      { new: true }
-    );
+    },
+  },
+  { new: true }
+);
 
     res.json({
       success: true,
