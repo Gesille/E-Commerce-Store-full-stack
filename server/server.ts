@@ -1,7 +1,7 @@
 import dns from "dns";
 dns.setDefaultResultOrder("ipv4first");
 import { app } from "./app.js";
-import { initSocketServer } from "./socketServer.js";
+
 import connectDB from "./utils/db.js";
 import { v2 as cloudinary } from "cloudinary";
 import http from "http";
@@ -20,7 +20,7 @@ cloudinary.config({
 });
 
 
-initSocketServer(server);
+
 startOrderExpiryJob();
 
 server.listen(process.env.PORT, () => {

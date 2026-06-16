@@ -1,4 +1,4 @@
-import mongoose, { Document, Model, Schema } from "mongoose";
+import mongoose, { CallbackWithoutResultAndOptionalError, Document, Model, Schema } from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 import bcrypt from "bcryptjs";
@@ -97,13 +97,11 @@ const userSchema: Schema<IUser> = new mongoose.Schema(
 );
 
 //Mash Password before saving
-userSchema.pre<IUser>("save", async function (next) {
+userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
-    next();
+    return;
   }
-  //10 round is to hard
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 //sign access token
