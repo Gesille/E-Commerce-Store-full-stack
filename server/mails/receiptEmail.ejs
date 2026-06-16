@@ -3,420 +3,420 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Receipt – <%= orderName %></title>
-  <!--[if mso]>
-  <noscript>
-    <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
-  </noscript>
-  <![endif]-->
+  <title>Receipt - <%= orderName %></title>
   <style>
-    /* ── Reset ───────────────────────────────────────── */
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body, html {
-      background-color: #f4f1ec;
-      font-family: 'Georgia', 'Times New Roman', serif;
-      color: #1a1a1a;
-      -webkit-text-size-adjust: 100%;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f4f4f4; padding: 24px; }
 
-    /* ── Wrapper ─────────────────────────────────────── */
-    .wrapper {
-      width: 100%;
-      background-color: #f4f1ec;
-      padding: 40px 16px;
-    }
-    .container {
-      max-width: 560px;
+    .receipt-wrap {
+      max-width: 680px;
       margin: 0 auto;
-      background: #fffdf8;
-      border: 1px solid #e0d9ce;
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    /* ── Header ──────────────────────────────────────── */
-    .header {
-      background-color: #1a1a1a;
-      color: #f4f1ec;
-      padding: 36px 40px 28px;
-      text-align: center;
-      position: relative;
-    }
-    .header::after {
-      content: '';
-      display: block;
-      height: 3px;
-      background: repeating-linear-gradient(
-        90deg,
-        #c9a96e 0px, #c9a96e 8px,
-        transparent 8px, transparent 14px
-      );
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-    }
-    .logo-img {
-      max-height: 52px;
-      max-width: 160px;
-      display: block;
-      margin: 0 auto 14px;
-      object-fit: contain;
-     
-    }
-    .logo-text {
-      font-size: 22px;
-      font-weight: normal;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: #f4f1ec;
-    }
-    .tagline {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #c9a96e;
-      margin-top: 6px;
-    }
-
-    /* ── Receipt Banner ──────────────────────────────── */
-    .receipt-banner {
-      background: #c9a96e;
-      color: #1a1a1a;
-      text-align: center;
-      padding: 10px 40px;
-      font-size: 11px;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      font-family: 'Georgia', serif;
-    }
-
-    /* ── Body ────────────────────────────────────────── */
-    .body {
-      padding: 32px 40px;
-    }
-
-    /* ── Meta grid ───────────────────────────────────── */
-    .meta-grid {
-      display: table;
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 28px;
-      border: 1px solid #e0d9ce;
-    }
-    .meta-grid tr { border-bottom: 1px solid #e0d9ce; }
-    .meta-grid tr:last-child { border-bottom: none; }
-    .meta-grid td {
-      padding: 9px 14px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      vertical-align: top;
-    }
-    .meta-label {
-      color: #888;
-      font-size: 10.5px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      white-space: nowrap;
-      width: 38%;
-      border-right: 1px solid #e0d9ce;
-    }
-    .meta-value {
-      color: #1a1a1a;
-      font-size: 12.5px;
-    }
-
-    /* ── Section heading ─────────────────────────────── */
-    .section-heading {
-      font-size: 10px;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: #888;
-      border-bottom: 1px solid #e0d9ce;
-      padding-bottom: 8px;
-      margin-bottom: 0;
-    }
-
-    /* ── Items table ─────────────────────────────────── */
-    .items-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 4px;
-    }
-    .items-table th {
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #888;
-      padding: 10px 6px;
-      text-align: left;
-      border-bottom: 1px solid #e0d9ce;
-      font-weight: normal;
-    }
-    .items-table th:last-child,
-    .items-table td:last-child { text-align: right; }
-    .items-table th.center,
-    .items-table td.center { text-align: center; }
-    .items-table td {
+      background: #ffffff;
+      border: 1px solid #222222;
+      color: #111111;
       font-size: 13px;
-      padding: 11px 6px;
-      border-bottom: 1px solid #f0ebe0;
-      color: #1a1a1a;
-      vertical-align: top;
-    }
-    .items-table tr:last-child td { border-bottom: none; }
-    .item-name { font-size: 13px; }
-    .item-discount {
-      font-size: 10.5px;
-      color: #c9a96e;
-      margin-top: 2px;
     }
 
-    /* ── Totals ──────────────────────────────────────── */
-    .totals-block {
-      border-top: 1px solid #e0d9ce;
-      padding-top: 14px;
-      margin-top: 8px;
-    }
-    .totals-row {
+    /* ── Header ── */
+    .receipt-header {
+      border-bottom: 2px solid #111111;
+      padding: 16px 20px 14px;
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
-      padding: 5px 0;
-      font-size: 13px;
-      color: #444;
+      align-items: flex-start;
+      gap: 16px;
     }
-    .totals-row.grand-total {
-      border-top: 2px solid #1a1a1a;
-      margin-top: 8px;
-      padding-top: 10px;
-      font-size: 16px;
-      color: #1a1a1a;
-      letter-spacing: 0.03em;
-    }
-    .totals-row.grand-total .t-label {
+    .shop-name {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 11px;
     }
-    .totals-row.grand-total .t-value {
-      font-size: 18px;
-    }
-    .totals-row.change-row { color: #c9a96e; }
-    .t-label { color: #888; font-size: 12px; }
-
-    /* ── Payment badge ───────────────────────────────── */
-    .payment-badge {
-      display: inline-block;
-      background: #1a1a1a;
-      color: #c9a96e;
+    .shop-tagline {
       font-size: 10px;
-      letter-spacing: 0.15em;
+      color: #555555;
+      margin-top: 3px;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 2px;
-      margin-top: 14px;
     }
-
-    /* ── CTA Button ──────────────────────────────────── */
-    .cta-wrapper {
-      text-align: center;
-      margin: 28px 0 8px;
-    }
-    .cta-button {
-      display: inline-block;
-      background: #1a1a1a;
-      color: #f4f1ec !important;
-      text-decoration: none;
+    .shop-contact {
       font-size: 11px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      padding: 13px 28px;
-      border-radius: 2px;
-    }
-
-    /* ── Divider ─────────────────────────────────────── */
-    .divider {
-      border: none;
-      border-top: 1px dashed #d0c9bc;
-      margin: 24px 0;
-    }
-
-    /* ── Footer ──────────────────────────────────────── */
-    .footer {
-      background: #f4f1ec;
-      border-top: 1px solid #e0d9ce;
-      padding: 24px 40px;
-      text-align: center;
-    }
-    .footer-shop {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #1a1a1a;
-      margin-bottom: 8px;
-    }
-    .footer-contact {
-      font-size: 11.5px;
-      color: #777;
-      line-height: 1.8;
-    }
-    .footer-contact a { color: #777; text-decoration: none; }
-    .footer-legal {
-      margin-top: 16px;
-      font-size: 10.5px;
-      color: #aaa;
+      color: #444444;
+      margin-top: 8px;
       line-height: 1.7;
     }
+    .invoice-label {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #111111;
+      text-align: right;
+    }
+    .invoice-meta {
+      margin-top: 8px;
+      border: 1px solid #bbbbbb;
+      font-size: 11px;
+    }
+    .invoice-meta table { width: 100%; border-collapse: collapse; min-width: 200px; }
+    .invoice-meta th {
+      background: #e0e0e0;
+      border: 1px solid #bbbbbb;
+      padding: 4px 12px;
+      font-weight: 700;
+      font-size: 10px;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .invoice-meta td {
+      border: 1px solid #bbbbbb;
+      padding: 5px 12px;
+      text-align: center;
+      font-size: 12px;
+    }
 
-    /* ── Responsive ──────────────────────────────────── */
+    /* ── Order Info Bar ── */
+    .order-info-row {
+      background: #f7f7f7;
+      border-bottom: 1px solid #bbbbbb;
+      padding: 8px 20px;
+      font-size: 11px;
+      color: #444444;
+      display: flex;
+      gap: 32px;
+    }
+    .order-info-row .info-item { display: flex; flex-direction: column; }
+    .order-info-row .info-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888888;
+      margin-bottom: 1px;
+    }
+    .order-info-row .info-value { font-weight: 700; color: #111111; font-size: 12px; }
+
+    /* ── Bill To / Order Info ── */
+    .bill-order-row {
+      display: flex;
+      border-bottom: 1px solid #bbbbbb;
+    }
+    .bill-section {
+      flex: 1;
+      padding: 12px 20px;
+      font-size: 12px;
+      line-height: 1.7;
+      border-right: 1px solid #bbbbbb;
+    }
+    .bill-section:last-child { border-right: none; }
+    .section-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888888;
+      margin-bottom: 5px;
+    }
+    .bill-name { font-weight: 700; font-size: 13px; color: #111111; }
+    .bill-detail { color: #444444; font-size: 12px; line-height: 1.6; }
+    .bill-abst { margin-top: 6px; font-size: 11px; color: #555555; }
+
+    .order-detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .order-detail-table td { padding: 2px 0; vertical-align: top; }
+    .order-detail-table td:first-child { color: #666666; width: 80px; }
+    .order-detail-table td:last-child { text-align: right; color: #111111; }
+
+    /* ── PO / Terms Row ── */
+    .po-head {
+      background: #e0e0e0;
+      border-top: 1px solid #bbbbbb;
+      border-bottom: 1px solid #bbbbbb;
+      display: flex;
+    }
+    .po-head-cell {
+      flex: 1;
+      padding: 4px 20px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-right: 1px solid #bbbbbb;
+    }
+    .po-head-cell:last-child { border-right: none; }
+    .po-values-row {
+      display: flex;
+      border-bottom: 2px solid #111111;
+    }
+    .po-cell {
+      flex: 1;
+      padding: 6px 20px;
+      border-right: 1px solid #bbbbbb;
+      font-size: 12px;
+      color: #111111;
+    }
+    .po-cell:last-child { border-right: none; }
+
+    /* ── Items Table ── */
+    .items-area { border-bottom: 1px solid #bbbbbb; min-height: 100px; }
+    .items-table { width: 100%; border-collapse: collapse; }
+    .items-table thead tr {
+      background: #e0e0e0;
+      border-top: 1px solid #bbbbbb;
+      border-bottom: 1px solid #bbbbbb;
+    }
+    .items-table th {
+      padding: 5px 20px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: left;
+      color: #111111;
+    }
+    .items-table th.right, .items-table td.right { text-align: right; }
+    .items-table td {
+      padding: 7px 20px;
+      font-size: 12px;
+      border-bottom: 1px solid #eeeeee;
+      vertical-align: top;
+      color: #111111;
+    }
+    .items-table tbody tr:last-child td { border-bottom: none; }
+    .discount-line td { color: #555555; font-style: italic; }
+
+    /* ── Totals ── */
+    .totals-section {
+      border-top: 2px solid #111111;
+      background: #ffffff;
+    }
+    .totals-table { width: 100%; border-collapse: collapse; }
+    .totals-table td { padding: 5px 20px; font-size: 12px; color: #111111; }
+    .totals-table td:last-child { text-align: right; }
+    .totals-table .row-subtotal td { padding-top: 9px; }
+    .totals-table .row-tax td { color: #444444; }
+    .totals-table .row-total { border-top: 2px solid #111111; }
+    .totals-table .row-total td {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .totals-table .row-paid { background: #f0f0f0; border-top: 1px solid #bbbbbb; }
+    .totals-table .row-paid td { padding: 6px 20px; font-size: 12px; color: #333333; }
+    .totals-table .row-change td { padding: 5px 20px 9px; font-size: 12px; color: #666666; background: #f0f0f0; }
+
+    .payment-badge {
+      display: inline-block;
+      background: #111111;
+      color: #ffffff;
+      padding: 2px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-left: 6px;
+    }
+
+    /* ── Footer ── */
+    .footer-strip {
+      background: #111111;
+      color: #ffffff;
+      text-align: center;
+      padding: 10px 20px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .footer-strip a { color: #cccccc; text-decoration: underline; }
+
     @media (max-width: 480px) {
-      .body { padding: 24px 20px; }
-      .header { padding: 28px 20px 24px; }
-      .footer { padding: 20px; }
-      .logo-text { font-size: 18px; }
+      body { padding: 8px; }
+      .receipt-header { flex-direction: column; }
+      .invoice-label { text-align: left; }
+      .bill-order-row { flex-direction: column; }
+      .bill-section { border-right: none; border-bottom: 1px solid #bbbbbb; }
+      .po-head, .po-values-row { flex-direction: column; }
+      .po-head-cell, .po-cell { border-right: none; border-bottom: 1px solid #bbbbbb; }
+      .order-info-row { flex-wrap: wrap; gap: 12px; }
     }
   </style>
 </head>
 <body>
-<div class="wrapper">
-  <div class="container">
+  <div class="receipt-wrap">
 
-    <!-- ═══════════ HEADER ═══════════ -->
-    <div class="header">
-      <% if (logoUrl) { %>
-        <img src="<%= logoUrl %>" alt="<%= shopName %>" class="logo-img" />
-      <% } else { %>
-        <div class="logo-text"><%= shopName %></div>
-      <% } %>
-      <% if (shopTagline) { %>
-        <div class="tagline"><%= shopTagline %></div>
+    <!-- ══ HEADER ══ -->
+    <div class="receipt-header">
+      <div>
+        <% if (logoUrl) { %>
+          <img src="<%= logoUrl %>" alt="<%= shopName %>" style="max-height: 48px; margin-bottom: 6px; display: block;" />
+        <% } %>
+        <div class="shop-name"><%= shopName %></div>
+        <% if (shopTagline) { %>
+          <div class="shop-tagline"><%= shopTagline %></div>
+        <% } %>
+        <div class="shop-contact">
+          <% if (shopPhone) { %>Phone #&nbsp;&nbsp;<%= shopPhone %><% if (shopFax) { %> &nbsp;&nbsp;Fax #&nbsp;&nbsp;<%= shopFax %><% } %><br><% } %>
+          <% if (shopEmail) { %><%= shopEmail %><br><% } %>
+          <% if (shopAbst) { %>ABST # <%= shopAbst %><br><% } %>
+          <% if (shopAddress) { %><%= shopAddress %><% } %>
+        </div>
+      </div>
+      <div style="text-align: right; flex-shrink: 0;">
+        <div class="invoice-label">Invoice</div>
+        <div class="invoice-meta">
+          <table>
+            <tr>
+              <th>Date</th>
+              <th>Invoice #</th>
+            </tr>
+            <tr>
+              <td><%= dateOrder %></td>
+              <td><strong><%= orderName %></strong></td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ORDER INFO BAR ══ -->
+    <div class="order-info-row">
+      <div class="info-item">
+        <span class="info-label">Served By</span>
+        <span class="info-value"><%= servedBy %></span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Order Type</span>
+        <span class="info-value"><%= orderType %></span>
+      </div>
+      <% if (posReference) { %>
+      <div class="info-item">
+        <span class="info-label">POS Ref</span>
+        <span class="info-value"><%= posReference %></span>
+      </div>
       <% } %>
     </div>
 
-    <div class="receipt-banner">✦ &nbsp; Official Receipt &nbsp; ✦</div>
-
-    <!-- ═══════════ BODY ═══════════ -->
-    <div class="body">
-
-      <!-- Order meta -->
-      <table class="meta-grid" cellspacing="0" cellpadding="0">
-        <tr>
-          <td class="meta-label">Order</td>
-          <td class="meta-value"><strong><%= orderName %></strong></td>
-        </tr>
-        <tr>
-          <td class="meta-label">Date</td>
-          <td class="meta-value"><%= dateOrder %></td>
-        </tr>
-        <tr>
-          <td class="meta-label">Served by</td>
-          <td class="meta-value"><%= servedBy %></td>
-        </tr>
+    <!-- ══ BILL TO / ORDER DETAILS ══ -->
+    <div class="bill-order-row">
+      <div class="bill-section">
+        <div class="section-label">Bill To</div>
         <% if (customerName) { %>
-        <tr>
-          <td class="meta-label">Customer</td>
-          <td class="meta-value"><%= customerName %></td>
-        </tr>
+          <div class="bill-name"><%= customerName %></div>
+          <% if (customerAddress) { %>
+            <div class="bill-detail"><%= customerAddress %></div>
+          <% } %>
+          <% if (customerAbst) { %>
+            <div class="bill-abst">Cust ABST #&nbsp;&nbsp;<%= customerAbst %></div>
+          <% } %>
+        <% } else { %>
+          <div class="bill-detail" style="color: #999;">Walk-in Customer</div>
         <% } %>
-        <tr>
-          <td class="meta-label">Order type</td>
-          <td class="meta-value"><%= orderType %></td>
-        </tr>
-      </table>
+      </div>
+      <div class="bill-section">
+        <div class="section-label">Order Details</div>
+        <table class="order-detail-table">
+          <tr>
+            <td>Order</td>
+            <td><%= orderName %></td>
+          </tr>
+          <tr>
+            <td>Date</td>
+            <td><%= dateOrder %></td>
+          </tr>
+          <% if (sessionId) { %>
+          <tr>
+            <td>Session</td>
+            <td><%= sessionId %></td>
+          </tr>
+          <% } %>
+          <% if (configId) { %>
+          <tr>
+            <td>Register</td>
+            <td><%= configId %></td>
+          </tr>
+          <% } %>
+        </table>
+      </div>
+    </div>
 
-      <!-- Items -->
-      <p class="section-heading">Items</p>
-      <table class="items-table" cellspacing="0" cellpadding="0">
+    <!-- ══ PO / TERMS ══ -->
+    <div class="po-head">
+      <div class="po-head-cell">P.O. No</div>
+      <div class="po-head-cell">Terms</div>
+      <div class="po-head-cell">Project</div>
+    </div>
+    <div class="po-values-row">
+      <div class="po-cell"><%= poNumber || '&mdash;' %></div>
+      <div class="po-cell"><%= paymentTerms || '&mdash;' %></div>
+      <div class="po-cell"><%= project || '' %></div>
+    </div>
+
+    <!-- ══ ITEMS ══ -->
+    <div class="items-area">
+      <table class="items-table">
         <thead>
           <tr>
-            <th style="width:36px;">Qty</th>
-            <th>Item</th>
-            <th style="width:72px; text-align:right;">Price</th>
-            <th style="width:72px; text-align:right;">Total</th>
+            <th style="width: 44px;">Qty</th>
+            <th>Description</th>
+            <th class="right" style="width: 90px;">Price Each</th>
+            <th class="right" style="width: 100px;">Amount</th>
           </tr>
         </thead>
         <tbody>
           <% lines.forEach(function(line) { %>
-          <tr>
-            <td class="center" style="color:#888;"><%= line.qty %></td>
-            <td>
-              <div class="item-name"><%= line.name %></div>
-              <% if (line.discount > 0) { %>
-                <div class="item-discount">– <%= line.discount %>% discount</div>
-              <% } %>
-            </td>
-            <td style="text-align:right; color:#555;">
-              <%= line.priceUnit.toFixed(2) %>
-            </td>
-            <td style="text-align:right;">
-              <%= line.priceTotal.toFixed(2) %>
-            </td>
-          </tr>
+            <tr>
+              <td><%= line.qty %></td>
+              <td><%= line.name %></td>
+              <td class="right"><%= line.priceUnit.toFixed(2) %></td>
+              <td class="right"><%= line.priceTotal.toFixed(2) %></td>
+            </tr>
+            <% if (line.discount > 0) { %>
+            <tr class="discount-line">
+              <td></td>
+              <td>Customer Discount</td>
+              <td class="right">-<%= line.discount.toFixed(2) %>%</td>
+              <td class="right" style="color: #aa0000;">-<%= (line.priceUnit * line.qty * line.discount / 100).toFixed(2) %></td>
+            </tr>
+            <% } %>
           <% }); %>
         </tbody>
       </table>
-
-      <!-- Totals -->
-      <div class="totals-block">
-        <div class="totals-row">
-          <span class="t-label">Subtotal</span>
-          <span><%= subtotal.toFixed(2) %></span>
-        </div>
-        <div class="totals-row">
-          <span class="t-label">Tax</span>
-          <span><%= tax.toFixed(2) %></span>
-        </div>
-        <div class="totals-row grand-total">
-          <span class="t-label">Total</span>
-          <span class="t-value"><%= total.toFixed(2) %></span>
-        </div>
-
-        <hr class="divider" style="margin: 12px 0;" />
-
-        <div class="totals-row">
-          <span class="t-label">Amount Paid</span>
-          <span><%= amountPaid.toFixed(2) %></span>
-        </div>
-        <% if (change > 0) { %>
-        <div class="totals-row change-row">
-          <span class="t-label">Change</span>
-          <span>– <%= change.toFixed(2) %></span>
-        </div>
-        <% } %>
-
-        <div>
-          <span class="payment-badge"><%= paymentMethod %></span>
-        </div>
-      </div>
-
-      <!-- CTA -->
-      <% if (ticketUrl) { %>
-      <div class="cta-wrapper">
-        <a href="<%= ticketUrl %>" class="cta-button">View Full Receipt Online</a>
-      </div>
-      <% } %>
-
-    </div><!-- /body -->
-
-    <!-- ═══════════ FOOTER ═══════════ -->
-    <div class="footer">
-      <div class="footer-shop"><%= shopName %></div>
-      <div class="footer-contact">
-        <% if (shopAddress) { %><%= shopAddress %><br /><% } %>
-        <% if (shopPhone) { %>
-          <a href="tel:<%= shopPhone %>"><%= shopPhone %></a>
-          <% if (shopEmail) { %> &nbsp;·&nbsp; <% } %>
-        <% } %>
-        <% if (shopEmail) { %>
-          <a href="mailto:<%= shopEmail %>"><%= shopEmail %></a>
-        <% } %>
-      </div>
-      <div class="footer-legal">
-        This is an automated receipt. Please keep it for your records.<br />
-        © <%= new Date().getFullYear() %> <%= shopName %>. All rights reserved.
-      </div>
     </div>
 
-  </div><!-- /container -->
-</div><!-- /wrapper -->
+    <!-- ══ TOTALS ══ -->
+    <div class="totals-section">
+      <table class="totals-table">
+        <tr class="row-subtotal">
+          <td>Subtotal</td>
+          <td>XCD <%= subtotal.toFixed(2) %></td>
+        </tr>
+        <tr class="row-tax">
+          <td>ABST Sales Tax (17.0%)</td>
+          <td>XCD <%= tax.toFixed(2) %></td>
+        </tr>
+        <tr class="row-total">
+          <td>Total Due</td>
+          <td>XCD <%= total.toFixed(2) %></td>
+        </tr>
+        <tr class="row-paid">
+          <td>
+            Amount Paid
+            <span class="payment-badge"><%= paymentMethod %></span>
+          </td>
+          <td>XCD <%= amountPaid.toFixed(2) %></td>
+        </tr>
+        <tr class="row-change">
+          <td>Change</td>
+          <td>XCD <%= change.toFixed(2) %></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ══ FOOTER ══ -->
+    <div class="footer-strip">
+      Thank you for your business &nbsp;&middot;&nbsp; <%= shopName %>
+      <% if (shopEmail) { %> &nbsp;&middot;&nbsp; <%= shopEmail %><% } %>
+      <% if (ticketUrl) { %><br><a href="<%= ticketUrl %>">View receipt online</a><% } %>
+    </div>
+
+  </div>
 </body>
 </html>
