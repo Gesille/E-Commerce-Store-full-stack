@@ -104,8 +104,12 @@ const AddProduct = () => {
   const shippingCost  = form.watch("shippingCost") ?? 0;
   const currency      = form.watch("currency") ?? "USD";
   const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
-  const xcdPreview = ((Number(supplierPrice) + Number(shippingCost)) * (XCD_RATES[currency] ?? 2.7)).toFixed(2);
+  const calculatedFinalPrice =
+  (Number(supplierPrice) + Number(shippingCost)) *
+  (XCD_RATES[currency] ?? 2.7);
 
+const xcdPreview = calculatedFinalPrice.toFixed(2);
+const [useFinalPriceAsSale, setUseFinalPriceAsSale] = useState(false);
   // Base64 helper
   const toBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -114,7 +118,14 @@ const AddProduct = () => {
       reader.onerror  = reject;
       reader.readAsDataURL(file);
     });
-
+useEffect(() => {
+  if (useFinalPriceAsSale) {
+    form.setValue(
+      "price",
+      Number(calculatedFinalPrice.toFixed(2))
+    );
+  }
+}, [calculatedFinalPrice, useFinalPriceAsSale, form]);
   // Barcode scanner
   useEffect(() => {
     let buffer = "";
@@ -355,10 +366,30 @@ const AddProduct = () => {
               )} />
 
               {/* XCD preview */}
-              <div className="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm">
-                <span className="text-slate-500">Final Price (XCD)</span>
-                <span className="font-semibold text-emerald-700">XCD {xcdPreview}</span>
-              </div>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 space-y-3">
+  <div className="flex items-center justify-between text-sm">
+    <span className="text-slate-500">
+      Final Price (XCD)
+    </span>
+
+    <span className="font-semibold text-emerald-700">
+      XCD {xcdPreview}
+    </span>
+  </div>
+
+  <label className="flex items-center gap-2 cursor-pointer">
+    <Checkbox
+      checked={useFinalPriceAsSale}
+      onCheckedChange={(checked) =>
+        setUseFinalPriceAsSale(!!checked)
+      }
+    />
+
+    <span className="text-sm text-slate-600">
+      Use final price as sale price
+    </span>
+  </label>
+</div>
             </Section>
 
             {/* ── 3. Inventory ────────────────────────────────────────── */}
