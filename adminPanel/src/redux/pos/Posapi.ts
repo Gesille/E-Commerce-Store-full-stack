@@ -271,7 +271,7 @@ createOrGetCustomer: builder.mutation<
   }
 >({
   query: (body) => ({
-    url: "pos-customer",
+    url: "create-get-customers",
     method: "POST",
     body,
     credentials: "include" as const,
