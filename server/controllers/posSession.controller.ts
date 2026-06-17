@@ -1569,3 +1569,57 @@ export const holdOrderToOdoo = CatchAsyncError(
     });
   }
 );
+
+export const getHeldOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const orders = await odooRequest(
+      "sale.order",
+      "search_read",
+      [[["state", "=", "draft"], ["origin", "ilike", "POS_HOLD"]]],
+      {
+        fields: ["id", "name", "partner_id", "date_order", "amount_total", "origin", "order_line"],
+        order: "date_order desc",
+        limit: 50,
+      }
+    );
+
+    if (!orders.length) {
+      return res.json({ success: true, orders: [] });
+    }
+
+    // Fetch lines for each order
+    const allLineIds = orders.flatMap((o: any) => o.order_line ?? []);
+    const lines = allLineIds.length
+      ? await odooRequest(
+          "sale.order.line",
+          "search_read",
+          [[["id", "in", allLineIds]]],
+          { fields: ["id", "order_id", "product_id", "product_uom_qty", "price_unit", "discount", "name"] }
+        )
+      : [];
+
+    // Group lines by order
+    const linesByOrder: Record<number, any[]> = {};
+    for (const line of lines) {
+      const oid = line.order_id[0];
+      if (!linesByOrder[oid]) linesByOrder[oid] = [];
+      linesByOrder[oid].push({
+        productName: line.product_id?.[1] ?? line.name,
+        qty: line.product_uom_qty,
+        price: line.price_unit,
+        discount: line.discount,
+      });
+    }
+
+    const result = orders.map((o: any) => ({
+      odooOrderId: o.id,
+      name: o.name,
+      customer: o.partner_id ? { id: o.partner_id[0], name: o.partner_id[1] } : null,
+      date: o.date_order,
+      total: o.amount_total,
+      lines: linesByOrder[o.id] ?? [],
+    }));
+
+    res.json({ success: true, orders: result });
+  }
+);
