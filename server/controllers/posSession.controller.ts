@@ -1230,29 +1230,43 @@ export const getCustomers = CatchAsyncError(
         fields: [
           "id", "name", "phone", "email",
           "street", "city", "country_id",
-          "commercial_company_name", // ✅ computed, read-only
-          "parent_id",               // ✅ actual company link
+          "commercial_company_name",
+          "parent_id",
           "is_company",
         ],
         limit: 100,
       },
     );
 
+    // ✅ ADD THIS — lets you see exactly what Odoo returns
+    console.log("[CUSTOMERS RAW SAMPLE]", JSON.stringify(customers[0], null, 2));
+
     const formatted = customers.map((c: any) => ({
       id: c.id,
       name: c.name,
       phone: c.phone || undefined,
       email: c.email || undefined,
+      // ✅ street/city: use own value, fallback to false → strip to undefined
       street: c.street || undefined,
       city: c.city || undefined,
       country: c.country_id ? c.country_id[1] : undefined,
-      // Show parent company name, or the commercial_company_name fallback
       company: c.parent_id
         ? c.parent_id[1]
         : c.commercial_company_name || undefined,
     }));
 
-    res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
+    res.status(200).json({ 
+      status: "success", 
+      count: formatted.length, 
+      customers: formatted,
+      // ✅ TEMP: include raw for debugging, remove after confirming
+      _raw: customers.map((c: any) => ({
+        id: c.id,
+        street: c.street,
+        city: c.city,
+        country_id: c.country_id,
+      }))
+    });
   },
 );
 
