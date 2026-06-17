@@ -1626,3 +1626,21 @@ export const getHeldOrders = CatchAsyncError(
     res.json({ success: true, orders: result });
   }
 );
+
+
+export const debugHeldOrders = CatchAsyncError(
+  async (req: Request, res: Response) => {
+    // جيبي آخر 5 draft orders بدون filter
+    const orders = await odooRequest(
+      "sale.order",
+      "search_read",
+      [[["state", "=", "draft"]]],
+      {
+        fields: ["id", "name", "origin", "note", "state"],
+        order: "id desc",
+        limit: 5,
+      }
+    );
+    res.json(orders);
+  }
+);
