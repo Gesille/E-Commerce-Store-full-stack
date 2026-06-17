@@ -1577,7 +1577,7 @@ export const getHeldOrders = CatchAsyncError(
   "search_read",
   [[
     ["state", "=", "draft"],
-    ["origin", "like", "POS_HOLD%"],  
+    ["origin", "like", "POS_HOLD:%"],  
   ]],
   {
     fields: ["id", "name", "partner_id", "date_order", "amount_total", "origin", "order_line"],
