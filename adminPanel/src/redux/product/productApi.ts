@@ -32,6 +32,7 @@ export const productApi = apiSlice.injectEndpoints({
           currency: p.currency ?? "USD",
           finalPriceXCD: p.finalPriceXCD ?? 0,
          supplier: p.supplierName ?? "",
+         supplierInvoiceNumber: p.supplierInvoiceNumber ?? "", 
 supplierId: p.supplierId ?? "",
           location: p.location ?? null,
         })),

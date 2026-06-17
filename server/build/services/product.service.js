@@ -13,6 +13,7 @@ const PRODUCT_FIELDS = [
     "categ_id",
     "taxes_id",
     "supplier_taxes_id",
+     "x_supplier_invoice_number", 
 ];
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
 const mapProductInput = (p, supplierName, location) => ({
@@ -31,21 +32,22 @@ const mapProductInput = (p, supplierName, location) => ({
     product_tmpl_id: [p.id],
     supplier_name: supplierName,
     location,
+    x_supplier_invoice_number: p.x_supplier_invoice_number || "", 
 });
-// ✅ helper - جلب الـ quants مع location لمنتج معين
+
 const getProductLocation = async (productVariantId) => {
     const quants = await odooRequest("stock.quant", "search_read", [[["product_id", "=", productVariantId], ["location_id.usage", "=", "internal"]]], { fields: ["location_id", "quantity"], limit: 1 });
     if (!quants.length)
         return null;
     const locationId = quants[0].location_id?.[0];
     const locationName = quants[0].location_id?.[1];
-    // جلب تفاصيل الـ location + parent (warehouse)
+ 
     const locationDetails = await odooRequest("stock.location", "search_read", [[["id", "=", locationId]]], { fields: ["id", "name", "complete_name", "location_id"] });
     const loc = locationDetails?.[0];
     return {
         shelfId: loc?.id || null,
         shelfName: loc?.name || null,
-        fullPath: loc?.complete_name || locationName || null, // مثال: WH/Stock/Shelf A
+        fullPath: loc?.complete_name || locationName || null, 
         warehouseId: loc?.location_id?.[0] || null,
         warehouseName: loc?.location_id?.[1] || null,
     };

@@ -33,6 +33,7 @@ export interface Product {
   images?: Record<string, string>;
   stock: number;
   materials: string[];
+  supplierInvoiceNumber?: string;
 }
 export interface Category {
   odooCategoryId: string | number;

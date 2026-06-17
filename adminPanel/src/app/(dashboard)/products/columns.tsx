@@ -29,6 +29,7 @@ export type Product = {
   colors: string[];
   materials: string[];
   barcode?: string;
+  supplierInvoiceNumber?: string;
 };
 
 export const getColumns = (

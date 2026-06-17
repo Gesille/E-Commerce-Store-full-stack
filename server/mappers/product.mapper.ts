@@ -45,7 +45,7 @@ const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     price: product.lst_price,
     stock: product.qty_available,
     image: product.image_1920 || false,
-
+  supplierInvoiceNumber: product.x_supplier_invoice_number || "",
     category: product.categ_id?.[1] || null,
 supplierPrice: product.standard_price || 0,
     currency: detectedCurrency,
