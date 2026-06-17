@@ -315,7 +315,7 @@ export function CustomerModal({
                         </span>
                       )}
                     </div>
-                    // In the customer list item, replace the subtitle line:
+                  
                     <div className="text-[11px] text-gray-400 mt-0.5 space-y-0.5">
                       <div>
                         {c.email} · {c.phone}

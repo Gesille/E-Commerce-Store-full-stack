@@ -1225,14 +1225,14 @@ export const getCustomers = CatchAsyncError(
     const customers = await odooRequest(
       "res.partner",
       "search_read",
-      [domain],  // ← was hardcoded [[["id", "=", 21]]], now back to real domain
+       [[["id", "=", 21]]],
       {
         fields: [
           "id", "name", "phone", "email",
           "street", "city", "country_id",
-          "parent_id",
+          "commercial_company_name", 
+          "parent_id",               
           "is_company",
-          // commercial_company_name REMOVED
         ],
         limit: 100,
       },
@@ -1246,7 +1246,10 @@ export const getCustomers = CatchAsyncError(
       street: c.street || undefined,
       city: c.city || undefined,
       country: c.country_id ? c.country_id[1] : undefined,
-      company: c.parent_id ? c.parent_id[1] : undefined,
+      // Show parent company name, or the commercial_company_name fallback
+      company: c.parent_id
+        ? c.parent_id[1]
+        : c.commercial_company_name || undefined,
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
