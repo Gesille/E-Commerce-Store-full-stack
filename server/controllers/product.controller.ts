@@ -193,17 +193,17 @@ export const createProduct = async (req: Request, res: Response) => {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
     }
 
-// In createProduct controller — replace the supplierId block:
-if (supplierId) {
-  await odooRequest("product.supplierinfo", "create", [
-    {
-      product_tmpl_id: createdProductTemplateId,
-      partner_id: 1,
-      price: Number(supplierPrice) || 0,
-      product_code: supplierId,  
-    },
-  ]);
-}
+    if (supplierId) {
+      await odooRequest("product.supplierinfo", "create", [
+        {
+          product_tmpl_id: createdProductTemplateId,
+          partner_id: 1,
+          price: Number(supplierPrice) || 0,
+          product_code: supplierId,
+        },
+      ]);
+    }
+
     // attributes
     if (attributes) {
       for (const key in attributes) {
@@ -237,15 +237,68 @@ if (supplierId) {
 
     const productId = variant[0].id;
 
-    let resolvedLocationId = locationId;
+    // ── Resolve location from Odoo ────────────────────────────────────────
+    let resolvedLocationId: number | null = locationId ?? null;
+    let resolvedShelfName = "";
+    let resolvedWarehouseName = "";
+
     if (!resolvedLocationId) {
-      const locations = await odooRequest(
+      // Build filter — try to match by shelf name first
+      const filter: any[] = [["usage", "=", "internal"]];
+      if (shelfName) {
+        filter.push(["name", "ilike", shelfName]);
+      }
+
+      const matchedLocations = await odooRequest(
         "stock.location",
         "search_read",
-        [[["usage", "=", "internal"]]],
-        { fields: ["id"], limit: 1 },
+        [filter],
+        { fields: ["id", "name", "complete_name"], limit: 10 },
       );
-      resolvedLocationId = locations[0].id;
+
+      let chosen = matchedLocations[0] ?? null;
+
+      // If shelfName was given but nothing matched, fall back to default
+      if (!chosen) {
+        const fallback = await odooRequest(
+          "stock.location",
+          "search_read",
+          [[["usage", "=", "internal"]]],
+          { fields: ["id", "name", "complete_name"], limit: 1 },
+        );
+        chosen = fallback[0] ?? null;
+      }
+
+      if (!chosen) {
+        throw new Error("No internal stock location found in Odoo.");
+      }
+
+      resolvedLocationId = chosen.id;
+
+      // Parse warehouse and shelf from Odoo's complete_name (e.g. "WH/Stock/Shelf A")
+      const parts: string[] = (chosen.complete_name ?? chosen.name ?? "")
+        .split("/")
+        .map((p: string) => p.trim());
+
+      resolvedWarehouseName = parts[0] ?? "";
+      resolvedShelfName = parts[parts.length - 1] ?? "";
+    } else {
+      // locationId was provided directly — look it up to get the real names
+      const direct = await odooRequest(
+        "stock.location",
+        "search_read",
+        [[["id", "=", resolvedLocationId]]],
+        { fields: ["id", "name", "complete_name"], limit: 1 },
+      );
+
+      if (direct[0]) {
+        const parts: string[] = (direct[0].complete_name ?? direct[0].name ?? "")
+          .split("/")
+          .map((p: string) => p.trim());
+
+        resolvedWarehouseName = parts[0] ?? "";
+        resolvedShelfName = parts[parts.length - 1] ?? "";
+      }
     }
 
     const quantId = await odooRequest("stock.quant", "create", [
@@ -272,9 +325,10 @@ if (supplierId) {
         materials: attributes?.materials ?? [],
       },
       location: {
-        shelfName: shelfName || "",
-
-        warehouseName: warehouseName || "",
+        // Store what Odoo actually used, not what the user typed
+        shelfName: resolvedShelfName,
+        warehouseName: resolvedWarehouseName,
+        odooLocationId: resolvedLocationId,
       },
       supplierPrice: Number(supplierPrice) || 0,
       shippingCost: Number(shippingCost) || 0,
@@ -290,6 +344,11 @@ if (supplierId) {
       success: true,
       productTemplateId: createdProductTemplateId,
       productId,
+      location: {
+        id: resolvedLocationId,
+        shelfName: resolvedShelfName,
+        warehouseName: resolvedWarehouseName,
+      },
     });
   } catch (err: any) {
     console.error("Odoo Logic Failed:", err.message);
@@ -606,3 +665,19 @@ export const getProductByBarcode = CatchAsyncError(
     res.status(200).json({ success: true, product: product[0] });
   },
 );
+
+
+// product.controller.ts
+export const getOdooLocations = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const locations = await odooRequest(
+      "stock.location",
+      "search_read",
+      [[["usage", "=", "internal"], ["active", "=", true]]],
+      { fields: ["id", "name", "complete_name"], order: "complete_name asc" },
+    );
+    res.json({ success: true, locations });
+  } catch (error: any) {
+    return next(new ErrorHandler(error.message, 500));
+  }
+};

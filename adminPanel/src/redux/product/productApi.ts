@@ -95,7 +95,7 @@ export const productApi = apiSlice.injectEndpoints({
         shelfName?: string;
 
         // Supplier
-        supplierId?: number;
+        supplierId?: string;
         supplierName?: string;
 
         // Media & attributes
@@ -141,6 +141,15 @@ export const productApi = apiSlice.injectEndpoints({
       transformResponse: (response: { success: boolean; product: any }) =>
         response.product,
     }),
+    // In productApi
+getOdooLocations: builder.query<{ id: number; name: string; complete_name: string }[], void>({
+  query: () => ({
+    url: "location",
+    method: "GET",
+    credentials: "include" as const,
+  }),
+  transformResponse: (res: any) => res.locations,
+}),
   }),
 });
 
@@ -152,4 +161,5 @@ export const {
   useGetLowStockAlertsQuery,
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
+  useGetOdooLocationsQuery
 } = productApi;

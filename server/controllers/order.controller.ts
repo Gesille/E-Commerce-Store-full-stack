@@ -644,32 +644,89 @@ export const getInventoryReport = async (
       },
     );
 
-    // 2. Fetch all supplier info records
+    // 2. Fetch supplier info (product_code = invoice number)
     const supplierInfos = await odooRequest(
       "product.supplierinfo",
       "search_read",
       [[]],
-      {
-        fields: ["product_tmpl_id", "product_code"],
-      },
+      { fields: ["product_tmpl_id", "product_code"] },
     );
 
-    // 3. Build map: templateId → invoice number
+    // 3. Build invoice map: templateId → invoice number
     const invoiceMap: Record<number, string> = {};
     for (const si of supplierInfos) {
       const tmplId = Array.isArray(si.product_tmpl_id)
         ? si.product_tmpl_id[0]
         : si.product_tmpl_id;
-
       if (si.product_code) {
         invoiceMap[tmplId] = si.product_code;
       }
     }
 
-    // 4. Merge into each product
+    // 4. Fetch stock quants to get shelf/warehouse per product
+    const quants = await odooRequest(
+      "stock.quant",
+      "search_read",
+      [[["location_id.usage", "=", "internal"]]],
+      { fields: ["product_id", "location_id", "quantity"] },
+    );
+
+    // 5. Fetch all internal locations to resolve warehouse
+    const locations = await odooRequest(
+      "stock.location",
+      "search_read",
+      [[["usage", "=", "internal"]]],
+      { fields: ["id", "name", "complete_name", "location_id"] },
+    );
+
+    const locationMap: Record<number, { shelfName: string; warehouseName: string }> = {};
+    for (const loc of locations) {
+      const fullPath: string = loc.complete_name ?? loc.name ?? "";
+      const parts = fullPath.split("/");
+      locationMap[loc.id] = {
+        warehouseName: parts[0]?.trim() ?? "",
+        shelfName: parts[parts.length - 1]?.trim() ?? "",
+      };
+    }
+
+    // 6. Build location map: product template id → location info
+    // stock.quant uses product.product (variant) id, need to map via product_tmpl_id
+    const variantIds = [...new Set(quants.map((q: any) => q.product_id[0]))];
+
+    const variants = variantIds.length
+      ? await odooRequest(
+          "product.product",
+          "search_read",
+          [[["id", "in", variantIds]]],
+          { fields: ["id", "product_tmpl_id"] },
+        )
+      : [];
+
+    const variantToTemplate: Record<number, number> = {};
+    for (const v of variants) {
+      variantToTemplate[v.id] = Array.isArray(v.product_tmpl_id)
+        ? v.product_tmpl_id[0]
+        : v.product_tmpl_id;
+    }
+
+    const productLocationMap: Record<number, { shelfName: string; warehouseName: string }> = {};
+    for (const quant of quants) {
+      const variantId = quant.product_id[0];
+      const tmplId = variantToTemplate[variantId];
+      const locId = Array.isArray(quant.location_id)
+        ? quant.location_id[0]
+        : quant.location_id;
+      if (tmplId && locationMap[locId]) {
+        productLocationMap[tmplId] = locationMap[locId];
+      }
+    }
+
+    // 7. Merge everything
     const enriched = products.map((p: any) => ({
       ...p,
       supplier_invoice_number: invoiceMap[p.id] ?? "",
+      warehouseName: productLocationMap[p.id]?.warehouseName ?? "",
+      shelfName: productLocationMap[p.id]?.shelfName ?? "",
     }));
 
     res.json({
