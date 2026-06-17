@@ -240,7 +240,7 @@ const AddProduct = () => {
         supplierPrice: data.supplierPrice,
         shippingCost: data.shippingCost,
         currency: data.currency,
-
+ supplierId: data.supplierId,
         warehouseName: data.warehouseName,
         shelfName: data.shelfName,
 

@@ -151,26 +151,14 @@ export const createProduct = async (req: Request, res: Response) => {
 
   try {
     const {
-      name,
-      price,
-      stock,
-      categoryId,
-      image,
-      attributes,
-      reference,
-      barcode,
-      itemNumber,
-      locationId,
-      warehouseName,
-      shelfName,
-      supplierPrice,
-      shippingCost,
-      currency,
-      supplierId,
-      supplierName,
+      name, price, stock, categoryId, image, attributes,
+      reference, barcode, itemNumber, locationId,
+      warehouseName, shelfName,
+      supplierPrice, shippingCost, currency,
+      supplierId, supplierName,
     } = req.body;
 
-    // ── XCD price calculation ─────────────────────────────────────────────
+    // ── XCD price ─────────────────────────────────────────────────────────
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
     const finalPriceXCD =
@@ -178,212 +166,201 @@ export const createProduct = async (req: Request, res: Response) => {
 
     // ── Image ─────────────────────────────────────────────────────────────
     let base64Image = null;
-    if (image) {
-      base64Image = await toBase64(image);
-    }
+    if (image) base64Image = await toBase64(image);
 
     // ── Create product template in Odoo ───────────────────────────────────
-    createdProductTemplateId = await odooRequest("product.template", "create", [
-      {
-        name,
-        list_price: price,
-        default_code: itemNumber || reference || false,
-        barcode: barcode || false,
-        standard_price: Number(supplierPrice) || 0,
-        type: "consu",
-        is_storable: true,
-        active: true,
-        sale_ok: true,
-        purchase_ok: true,
-        categ_id: categoryId,
-        image_1920: base64Image || false,
-      },
-    ]);
+    createdProductTemplateId = await odooRequest("product.template", "create", [{
+      name,
+      list_price: price,
+      default_code: itemNumber || reference || false,
+      barcode: barcode || false,
+      standard_price: Number(supplierPrice) || 0,
+      type: "consu",
+      is_storable: true,
+      active: true,
+      sale_ok: true,
+      purchase_ok: true,
+      categ_id: categoryId,
+      image_1920: base64Image || false,
+    }]);
 
-    if (!createdProductTemplateId) {
+    if (!createdProductTemplateId)
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
-    }
 
-    // ── Supplier info ─────────────────────────────────────────────────────
-    if (supplierId) {
-      await odooRequest("product.supplierinfo", "create", [
-        {
-          product_tmpl_id: createdProductTemplateId,
-          partner_id: 1,
-          price: Number(supplierPrice) || 0,
-          product_code: supplierId,
-        },
-      ]);
+    // ── Supplier: find or create partner in Odoo ──────────────────────────
+    let resolvedSupplierId: number | null = null;
+
+    if (supplierName || supplierId) {
+      const suppliers = await odooRequest(
+        "res.partner",
+        "search_read",
+        [[[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]]],
+        { fields: ["id", "name", "ref"], limit: 1 }
+      );
+
+      if (suppliers.length > 0) {
+        resolvedSupplierId = suppliers[0].id;
+      } else {
+        // Create supplier if not found
+        resolvedSupplierId = await odooRequest("res.partner", "create", [{
+          name: supplierName || "Unknown Supplier",
+          ref: supplierId || false,
+          supplier_rank: 1,
+        }]);
+      }
+
+      await odooRequest("product.supplierinfo", "create", [{
+        product_tmpl_id: createdProductTemplateId,
+        partner_id: resolvedSupplierId,
+        price: Number(supplierPrice) || 0,
+        product_code: supplierId || false,
+      }]);
     }
 
     // ── Attributes ────────────────────────────────────────────────────────
     const ATTRIBUTE_NAME_MAP: Record<string, string> = {
-      colors: "Color",
-      sizes: "Size",
-      materials: "Material",
+      colors: "Color", sizes: "Size", materials: "Material",
     };
 
     if (attributes) {
       for (const key in attributes) {
         const values = Array.isArray(attributes[key])
-          ? attributes[key]
-          : [attributes[key]];
-
-        // Skip empty arrays
+          ? attributes[key] : [attributes[key]];
         if (!values || values.length === 0) continue;
 
         const odooAttributeName = ATTRIBUTE_NAME_MAP[key] ?? key;
         const attributeId = await createOrGetAttribute(odooAttributeName);
-
         const valueIds = [];
         for (const val of values) {
           const id = await createAttributeValue(attributeId, val);
           valueIds.push(id);
         }
-
-        await createAttributeLines(
-          createdProductTemplateId!,
-          attributeId,
-          valueIds,
-        );
+        await createAttributeLines(createdProductTemplateId!, attributeId, valueIds);
       }
     }
 
     // ── Get product variant ───────────────────────────────────────────────
     const variant = await odooRequest(
-      "product.product",
-      "search_read",
+      "product.product", "search_read",
       [[["product_tmpl_id", "=", createdProductTemplateId]]],
-      { fields: ["id"], limit: 1 },
+      { fields: ["id"], limit: 1 }
     );
 
-    if (!variant || variant.length === 0) {
+    if (!variant || variant.length === 0)
       throw new Error("Could not find product variant.");
-    }
 
     const productId = variant[0].id;
 
-    // ── Resolve location ──────────────────────────────────────────────────
+    // ── Resolve / Create Odoo location ────────────────────────────────────
     let resolvedLocationId: number | null = locationId ?? null;
-    let resolvedShelfName = "";
-    let resolvedWarehouseName = "";
+    // Always keep user-entered names as the source of truth
+    let resolvedWarehouseName = warehouseName || "";
+    let resolvedShelfName = shelfName || "";
 
-    if (!resolvedLocationId) {
+    if (!resolvedLocationId && warehouseName && shelfName) {
+      // 1. Find or create warehouse location
+      const warehouseResults = await odooRequest(
+        "stock.location", "search_read",
+        [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
+        { fields: ["id", "name"], limit: 1 }
+      );
 
-      // Step 1: exact match on shelf name
+      let warehouseLocationId: number;
+
+      if (warehouseResults.length) {
+        warehouseLocationId = warehouseResults[0].id;
+      } else {
+        // Create it
+        warehouseLocationId = await odooRequest("stock.location", "create", [{
+          name: warehouseName,
+          usage: "internal",
+        }]);
+      }
+
+      // 2. Find or create shelf inside that warehouse
+      const shelfResults = await odooRequest(
+        "stock.location", "search_read",
+        [[
+          ["name", "=", shelfName],
+          ["location_id", "=", warehouseLocationId],
+          ["usage", "=", "internal"],
+        ]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (shelfResults.length) {
+        resolvedLocationId = shelfResults[0].id;
+      } else {
+        // Create shelf under warehouse
+        resolvedLocationId = await odooRequest("stock.location", "create", [{
+          name: shelfName,
+          location_id: warehouseLocationId,
+          usage: "internal",
+        }]);
+      }
+
+    } else if (!resolvedLocationId) {
+      // Fallback: only locationId or nothing was given — search by name
       if (shelfName) {
-        const exact = await odooRequest(
-          "stock.location",
-          "search_read",
+        const found = await odooRequest(
+          "stock.location", "search_read",
           [[["usage", "=", "internal"], ["name", "=", shelfName]]],
-          { fields: ["id", "name", "complete_name"], limit: 1 },
+          { fields: ["id"], limit: 1 }
         );
-        if (exact[0]) resolvedLocationId = exact[0].id;
+        if (found[0]) resolvedLocationId = found[0].id;
       }
 
-      // Step 2: ilike on complete_name (catches "WH/Stock/Shelf A")
-      if (!resolvedLocationId && shelfName) {
-        const ilikeShelf = await odooRequest(
-          "stock.location",
-          "search_read",
-          [
-            [
-              ["usage", "=", "internal"],
-              ["complete_name", "ilike", shelfName],
-            ],
-          ],
-          { fields: ["id", "name", "complete_name"], limit: 1 },
-        );
-        if (ilikeShelf[0]) resolvedLocationId = ilikeShelf[0].id;
-      }
-
-      // Step 3: fallback to warehouse name
-      if (!resolvedLocationId && warehouseName) {
-        const ilikeWH = await odooRequest(
-          "stock.location",
-          "search_read",
-          [
-            [
-              ["usage", "=", "internal"],
-              ["complete_name", "ilike", warehouseName],
-            ],
-          ],
-          { fields: ["id", "name", "complete_name"], limit: 1 },
-        );
-        if (ilikeWH[0]) resolvedLocationId = ilikeWH[0].id;
-      }
-
-      // Step 4: last resort — first internal location in Odoo
+      // Last resort: first available internal location
       if (!resolvedLocationId) {
         const fallback = await odooRequest(
-          "stock.location",
-          "search_read",
+          "stock.location", "search_read",
           [[["usage", "=", "internal"]]],
-          { fields: ["id", "name", "complete_name"], limit: 1 },
+          { fields: ["id", "name", "complete_name"], limit: 1 }
         );
-        if (!fallback[0])
+        if (!fallback.length)
           throw new Error("No internal stock location found in Odoo.");
         resolvedLocationId = fallback[0].id;
       }
     }
 
-    // Resolve display names from whichever ID we ended up with
-    const locationRecord = await odooRequest(
-      "stock.location",
-      "search_read",
-      [[["id", "=", resolvedLocationId]]],
-      { fields: ["name", "complete_name"], limit: 1 },
-    );
-
-    if (locationRecord[0]) {
-      const parts = (locationRecord[0].complete_name ?? "")
-        .split("/")
-        .map((p: string) => p.trim());
-      resolvedWarehouseName = parts[0] ?? warehouseName ?? "";
-      resolvedShelfName = parts[parts.length - 1] ?? shelfName ?? "";
-    }
-
     // ── Set stock via stock.quant ─────────────────────────────────────────
-    const quantId = await odooRequest("stock.quant", "create", [
-      {
-        product_id: productId,
-        location_id: resolvedLocationId,
-        inventory_quantity: Number(stock),
-      },
-    ]);
+    const quantId = await odooRequest("stock.quant", "create", [{
+      product_id: productId,
+      location_id: resolvedLocationId,
+      inventory_quantity: Number(stock),
+    }]);
 
     await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
     // ── Save to MongoDB ───────────────────────────────────────────────────
-  await Product.create({
-  name,
-  reference: reference || "",
-  itemNumber: itemNumber || "",
-  barcode: barcode || "",
-  price: Number(price),
-  stock: Number(stock),
-  image: image || "",
-  attributes: {
-    colors: attributes?.colors ?? [],
-    sizes: attributes?.sizes ?? [],
-    materials: attributes?.materials ?? [],
-  },
-  location: {
-    shelfName:      resolvedShelfName,      // ← resolved from Odoo, not user input
-    warehouseName:  resolvedWarehouseName,  // ← resolved from Odoo, not user input
-    odooLocationId: resolvedLocationId,
-  },
-  supplierPrice:  Number(supplierPrice) || 0,
-  shippingCost:   Number(shippingCost) || 0,
-  currency:       currency || "USD",
-  finalPriceXCD,
-  supplierId:     supplierId || null,       // string — invoice number like "INV-001"
-  supplierName:   supplierName || "",       // ← this is what shows as "supplier" in response
-  odooProductId:  createdProductTemplateId,
-  odooCategoryId: categoryId,
-});;
+    await Product.create({
+      name,
+      reference: reference || "",
+      itemNumber: itemNumber || "",
+      barcode: barcode || "",
+      price: Number(price),
+      stock: Number(stock),
+      image: image || "",
+      attributes: {
+        colors: attributes?.colors ?? [],
+        sizes: attributes?.sizes ?? [],
+        materials: attributes?.materials ?? [],
+      },
+      location: {
+        shelfName: resolvedShelfName,         // user-entered value preserved
+        warehouseName: resolvedWarehouseName, // user-entered value preserved
+        odooLocationId: resolvedLocationId,
+      },
+      supplierPrice: Number(supplierPrice) || 0,
+      shippingCost: Number(shippingCost) || 0,
+      currency: currency || "USD",
+      finalPriceXCD,
+      supplierId: supplierId || "",
+      supplierName: supplierName || "",
+      odooProductId: createdProductTemplateId,
+      odooCategoryId: categoryId,
+    });
 
-    // ── Response ──────────────────────────────────────────────────────────
     res.json({
       success: true,
       productTemplateId: createdProductTemplateId,
@@ -394,16 +371,13 @@ export const createProduct = async (req: Request, res: Response) => {
         warehouseName: resolvedWarehouseName,
       },
     });
+
   } catch (err: any) {
     console.error("Odoo Logic Failed:", err.message);
 
-    // Rollback — delete the Odoo product if anything failed after creation
     if (createdProductTemplateId) {
-      await odooRequest("product.template", "unlink", [
-        [createdProductTemplateId],
-      ]).catch((e) => {
-        console.error("Critical: Cleanup failed!", e.message);
-      });
+      await odooRequest("product.template", "unlink", [[createdProductTemplateId]])
+        .catch((e) => console.error("Critical: Cleanup failed!", e.message));
     }
 
     res.status(500).json({

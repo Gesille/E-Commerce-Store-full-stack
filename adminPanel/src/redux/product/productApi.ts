@@ -31,7 +31,8 @@ export const productApi = apiSlice.injectEndpoints({
           shippingCost: p.shippingCost ?? 0,
           currency: p.currency ?? "USD",
           finalPriceXCD: p.finalPriceXCD ?? 0,
-          supplier: p.supplier ?? "",
+         supplier: p.supplierName ?? "",
+supplierId: p.supplierId ?? "",
           location: p.location ?? null,
         })),
     }),
@@ -97,7 +98,7 @@ export const productApi = apiSlice.injectEndpoints({
         // Supplier
         supplierId?: string;
         supplierName?: string;
-
+supplier?: string;
         // Media & attributes
         image?: string;
         attributes: {
