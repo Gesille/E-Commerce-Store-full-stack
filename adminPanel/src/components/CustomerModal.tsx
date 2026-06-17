@@ -9,15 +9,23 @@ import {
 
 // Fix exportCustomersCSV
 function exportCustomersCSV(customers: Customer[]) {
-  const header = ["Name", "Email", "Phone", "Company", "Street", "City", "Country"];
+  const header = [
+    "Name",
+    "Email",
+    "Phone",
+    "Company",
+    "Street",
+    "City",
+    "Country",
+  ];
   const rows = customers.map((c) => [
     `"${c.name.replace(/"/g, '""')}"`,
     `"${(c.email ?? "").replace(/"/g, '""')}"`,
     `"${(c.phone ?? "").replace(/"/g, '""')}"`,
-    `"${(c.company ?? "").replace(/"/g, '""')}"`,   
-    `"${(c.street ?? "").replace(/"/g, '""')}"`,    
-    `"${(c.city ?? "").replace(/"/g, '""')}"`,     
-    `"${(c.country ?? "").replace(/"/g, '""')}"`,  
+    `"${(c.company ?? "").replace(/"/g, '""')}"`,
+    `"${(c.street ?? "").replace(/"/g, '""')}"`,
+    `"${(c.city ?? "").replace(/"/g, '""')}"`,
+    `"${(c.country ?? "").replace(/"/g, '""')}"`,
   ]);
   const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -53,51 +61,51 @@ export function CustomerModal({
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
 
   // Backend returns { customers: [...] }
-// In CustomerModal — fix the customers mapping
-const customers: Customer[] = (data?.customers ?? []).map((c: any) => ({
-  id: c.id,
-  name: c.name,
-  email: c.email || "",
-  phone: c.phone || "",
-  company: c.company || undefined,   
-  street: c.street || undefined,     
-  city: c.city || undefined,        
-  country: c.country || undefined,  
-}));
+  // In CustomerModal — fix the customers mapping
+  const customers: Customer[] = (data?.customers ?? []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    email: c.email || "",
+    phone: c.phone || "",
+    company: c.company || undefined,
+    street: c.street || undefined,
+    city: c.city || undefined,
+    country: c.country || undefined,
+  }));
 
-const handleCreate = async () => {
-  if (!newName.trim()) {
-    setCreateError("Name is required.");
-    return;
-  }
-  setCreateError("");
-  try {
-    const result = await createCustomer({
-      name: newName.trim(),
-      phone: newPhone.trim() || undefined,
-      email: newEmail.trim() || undefined,
-      company: newCompany.trim() || undefined, 
-      street: newStreet.trim() || undefined,     
-      city: newCity.trim() || undefined,         
-      country: newCountry.trim() || undefined,   
-    }).unwrap();
+  const handleCreate = async () => {
+    if (!newName.trim()) {
+      setCreateError("Name is required.");
+      return;
+    }
+    setCreateError("");
+    try {
+      const result = await createCustomer({
+        name: newName.trim(),
+        phone: newPhone.trim() || undefined,
+        email: newEmail.trim() || undefined,
+        company: newCompany.trim() || undefined,
+        street: newStreet.trim() || undefined,
+        city: newCity.trim() || undefined,
+        country: newCountry.trim() || undefined,
+      }).unwrap();
 
-    const created: Customer = {
-      id: result.customerId,
-      name: newName.trim(),
-      email: newEmail.trim(),
-      phone: newPhone.trim(),
-      company: newCompany.trim() || undefined,   
-      street: newStreet.trim() || undefined,
-      city: newCity.trim() || undefined,
-      country: newCountry.trim() || undefined,
-    };
-    onSelect(created);
-    onClose();
-  } catch (e: any) {
-    setCreateError(e?.data?.message ?? "Failed to create customer.");
-  }
-};
+      const created: Customer = {
+        id: result.customerId,
+        name: newName.trim(),
+        email: newEmail.trim(),
+        phone: newPhone.trim(),
+        company: newCompany.trim() || undefined,
+        street: newStreet.trim() || undefined,
+        city: newCity.trim() || undefined,
+        country: newCountry.trim() || undefined,
+      };
+      onSelect(created);
+      onClose();
+    } catch (e: any) {
+      setCreateError(e?.data?.message ?? "Failed to create customer.");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -117,7 +125,8 @@ const handleCreate = async () => {
 
         {/* ── CREATE FORM ── */}
         {showCreate ? (
-          <div className="px-5 py-4 flex flex-col gap-3">
+          <div className="px-5 py-4 flex flex-col gap-3 overflow-y-auto flex-1">
+            {/* Name */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
                 Name *
@@ -130,6 +139,8 @@ const handleCreate = async () => {
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
               />
             </div>
+
+            {/* Phone */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
                 Phone
@@ -141,6 +152,8 @@ const handleCreate = async () => {
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
               />
             </div>
+
+            {/* Email */}
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
                 Email
@@ -152,59 +165,64 @@ const handleCreate = async () => {
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
               />
             </div>
- <div>
-  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
-    Company
-  </label>
-  <input
-    value={newCompany}
-    onChange={(e) => setNewCompany(e.target.value)}
-    placeholder="Company name"
-    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
-  />
-</div>
-<div>
-  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
-    Street
-  </label>
-  <input
-    value={newStreet}
-    onChange={(e) => setNewStreet(e.target.value)}
-    placeholder="Street address"
-    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
-  />
-</div>
-<div className="flex gap-2">
-  <div className="flex-1">
-    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
-      City
-    </label>
-    <input
-      value={newCity}
-      onChange={(e) => setNewCity(e.target.value)}
-      placeholder="City"
-      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
-    />
-  </div>
-  <div className="flex-1">
-    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
-      Country
-    </label>
-    <input
-      value={newCountry}
-      onChange={(e) => setNewCountry(e.target.value)}
-      placeholder="Country"
-      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
-    />
-  </div>
-</div>
+
+            {/* Company */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+                Company
+              </label>
+              <input
+                value={newCompany}
+                onChange={(e) => setNewCompany(e.target.value)}
+                placeholder="Company name"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+              />
+            </div>
+
+            {/* Street */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+                Street
+              </label>
+              <input
+                value={newStreet}
+                onChange={(e) => setNewStreet(e.target.value)}
+                placeholder="Street address"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+              />
+            </div>
+
+            {/* City + Country */}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+                  City
+                </label>
+                <input
+                  value={newCity}
+                  onChange={(e) => setNewCity(e.target.value)}
+                  placeholder="City"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+                  Country
+                </label>
+                <input
+                  value={newCountry}
+                  onChange={(e) => setNewCountry(e.target.value)}
+                  placeholder="e.g. United States"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
             {createError && (
               <div className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">
                 {createError}
               </div>
             )}
-
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-1 pb-1">
               <button
                 onClick={() => {
                   setShowCreate(false);
@@ -297,8 +315,21 @@ const handleCreate = async () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">
-                      {c.email} · {c.phone}
+                    // In the customer list item, replace the subtitle line:
+                    <div className="text-[11px] text-gray-400 mt-0.5 space-y-0.5">
+                      <div>
+                        {c.email} · {c.phone}
+                      </div>
+                      {(c.street || c.city || c.country) && (
+                        <div>
+                          {[c.street, c.city, c.country]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </div>
+                      )}
+                      {c.company && (
+                        <div className="text-blue-400">{c.company}</div>
+                      )}
                     </div>
                   </div>
                 ))}
