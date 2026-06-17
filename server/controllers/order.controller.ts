@@ -627,26 +627,55 @@ export const getInventoryReport = async (
   next: NextFunction,
 ) => {
   try {
+    // 1. Fetch products
     const products = await odooRequest(
       "product.template",
       "search_read",
       [[]],
       {
         fields: [
+          "id",
           "name",
           "default_code",
           "qty_available",
-          "virtual_available",
           "list_price",
           "standard_price",
         ],
       },
     );
 
+    // 2. Fetch all supplier info records (ref = invoice number)
+    const supplierInfos = await odooRequest(
+      "product.supplierinfo",
+      "search_read",
+      [[]],
+      {
+        fields: ["product_tmpl_id", "ref"],
+      },
+    );
+
+    // 3. Build map: templateId → invoice number
+    const invoiceMap: Record<number, string> = {};
+    for (const si of supplierInfos) {
+      const tmplId = Array.isArray(si.product_tmpl_id)
+        ? si.product_tmpl_id[0]
+        : si.product_tmpl_id;
+
+      if (si.ref) {
+        invoiceMap[tmplId] = si.ref;
+      }
+    }
+
+    // 4. Merge into each product
+    const enriched = products.map((p: any) => ({
+      ...p,
+      supplier_invoice_number: invoiceMap[p.id] ?? "",
+    }));
+
     res.json({
       success: true,
-      count: products.length,
-      inventory: products,
+      count: enriched.length,
+      inventory: enriched,
     });
   } catch (error: any) {
     return next(new ErrorHandler(error.message, 500));

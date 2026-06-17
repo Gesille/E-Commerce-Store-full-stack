@@ -1,15 +1,22 @@
 "use client";
 
-import { useGetInventoryReportQuery, useLazyExportInventoryQuery } from "@/redux/inventory/inventoryApi";
+import {
+  useGetInventoryReportQuery,
+  useLazyExportInventoryQuery,
+} from "@/redux/inventory/inventoryApi";
 import { useState, useMemo } from "react";
 
-
-type SortKey = "name" | "qty_available" | "virtual_available" | "list_price" | "standard_price";
+type SortKey =
+  | "name"
+  | "qty_available"
+  | "supplier_invoice_number"
+  | "list_price"
+  | "standard_price";
 type SortDir = "asc" | "desc";
 type StockFilter = "all" | "in_stock" | "low_stock" | "out_of_stock";
 
 const getLowStockThreshold = (qty: number) => {
-  return Math.ceil(qty * 0.5); 
+  return Math.ceil(qty * 0.5);
 };
 
 function StockBadge({ qty }: { qty: number }) {
@@ -33,48 +40,68 @@ function StockBadge({ qty }: { qty: number }) {
 
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-        In stock
+      In stock
     </span>
   );
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   return (
-    <span className={`ml-1 inline-block transition-opacity ${active ? "opacity-100" : "opacity-30"}`}>
+    <span
+      className={`ml-1 inline-block transition-opacity ${active ? "opacity-100" : "opacity-30"}`}
+    >
       {active && dir === "desc" ? "↓" : "↑"}
     </span>
   );
 }
 
 export default function InventoryPage() {
-  const { data: inventory = [], isLoading, isError, refetch } = useGetInventoryReportQuery();
-  const [triggerExport, { isFetching: isExporting }] = useLazyExportInventoryQuery();
+  const {
+    data: inventory = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useGetInventoryReportQuery();
+  const [triggerExport, { isFetching: isExporting }] =
+    useLazyExportInventoryQuery();
 
-  const [search, setSearch] = useState("");
-  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [page, setPage] = useState(1);
+  const [search, setSearch]               = useState("");
+  const [stockFilter, setStockFilter]     = useState<StockFilter>("all");
+  const [invoiceFilter, setInvoiceFilter] = useState("");
+  const [sortKey, setSortKey]             = useState<SortKey>("name");
+  const [sortDir, setSortDir]             = useState<SortDir>("asc");
+  const [page, setPage]                   = useState(1);
   const PAGE_SIZE = 15;
+
+  // Unique invoice numbers for the dropdown
+  const invoiceNumbers = useMemo(
+    () =>
+      [
+        ...new Set(
+          inventory
+            .map((p) => p.supplier_invoice_number)
+            .filter((v): v is string => !!v),
+        ),
+      ].sort(),
+    [inventory],
+  );
 
   // Stats
   const stats = useMemo(() => {
     const total = inventory.length;
-   const inStock = inventory.filter((p) => {
-  const threshold = getLowStockThreshold(p.qty_available);
-  return p.qty_available > threshold;
-}).length;
-
-const lowStock = inventory.filter((p) => {
-  const threshold = getLowStockThreshold(p.qty_available);
-  return (
-    p.qty_available > 0 &&
-    p.qty_available <= threshold
-  );
-}).length;
-   
+    const inStock = inventory.filter((p) => {
+      const threshold = getLowStockThreshold(p.qty_available);
+      return p.qty_available > threshold;
+    }).length;
+    const lowStock = inventory.filter((p) => {
+      const threshold = getLowStockThreshold(p.qty_available);
+      return p.qty_available > 0 && p.qty_available <= threshold;
+    }).length;
     const outOfStock = inventory.filter((p) => p.qty_available <= 0).length;
-    const totalValue = inventory.reduce((acc, p) => acc + p.qty_available * p.standard_price, 0);
+    const totalValue = inventory.reduce(
+      (acc, p) => acc + p.qty_available * p.standard_price,
+      0,
+    );
     return { total, inStock, lowStock, outOfStock, totalValue };
   }, [inventory]);
 
@@ -82,37 +109,42 @@ const lowStock = inventory.filter((p) => {
   const filtered = useMemo(() => {
     let result = [...inventory];
 
+    // Text search — name, SKU, and invoice number
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
-          (p.default_code && String(p.default_code).toLowerCase().includes(q))
+          (p.default_code &&
+            String(p.default_code).toLowerCase().includes(q)) ||
+          (p.supplier_invoice_number &&
+            p.supplier_invoice_number.toLowerCase().includes(q)),
       );
     }
-if (stockFilter === "in_stock") {
-  result = result.filter((p) => {
-    const threshold = getLowStockThreshold(
-      p.qty_available
-    );
-    return p.qty_available > threshold;
-  });
-}
 
-if (stockFilter === "low_stock") {
-  result = result.filter((p) => {
-    const threshold = getLowStockThreshold(
-      p.qty_available
-    );
+    // Invoice dropdown filter
+    if (invoiceFilter) {
+      result = result.filter(
+        (p) => p.supplier_invoice_number === invoiceFilter,
+      );
+    }
 
-    return (
-      p.qty_available > 0 &&
-      p.qty_available <= threshold
-    );
-  });
-}
-    if (stockFilter === "out_of_stock") result = result.filter((p) => p.qty_available <= 0);
+    // Stock status filter
+    if (stockFilter === "in_stock") {
+      result = result.filter((p) => {
+        const threshold = getLowStockThreshold(p.qty_available);
+        return p.qty_available > threshold;
+      });
+    } else if (stockFilter === "low_stock") {
+      result = result.filter((p) => {
+        const threshold = getLowStockThreshold(p.qty_available);
+        return p.qty_available > 0 && p.qty_available <= threshold;
+      });
+    } else if (stockFilter === "out_of_stock") {
+      result = result.filter((p) => p.qty_available <= 0);
+    }
 
+    // Sort
     result.sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
@@ -125,10 +157,10 @@ if (stockFilter === "low_stock") {
     });
 
     return result;
-  }, [inventory, search, stockFilter, sortKey, sortDir]);
+  }, [inventory, search, invoiceFilter, stockFilter, sortKey, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -144,8 +176,8 @@ if (stockFilter === "low_stock") {
     const result = await triggerExport(format);
     if (result.data) {
       const url = URL.createObjectURL(result.data);
-      const a = document.createElement("a");
-      a.href = url;
+      const a   = document.createElement("a");
+      a.href    = url;
       const date = new Date().toISOString().split("T")[0];
       a.download = `Inventory_Report_${date}.${format === "pdf" ? "pdf" : "xlsx"}`;
       a.click();
@@ -167,7 +199,9 @@ if (stockFilter === "low_stock") {
             <p className="text-xs font-medium uppercase tracking-widest text-gray-400 mb-1">
               Operations
             </p>
-            <h1 className="text-2xl font-semibold text-gray-900">Inventory Report</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              Inventory Report
+            </h1>
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
@@ -205,14 +239,16 @@ if (stockFilter === "low_stock") {
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
           {[
-            { label: "Total products", value: stats.total, color: "text-gray-900" },
-            { label: "In stock", value: stats.inStock, color: "text-emerald-600" },
-            { label: "Low stock", value: stats.lowStock, color: "text-amber-600" },
-            { label: "Out of stock", value: stats.outOfStock, color: "text-red-600" },
+            { label: "Total products", value: stats.total,      color: "text-gray-900"    },
+            { label: "In stock",       value: stats.inStock,    color: "text-emerald-600" },
+            { label: "Low stock",      value: stats.lowStock,   color: "text-amber-600"   },
+            { label: "Out of stock",   value: stats.outOfStock, color: "text-red-600"     },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-1">{s.label}</p>
-              <p className={`text-2xl font-semibold ${s.color}`}>{isLoading ? "—" : s.value}</p>
+              <p className={`text-2xl font-semibold ${s.color}`}>
+                {isLoading ? "—" : s.value}
+              </p>
             </div>
           ))}
         </div>
@@ -222,7 +258,9 @@ if (stockFilter === "low_stock") {
           <div>
             <p className="text-xs text-gray-400 mb-1">Total stock value (cost price)</p>
             <p className="text-2xl font-semibold text-gray-900">
-              {isLoading ? "—" : `$${stats.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {isLoading
+                ? "—"
+                : `$${stats.totalValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </p>
           </div>
           <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
@@ -233,19 +271,55 @@ if (stockFilter === "low_stock") {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search by name or SKU..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-            />
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-col gap-3">
+          {/* Row 1: search + invoice dropdown */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Search */}
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by name, SKU or invoice #..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+              />
+            </div>
+
+            {/* Invoice number dropdown */}
+            <div className="relative">
+              <select
+                value={invoiceFilter}
+                onChange={(e) => { setInvoiceFilter(e.target.value); setPage(1); }}
+                className="appearance-none pl-3 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white text-gray-700 min-w-[180px]"
+              >
+                <option value="">All invoice #</option>
+                {invoiceNumbers.map((inv) => (
+                  <option key={inv} value={inv}>
+                    {inv}
+                  </option>
+                ))}
+              </select>
+              {/* Chevron icon */}
+              <svg
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
+
+          {/* Row 2: stock status buttons */}
           <div className="flex gap-2 flex-wrap">
             {(["all", "in_stock", "low_stock", "out_of_stock"] as StockFilter[]).map((f) => (
               <button
@@ -257,9 +331,28 @@ if (stockFilter === "low_stock") {
                     : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                 }`}
               >
-                {f === "all" ? "All" : f === "in_stock" ? "In stock" : f === "low_stock" ? "Low stock" : "Out of stock"}
+                {f === "all"
+                  ? "All"
+                  : f === "in_stock"
+                    ? "In stock"
+                    : f === "low_stock"
+                      ? "Low stock"
+                      : "Out of stock"}
               </button>
             ))}
+
+            {/* Clear invoice filter badge */}
+            {invoiceFilter && (
+              <button
+                onClick={() => { setInvoiceFilter(""); setPage(1); }}
+                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
+              >
+                Invoice: {invoiceFilter}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
@@ -278,7 +371,9 @@ if (stockFilter === "low_stock") {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <p className="text-sm font-medium text-red-600">Failed to load inventory</p>
-              <button onClick={() => refetch()} className="mt-2 text-sm text-blue-500 hover:underline">Try again</button>
+              <button onClick={() => refetch()} className="mt-2 text-sm text-blue-500 hover:underline">
+                Try again
+              </button>
             </div>
           ) : (
             <>
@@ -293,8 +388,8 @@ if (stockFilter === "low_stock") {
                       <th className={thClass} onClick={() => handleSort("qty_available")}>
                         On hand <SortIcon active={sortKey === "qty_available"} dir={sortDir} />
                       </th>
-                      <th className={thClass} onClick={() => handleSort("virtual_available")}>
-                        Forecasted <SortIcon active={sortKey === "virtual_available"} dir={sortDir} />
+                      <th className={thClass} onClick={() => handleSort("supplier_invoice_number")}>
+                        Invoice # <SortIcon active={sortKey === "supplier_invoice_number"} dir={sortDir} />
                       </th>
                       <th className={thClass} onClick={() => handleSort("list_price")}>
                         Sale price <SortIcon active={sortKey === "list_price"} dir={sortDir} />
@@ -322,23 +417,30 @@ if (stockFilter === "low_stock") {
                             {product.default_code || <span className="text-gray-300">—</span>}
                           </td>
                           <td className={tdClass}>
-                           <span
-  className={
-    product.qty_available <= 0
-      ? "text-red-600 font-medium"
-      : product.qty_available <=
-        getLowStockThreshold(product.qty_available)
-      ? "text-amber-600 font-medium"
-      : "text-gray-700"
-  }
->
+                            <span
+                              className={
+                                product.qty_available <= 0
+                                  ? "text-red-600 font-medium"
+                                  : product.qty_available <= getLowStockThreshold(product.qty_available)
+                                    ? "text-amber-600 font-medium"
+                                    : "text-gray-700"
+                              }
+                            >
                               {product.qty_available.toLocaleString()}
                             </span>
                           </td>
-                          <td className={tdClass}>
-                            <span className={product.virtual_available < 0 ? "text-red-500" : "text-gray-700"}>
-                              {product.virtual_available.toLocaleString()}
-                            </span>
+                          <td className={`${tdClass} font-mono text-xs`}>
+                            {product.supplier_invoice_number ? (
+                              // Clickable — sets the invoice filter on click
+                              <button
+                              onClick={() => { setInvoiceFilter(product.supplier_invoice_number ?? ""); setPage(1); }}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100 transition-colors"
+                              >
+                                {product.supplier_invoice_number}
+                              </button>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
                           </td>
                           <td className={tdClass}>
                             ${Number(product.list_price).toFixed(2)}
@@ -360,7 +462,9 @@ if (stockFilter === "low_stock") {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                   <p className="text-xs text-gray-400">
-                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} products
+                    Showing {(page - 1) * PAGE_SIZE + 1}–
+                    {Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
+                    {filtered.length} products
                   </p>
                   <div className="flex gap-1">
                     <button
@@ -371,7 +475,7 @@ if (stockFilter === "low_stock") {
                       Previous
                     </button>
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                      const start  = Math.max(1, Math.min(page - 2, totalPages - 4));
                       const pageNum = start + i;
                       return (
                         <button

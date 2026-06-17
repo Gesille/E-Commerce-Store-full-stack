@@ -8,6 +8,7 @@ export interface InventoryProduct {
   virtual_available: number;
   list_price: number;
   standard_price: number;
+  supplier_invoice_number?: string;
 }
 
 export interface InventoryReportResponse {

@@ -193,17 +193,17 @@ export const createProduct = async (req: Request, res: Response) => {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
     }
 
-    // ربط الـ supplier
-    if (supplierId) {
-      await odooRequest("product.supplierinfo", "create", [
-        {
-          product_tmpl_id: createdProductTemplateId,
-          partner_id: supplierId,
-          price: Number(supplierPrice) || 0,
-        },
-      ]);
-    }
-
+// In createProduct controller — replace the supplierId block:
+if (supplierId) {
+  await odooRequest("product.supplierinfo", "create", [
+    {
+      product_tmpl_id: createdProductTemplateId,
+      partner_id: 1,           // generic supplier partner, or keep a default
+      price: Number(supplierPrice) || 0,
+      ref: supplierId,   // ← Odoo's built-in "Supplier Product Code" field
+    },
+  ]);
+}
     // attributes
     if (attributes) {
       for (const key in attributes) {
