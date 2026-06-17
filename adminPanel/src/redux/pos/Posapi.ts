@@ -19,7 +19,7 @@ import {
   POSConfigsResponse,
 } from "@/types/session";
 import { apiSlice } from "../api/apiSlice";
-import { CreateCustomerResponse, CreateOrGetCustomerResponse } from "@/types/pos";
+import { CreateCustomerResponse } from "@/types/pos";
 import { Sacramento } from "next/font/google";
 
 export const posApi = apiSlice.injectEndpoints({
@@ -148,7 +148,21 @@ export const posApi = apiSlice.injectEndpoints({
       providesTags: ["Customers"],
     }),
 
-    
+    createCustomer: builder.mutation<
+      CreateCustomerResponse,
+      {
+        name: string;
+        phone?: string;
+        email?: string;
+      }
+    >({
+      query: (body) => ({
+        url: "customers",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Customers"],
+    }),
 
     getPaymentMethods: builder.query<PaymentMethodsResponse, void>({
       query: () => ({
@@ -258,9 +272,8 @@ holdOrder: builder.mutation({
   invalidatesTags: ["HeldOrders"],
 }),
 
-createOrGetCustomer: builder.mutation<
-  CreateOrGetCustomerResponse,
-  {
+createOrGetCustomer: builder.mutation({
+  query: (body: {
     name: string;
     email?: string;
     phone?: string;
@@ -268,10 +281,8 @@ createOrGetCustomer: builder.mutation<
     city?: string;
     country?: string;
     company?: string;
-  }
->({
-  query: (body) => ({
-    url: "create-get-customers",
+  }) => ({
+    url: "pos-customer",
     method: "POST",
     body,
     credentials: "include" as const,
@@ -301,7 +312,7 @@ export const {
   useGetProductsQuery,
 useGetHeldOrdersQuery,
   useGetCustomersQuery,
-
+  useCreateCustomerMutation,
 useCreateOrGetCustomerMutation,
   useGetPaymentMethodsQuery,
 useHoldOrderMutation,

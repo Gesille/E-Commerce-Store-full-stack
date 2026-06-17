@@ -53,12 +53,7 @@ export interface Customer {
   country?: string;    
   company?: string;  
 }
-export interface CreateOrGetCustomerResponse {
-  success: boolean;
-  created: boolean;
-  customerId: number;
-  customer: Customer;
-}
+
 export function fmt(n: number) {
   return n.toFixed(2);
 }

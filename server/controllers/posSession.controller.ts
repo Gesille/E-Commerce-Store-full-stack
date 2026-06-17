@@ -1247,7 +1247,39 @@ export const getCustomers = CatchAsyncError(
   },
 );
 
-
+export const createCustomer = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { name, phone, email, street, city, country, company } = req.body;
+    if (!name) return next(new ErrorHandler("Customer name is required", 400));
+    let countryId: number | false = false;
+    if (country) {
+      const countryMatch = await odooRequest(
+        "res.country",
+        "search_read",
+        [[["name", "=", country]]],
+        { fields: ["id"], limit: 1 },
+      );
+      countryId = countryMatch[0]?.id ?? false;
+    }
+     const customerId = await odooRequest("res.partner", "create", [
+      {
+        name,
+        phone: phone ?? false,
+        email: email ?? false,
+        street: street ?? false,
+        city: city ?? false,
+        country_id: countryId,
+        company_name: company ?? false,
+        customer_rank: 1,
+      },
+    ]);
+    res.status(201).json({
+      status: "success",
+      message: "Customer created successfully",
+      customerId,
+    });
+  },
+);
 
 export const getPaymentMethods = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -1492,62 +1524,36 @@ export const getPosOrderById = CatchAsyncError(
   },
 );
 
-
 // Create or get customer in Odoo
 export const createOrGetCustomer = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { name, email, phone, street, city, country, company } = req.body;
 
-    if (!name) return next(new ErrorHandler("Customer name is required", 400));
+    // Search if customer exists
+    const existing = await odooRequest(
+      "res.partner",
+      "search_read",
+      [[["email", "=", email]]],
+      {
+        fields: [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "street",
+          "city",
+          "country_id",
+          "company_name",
+        ],
+        limit: 1,
+      },
+    );
 
-    const orConditions: any[] = [];
-    if (email) orConditions.push(["email", "=", email]);
-    if (phone) orConditions.push(["phone", "=", phone]);
-
-    if (orConditions.length) {
-      const domain = orConditions.length === 1 ? orConditions : ["|", ...orConditions];
-
-      const existing = await odooRequest(
-        "res.partner",
-        "search_read",
-        [domain],
-        {
-          fields: ["id", "name", "email", "phone", "street", "city", "country_id", "company_name"],
-          limit: 1,
-        },
-      );
-
-      if (existing.length) {
-        const c = existing[0];
-        return res.json({
-          success: true,
-          created: false,
-          customerId: c.id,
-          customer: {
-            id: c.id,
-            name: c.name,
-            email: c.email || undefined,
-            phone: c.phone || undefined,
-            street: c.street || undefined,
-            city: c.city || undefined,
-            country: c.country_id ? c.country_id[1] : undefined,
-            company: c.company_name || undefined,
-          },
-        });
-      }
+    if (existing.length) {
+      return res.json({ success: true, customer: existing[0] });
     }
 
-    let countryId: number | false = false;
-    if (country) {
-      const countryMatch = await odooRequest(
-        "res.country",
-        "search_read",
-        [[["name", "=", country]]],
-        { fields: ["id"], limit: 1 },
-      );
-      countryId = countryMatch[0]?.id ?? false;
-    }
-
+    // Create new customer
     const customerId = await odooRequest("res.partner", "create", [
       {
         name,
@@ -1555,18 +1561,12 @@ export const createOrGetCustomer = CatchAsyncError(
         phone: phone || false,
         street: street || false,
         city: city || false,
-        country_id: countryId,
         company_name: company || false,
         customer_rank: 1,
       },
     ]);
 
-    res.status(201).json({
-      success: true,
-      created: true,
-      customerId,
-      customer: { id: customerId, name, email, phone, street, city, country, company },
-    });
+    res.json({ success: true, customerId });
   },
 );
 
@@ -1700,19 +1700,4 @@ export const getHeldOrders = CatchAsyncError(
   },
 );
 
-export const debugHeldOrders = CatchAsyncError(
-  async (req: Request, res: Response) => {
-    // جيبي آخر 5 draft orders بدون filter
-    const orders = await odooRequest(
-      "sale.order",
-      "search_read",
-      [[["state", "=", "draft"]]],
-      {
-        fields: ["id", "name", "origin", "note", "state"],
-        order: "id desc",
-        limit: 5,
-      },
-    );
-    res.json(orders);
-  },
-);
+

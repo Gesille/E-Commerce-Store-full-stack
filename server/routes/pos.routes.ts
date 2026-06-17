@@ -15,7 +15,7 @@ import {
   getSessionReport,
   getProducts,
   getCustomers,
-  
+  createCustomer,
   getPaymentMethods,
   createOrder,
   confirmOpeningBalance,
@@ -26,7 +26,6 @@ import {
   getPosOrderById,
   holdOrderToOdoo,
   getHeldOrders,
-  createOrGetCustomer,
 
 } from "../controllers/posSession.controller.js";
 
@@ -117,10 +116,10 @@ POSRouter.get(
 POSRouter.get("/products", isAuthenticated, getProducts);
 POSRouter.get("/get-customers", isAuthenticated, getCustomers);
 POSRouter.post(
-  "/create-get-customers",
+  "/customers",
   isAuthenticated,
   authorizeRoles("admin", "cashier"),
-  createOrGetCustomer,
+  createCustomer,
 );
 POSRouter.get("/payment-methods", isAuthenticated, getPaymentMethods);
 
@@ -139,7 +138,7 @@ POSRouter.get(
 );
 
 // pos.routes.ts
-
+POSRouter.post("/pos-customer", isAuthenticated,authorizeRoles("admin","cashier"), createCustomer);
 POSRouter.post("/pos-hold-order", isAuthenticated,authorizeRoles("admin","cashier"), holdOrderToOdoo);
 POSRouter.get("/pos-held-orders",isAuthenticated,authorizeRoles("admin","cashier"), getHeldOrders);
 
