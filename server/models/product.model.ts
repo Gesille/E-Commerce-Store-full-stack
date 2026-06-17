@@ -4,6 +4,7 @@ export interface IProduct extends Document {
   name: string;
   reference: string;
   itemNumber: string;
+  supplierInvoiceNumber:string,
   price: number;
   stock: number;
   image?: string;
@@ -33,6 +34,7 @@ const productSchema: Schema<IProduct> = new Schema(
     name: { type: String, required: true },
     reference: { type: String, default: "" },
     itemNumber: { type: String, default: "" },
+    supplierInvoiceNumber: { type: String, default: "" },
     price: { type: Number, required: true },        
     stock: { type: Number, required: true },
     image: { type: String },

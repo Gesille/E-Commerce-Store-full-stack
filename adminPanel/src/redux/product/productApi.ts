@@ -38,30 +38,39 @@ supplierId: p.supplierId ?? "",
         })),
     }),
 
-    updateProduct: builder.mutation({
-      query: ({
-        id,
-        ...body
-      }: {
-        id: string | number;
-        name: string;
-        price: number;
-        stock: number;
-        barcode?: string;
-        image?: string | null;
-        attributes: {
-          colors: string[];
-          sizes: string[];
-          materials: string[];
-        };
-      }) => ({
-        url: `update-product/${id}`,
-        method: "POST",
-        credentials: "include" as const,
-        body,
-      }),
-      invalidatesTags: ["Products"],
-    }),
+   updateProduct: builder.mutation({
+  query: ({
+    id,
+    ...body
+  }: {
+    id: string | number;
+    name: string;
+    price: number;
+    stock: number;
+    reference?: string;
+    barcode?: string;
+    itemNumber?: string;          
+    supplierPrice?: number;      
+    shippingCost?: number;        
+    currency?: string;            
+    supplierId?: string;         
+    supplierName?: string;         
+    warehouseName?: string;      
+    shelfName?: string;           
+    image?: string | null;
+    attributes: {
+      colors: string[];
+      sizes: string[];
+      materials: string[];
+    };
+  }) => ({
+    url: `update-product/${id}`,
+    method: "POST",
+    credentials: "include" as const,
+    body,
+  }),
+  invalidatesTags: ["Products"],
+}),
 
     deleteProduct: builder.mutation({
       query: (id: string | number) => ({
@@ -152,9 +161,7 @@ getOdooLocations: builder.query<{ id: number; name: string; complete_name: strin
   }),
   transformResponse: (res: any) => res.locations,
 }),
-getAttributeOptions: builder.query<{ values: string[] }, "colors" | "sizes" | "materials">({
-  query: (type) => `attributes/${type}`,
-}),
+
   }),
 });
 
@@ -166,6 +173,5 @@ export const {
   useGetLowStockAlertsQuery,
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
-  useGetOdooLocationsQuery,
-  useGetAttributeOptionsQuery 
+  useGetOdooLocationsQuery
 } = productApi;

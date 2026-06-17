@@ -97,25 +97,23 @@ const toBase64 = async (url: string) => {
 };
 
 const createOrGetAttribute = async (name: string): Promise<number> => {
-  // Exact match only — never ilike
   const existing = await odooRequest(
-    "product.attribute",
-    "search_read",
+    "product.attribute", "search_read",
     [[["name", "=", name]]],
     { fields: ["id", "name"], limit: 1 }
   );
-
   if (existing[0]) return existing[0].id;
-
-  // Create if not found
-  return await odooRequest("product.attribute", "create", [{ name }]);
+  return await odooRequest("product.attribute", "create", [{
+    name,
+    create_variant: "no_variant",
+  }]);
 };
 
 const createAttributeValue = async (
   attributeId: number,
   value: string
 ): Promise<number> => {
-  // MUST scope by attribute_id — otherwise finds "Small" from a different attribute
+ 
   const existing = await odooRequest(
     "product.attribute.value",
     "search_read",
@@ -130,7 +128,41 @@ const createAttributeValue = async (
     { attribute_id: attributeId, name: value },
   ]);
 };
+const syncAttributeLine = async (
+  productTemplateId: number,
+  attributeId: number,
+  valueIds: number[],
+) => {
+  const existingLine = await odooRequest(
+    "product.template.attribute.line", "search_read",
+    [[["product_tmpl_id", "=", productTemplateId], ["attribute_id", "=", attributeId]]],
+    { fields: ["id"], limit: 1 }
+  );
 
+  if (!valueIds.length) {
+    if (existingLine.length) {
+      await odooRequest("product.template.attribute.line", "unlink", [[existingLine[0].id]]);
+    }
+    return;
+  }
+
+  if (existingLine.length) {
+    await odooRequest("product.template.attribute.line", "write", [
+      [existingLine[0].id],
+      { value_ids: [[6, 0, valueIds]] },
+    ]);
+  } else {
+    await odooRequest("product.template.attribute.line", "create", [{
+      product_tmpl_id: productTemplateId,
+      attribute_id: attributeId,
+      value_ids: [[6, 0, valueIds]],
+    }]);
+  }
+};
+
+const ATTRIBUTE_NAME_MAP: Record<string, string> = {
+  colors: "Color", sizes: "Size", materials: "Material",
+};
 const createAttributeLines = async (
   productTemplateId: number,
   attributeId: number,
@@ -411,57 +443,147 @@ export const decreaseStock = async (productId: number, qty: number) => {
 };
 
 // update product
-
-
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const raw = await Product.collection.findOne({ odooProductId: Number(id) });
+    const {
+      name, price, stock, reference, barcode,
+      itemNumber, attributes, warehouseName, shelfName,
+      supplierId, supplierName, supplierPrice,
+      shippingCost, currency,
+    } = req.body;
 
-    const { name, price, stock, colors, sizes, materials, reference, barcode } =
-      req.body;
-
-    const exists = await odooRequest(
-      "product.template",
-      "search_read",
-      [[["id", "=", Number(id)]]],
-      { fields: ["id", "name"] },
-    );
-
-    let imageUrl = null;
-    let base64Image = null;
+    let imageUrl: string | null = null;
+    let base64Image: string | null = null;
 
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
       imageUrl = uploaded.url;
-
-      const response = await axios.get(imageUrl, {
-        responseType: "arraybuffer",
-      });
-
+      const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
 
-    
-    const [finalColors, finalSizes, finalMaterials] = await Promise.all([
-      ensureOdooAttributeValues("Color", colors ?? []),
-      ensureOdooAttributeValues("Size", sizes ?? []),
-      ensureOdooAttributeValues("Material", materials ?? []),
-    ]);
-    // ──────────────────────────────────────────────────────────────────
-
-    // ✅ Update in Odoo
+    // ✅ Update Odoo — all fields including custom ones
     await odooRequest("product.template", "write", [
       [Number(id)],
       {
         name,
-        list_price: Number(price),
-        qty_available: stock,
-        default_code: reference || false,
+        list_price: Number(price) || 0,
+        standard_price: Number(supplierPrice) || 0,
+        default_code: itemNumber || reference || false,
         barcode: barcode || false,
+        x_item_number: itemNumber || false,
+        x_shipping_cost: Number(shippingCost) || 0,
+        x_currency: currency || "USD",
+        x_supplier_invoice_number: supplierId || false,
         ...(base64Image && { image_1920: base64Image }),
       },
     ]);
+
+    // ✅ Sync attributes
+    const finalColors: string[] = attributes?.colors ?? [];
+    const finalSizes: string[] = attributes?.sizes ?? [];
+    const finalMaterials: string[] = attributes?.materials ?? [];
+
+    for (const [key, values] of [
+      ["colors", finalColors],
+      ["sizes", finalSizes],
+      ["materials", finalMaterials],
+    ] as [string, string[]][]) {
+      const odooAttributeName = ATTRIBUTE_NAME_MAP[key];
+      const attributeId = await createOrGetAttribute(odooAttributeName);
+      const valueIds: number[] = [];
+      for (const val of values) {
+        const valId = await createAttributeValue(attributeId, val);
+        valueIds.push(valId);
+      }
+      await syncAttributeLine(Number(id), attributeId, valueIds);
+    }
+
+    // ✅ Update stock via stock.quant
+    if (stock !== undefined && stock !== null) {
+      const variant = await odooRequest(
+        "product.product", "search_read",
+        [[["product_tmpl_id", "=", Number(id)]]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (variant.length) {
+        const locations = await odooRequest(
+          "stock.location", "search_read",
+          [[["usage", "=", "internal"]]],
+          { fields: ["id"], limit: 1 }
+        );
+
+        if (locations.length) {
+          const existingQuant = await odooRequest(
+            "stock.quant", "search_read",
+            [[["product_id", "=", variant[0].id], ["location_id", "=", locations[0].id]]],
+            { fields: ["id"], limit: 1 }
+          );
+
+          if (existingQuant.length) {
+            await odooRequest("stock.quant", "write", [
+              [existingQuant[0].id],
+              { inventory_quantity: Number(stock) },
+            ]);
+            await odooRequest("stock.quant", "action_apply_inventory", [[existingQuant[0].id]]);
+          } else {
+            const quantId = await odooRequest("stock.quant", "create", [{
+              product_id: variant[0].id,
+              location_id: locations[0].id,
+              inventory_quantity: Number(stock),
+            }]);
+            await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
+          }
+        }
+      }
+    }
+
+    // ✅ Update supplier info in Odoo
+    if (supplierName || supplierId) {
+      const suppliers = await odooRequest(
+        "res.partner", "search_read",
+        [["|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""]]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      let resolvedSupplierId: number;
+      if (suppliers.length) {
+        resolvedSupplierId = suppliers[0].id;
+      } else {
+        resolvedSupplierId = await odooRequest("res.partner", "create", [{
+          name: supplierName || "Unknown Supplier",
+          ref: supplierId || false,
+          supplier_rank: 1,
+        }]);
+      }
+
+      const existingSupplierInfo = await odooRequest(
+        "product.supplierinfo", "search_read",
+        [[["product_tmpl_id", "=", Number(id)], ["partner_id", "=", resolvedSupplierId]]],
+        { fields: ["id"], limit: 1 }
+      );
+
+      if (existingSupplierInfo.length) {
+        await odooRequest("product.supplierinfo", "write", [
+          [existingSupplierInfo[0].id],
+          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
+        ]);
+      } else {
+        await odooRequest("product.supplierinfo", "create", [{
+          product_tmpl_id: Number(id),
+          partner_id: resolvedSupplierId,
+          price: Number(supplierPrice) || 0,
+          product_code: supplierId || false,
+        }]);
+      }
+    }
+
+    // ✅ Sync MongoDB — all fields match Odoo
+    const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+    const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
+    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
     const updated = await Product.findOneAndUpdate(
       { odooProductId: Number(id) },
@@ -469,25 +591,33 @@ export const updateProduct = async (req: Request, res: Response) => {
         $set: {
           name,
           reference: reference || "",
+          itemNumber: itemNumber || "",
+          supplierInvoiceNumber: supplierId || "",   // ← synced field
           barcode: barcode || false,
-          price: Number(price),
-          stock: Number(stock),
+          price: Number(price) || 0,
+          stock: Number(stock) || 0,
+          supplierPrice: Number(supplierPrice) || 0,
+          shippingCost: Number(shippingCost) || 0,
+          currency: currency || "USD",
+          finalPriceXCD,
+          supplierId: supplierId || "",
+          supplierName: supplierName || "",
+          location: {
+            warehouseName: warehouseName || "",
+            shelfName: shelfName || "",
+          },
           ...(imageUrl && { image: imageUrl }),
           attributes: {
-            colors: finalColors,     // ← غيّرت من colors إلى finalColors
-            sizes: finalSizes,       // ← غيّرت من sizes إلى finalSizes
-            materials: finalMaterials, // ← غيّرت من materials إلى finalMaterials
+            colors: finalColors,
+            sizes: finalSizes,
+            materials: finalMaterials,
           },
         },
       },
-      { new: true },
+      { new: true }
     );
 
-    res.json({
-      success: true,
-      message: "Product updated successfully",
-      product: updated,
-    });
+    res.json({ success: true, message: "Product updated successfully", product: updated });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
