@@ -11,7 +11,7 @@ export const apiSlice = createApi({
     credentials: 'include',
     
   }),
-  tagTypes:["Products","Users","Orders","Categories","Customers","Returns","Inventory"],
+  tagTypes:["Products","Users","Orders","Categories","Customers","Returns","Inventory","HeldOrders"],
   endpoints: (builder) => ({
     refreshToken: builder.query({
       query: (data) => ({

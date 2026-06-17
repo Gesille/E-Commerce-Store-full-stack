@@ -1,28 +1,34 @@
+// components/HoldOrdersPanel.tsx
 "use client";
-import { Order, calcLineTotal, fmt } from "@/types/pos";
+import { Order, calcLineTotal, fmt, Customer } from "@/types/pos";
 import { useState } from "react";
-import { useHoldOrderMutation } from "@/redux/pos/Posapi";
+import { useGetHeldOrdersQuery, useHoldOrderMutation } from "@/redux/pos/Posapi";
 
 export function HoldOrdersPanel({
   orders,
   setOrders,
   activeOrderId,
   setActiveOrderId,
-  getCustomerForOrder,  // ✅ new prop
+  getCustomerForOrder,
+  onOdooOrderSaved,
 }: {
   orders: Order[];
   setOrders: (orders: Order[]) => void;
   activeOrderId: number;
   setActiveOrderId: (id: number) => void;
-  getCustomerForOrder: (orderId: number) => { id: number; name: string } | null;
+  getCustomerForOrder: (orderId: number) => Customer | null;
+  onOdooOrderSaved: (orderId: number, odooOrderId: number) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [holdingId, setHoldingId] = useState<number | null>(null);
-  const [holdOrder] = useHoldOrderMutation();
+  const [holdOrder] =useHoldOrderMutation();
 
   const addOrder = () => {
     const newId = Date.now();
-    setOrders([...orders, { id: newId, name: `Order ${orders.length + 1}`, cart: [], createdAt: new Date() }]);
+    setOrders([
+      ...orders,
+      { id: newId, name: `Order ${orders.length + 1}`, cart: [], createdAt: new Date() },
+    ]);
     setActiveOrderId(newId);
   };
 
@@ -44,10 +50,9 @@ export function HoldOrdersPanel({
 
   const handleHoldInOdoo = async (e: React.MouseEvent, order: Order) => {
     e.stopPropagation();
-    const customer = getCustomerForOrder(order.id);
 
-    if (!customer) {
-      alert("Please assign a customer to this order before holding it in Odoo.\n\nClick 'Add customer' in the cart panel.");
+    if (order.odooOrderId) {
+      alert(`Already saved in Odoo as quotation #${order.odooOrderId}`);
       return;
     }
 
@@ -56,9 +61,9 @@ export function HoldOrdersPanel({
       return;
     }
 
-    // Already held
-    if (order.odooOrderId) {
-      alert(`Already held in Odoo as quotation #${order.odooOrderId}`);
+    const customer = getCustomerForOrder(order.id);
+    if (!customer) {
+      alert("Please assign a customer first.\n\nClick 'Add customer' in the cart panel.");
       return;
     }
 
@@ -77,14 +82,10 @@ export function HoldOrdersPanel({
         orderName: order.name,
       }).unwrap();
 
-      // Save odooOrderId back to the order
-      setOrders(orders.map((o) =>
-        o.id === order.id ? { ...o, odooOrderId: result.odooOrderId } : o
-      ));
-
-      alert(`✅ Order held in Odoo as draft quotation #${result.odooOrderId}`);
+      onOdooOrderSaved(order.id, result.odooOrderId);
+      alert(`✅ Held in Odoo as draft quotation #${result.odooOrderId}`);
     } catch (err: any) {
-      alert(`Failed to hold order: ${err?.data?.message ?? "Unknown error"}`);
+      alert(`Failed to hold: ${err?.data?.message ?? "Unknown error"}`);
     } finally {
       setHoldingId(null);
     }
@@ -97,10 +98,11 @@ export function HoldOrdersPanel({
     <div className="w-36 bg-white border-l border-gray-100 flex flex-col shrink-0">
       {/* Header */}
       <div className="h-12 bg-gray-50 border-b border-gray-100 flex items-center justify-between px-3.5 shrink-0">
-        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Orders</span>
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
+          Orders
+        </span>
         <button
           onClick={addOrder}
-          aria-label="New order"
           className="w-6 h-6 bg-blue-600 hover:bg-blue-700 text-white text-base rounded-md flex items-center justify-center border-none cursor-pointer transition-colors leading-none"
         >
           +
@@ -121,17 +123,22 @@ export function HoldOrdersPanel({
               <div
                 onClick={() => setActiveOrderId(order.id)}
                 className={`px-3.5 py-2.5 border-b border-gray-50 cursor-pointer transition-colors border-l-2 ${
-                  isActive ? "bg-blue-50 border-l-blue-500" : "border-l-transparent hover:bg-gray-50"
+                  isActive
+                    ? "bg-blue-50 border-l-blue-500"
+                    : "border-l-transparent hover:bg-gray-50"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-[12px] font-medium truncate flex-1 ${isActive ? "text-blue-600" : "text-gray-800"}`}>
+                  <span
+                    className={`text-[12px] font-medium truncate flex-1 ${
+                      isActive ? "text-blue-600" : "text-gray-800"
+                    }`}
+                  >
                     {order.name}
                   </span>
                   {orders.length > 1 && (
                     <button
                       onClick={(e) => handleDeleteClick(e, order)}
-                      aria-label={`Delete ${order.name}`}
                       className="text-gray-300 hover:text-red-400 text-[11px] border-none bg-transparent cursor-pointer pl-1 leading-none"
                     >
                       ✕
@@ -139,23 +146,35 @@ export function HoldOrdersPanel({
                   )}
                 </div>
 
-                {/* Customer badge */}
+                {/* Customer */}
                 {customer && (
                   <div className="text-[10px] mt-0.5 text-indigo-500 truncate">
                     👤 {customer.name}
                   </div>
                 )}
 
-                <div className={`text-[10px] mt-0.5 ${isActive ? "text-blue-400" : "text-gray-400"}`}>
+                <div
+                  className={`text-[10px] mt-0.5 ${
+                    isActive ? "text-blue-400" : "text-gray-400"
+                  }`}
+                >
                   {order.cart.length} item{order.cart.length !== 1 ? "s" : ""}
                   {tot > 0 ? ` · $${fmt(tot)}` : ""}
                 </div>
-                <div className={`text-[10px] mt-0.5 ${isActive ? "text-blue-300" : "text-gray-300"}`}>
-                  {order.createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+
+                <div
+                  className={`text-[10px] mt-0.5 ${
+                    isActive ? "text-blue-300" : "text-gray-300"
+                  }`}
+                >
+                  {order.createdAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
 
-                {/* Hold in Odoo button */}
-                {order.cart.length > 0 && isActive && (
+                {/* Hold in Odoo button — only show when active and has items */}
+                {isActive && order.cart.length > 0 && (
                   <button
                     onClick={(e) => handleHoldInOdoo(e, order)}
                     disabled={isHolding || isHeld}
@@ -167,7 +186,11 @@ export function HoldOrdersPanel({
                           : "bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 cursor-pointer"
                     }`}
                   >
-                    {isHeld ? `✓ In Odoo #${order.odooOrderId}` : isHolding ? "Saving…" : "Hold in Odoo"}
+                    {isHeld
+                      ? `✓ Odoo #${order.odooOrderId}`
+                      : isHolding
+                        ? "Saving…"
+                        : "Hold in Odoo"}
                   </button>
                 )}
               </div>
@@ -175,7 +198,9 @@ export function HoldOrdersPanel({
               {/* Confirm delete */}
               {confirmDelete === order.id && (
                 <div className="px-3 py-2 bg-red-50 border-b border-red-100">
-                  <div className="text-[10px] text-red-600 mb-1.5">Delete order with items?</div>
+                  <div className="text-[10px] text-red-600 mb-1.5">
+                    Delete order with items?
+                  </div>
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => setConfirmDelete(null)}

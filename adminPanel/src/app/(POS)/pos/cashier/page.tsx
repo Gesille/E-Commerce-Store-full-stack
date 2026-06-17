@@ -26,6 +26,7 @@ import { useCreateOrderMutation } from "@/redux/pos/Posapi";
 import { useHeldOrders } from "@/hooks/Useheldorders";
 import { ScanToast, ScanToastState } from "@/components/Scantoast";
 import { useLazyGetProductByBarcodeQuery } from "@/redux/product/productApi";
+import { HeldOrdersDrawer } from "@/components/HeldOrdersDrawer";
 
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export default function CashierPage() {
     setActiveOrderId,
     updateCart: persistCart,
     removeOrder,
+    setOdooOrderId
   } = useHeldOrders();
 
   const initMeta: Record<number, OrderMeta> = {};
@@ -148,7 +150,42 @@ export default function CashierPage() {
       return next;
     });
   };
+const handleRestoreHeldOrder = (odooOrder: any) => {
+  const newId = Date.now();
+  const restoredOrder = {
+    id: newId,
+    name: odooOrder.name,
+    cart: odooOrder.lines.map((line: any, i: number) => ({
+      id: newId + i,
+      productId: line.productId,
+      name: line.productName,
+      price: line.price,
+      unitPrice: line.price,
+      qty: line.qty,
+      discount: line.discount || 0,
+      note: line.note || "",
+    })),
+    createdAt: new Date(odooOrder.date),
+    odooOrderId: odooOrder.odooOrderId,
+  };
 
+  setOrders([...orders, restoredOrder]);
+  setActiveOrderId(newId);
+
+  // Restore customer meta
+  if (odooOrder.customer?.id) {
+    setOrderMeta((prev) => ({
+      ...prev,
+      [newId]: {
+        customer: {
+          id: odooOrder.customer.id,
+          name: odooOrder.customer.name,
+        },
+        note: odooOrder.note || "",
+      },
+    }));
+  }
+};
   const handleSetOrders = (newOrders: Order[]) => {
     setOrders(newOrders);
     newOrders.forEach((o) => {
@@ -447,7 +484,7 @@ useEffect(() => {
               </svg>
               <span>Scanner ready</span>
             </div>
-
+<HeldOrdersDrawer onRestore={handleRestoreHeldOrder} />
             <POSSearchBar search={search} setSearch={setSearch} />
             <span className="text-[12px] text-gray-400">
               <ClockDisplay />
@@ -482,13 +519,14 @@ useEffect(() => {
             onOpenNote={() => setShowNote(true)}
           />
 
-          <HoldOrdersPanel
-            orders={orders}
-            setOrders={handleSetOrders}
-            activeOrderId={activeOrderId}
-            setActiveOrderId={setActiveOrderId}
-             getCustomerForOrder={(orderId) => orderMeta[orderId]?.customer ?? null} 
-          />
+         <HoldOrdersPanel
+  orders={orders}
+  setOrders={handleSetOrders}
+  activeOrderId={activeOrderId}
+  setActiveOrderId={setActiveOrderId}
+  getCustomerForOrder={(orderId) => orderMeta[orderId]?.customer ?? null}
+  onOdooOrderSaved={(orderId, odooOrderId) => setOdooOrderId(orderId, odooOrderId)}
+/>
         </div>
       </div>
 

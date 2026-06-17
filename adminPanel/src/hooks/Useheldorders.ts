@@ -1,10 +1,9 @@
+// hooks/Useheldorders.ts
 import { useState, useCallback } from "react";
 import { Order, CartItem } from "@/types/pos";
 
 const STORAGE_KEY = "pos_held_orders";
 const ACTIVE_KEY  = "pos_active_order_id";
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function defaultOrder(): Order {
   return { id: Date.now(), name: "Order 1", cart: [], createdAt: new Date() };
@@ -37,8 +36,6 @@ function persist(orders: Order[]) {
 function persistActive(id: number) {
   try { localStorage.setItem(ACTIVE_KEY, String(id)); } catch {}
 }
-
-// ─── hook ─────────────────────────────────────────────────────────────────────
 
 export function useHeldOrders() {
   const [orders, setOrdersRaw] = useState<Order[]>(load);
@@ -96,7 +93,17 @@ export function useHeldOrders() {
     });
   }, []);
 
-  /** Call after a successful payment to remove the paid order */
+  // ✅ NEW: save odooOrderId back to the order after holding
+  const setOdooOrderId = useCallback((orderId: number, odooOrderId: number) => {
+    setOrdersRaw((prev) => {
+      const next = prev.map((o) =>
+        o.id === orderId ? { ...o, odooOrderId } : o
+      );
+      persist(next);
+      return next;
+    });
+  }, []);
+
   const removeOrder = useCallback((id: number) => {
     deleteOrder(id);
   }, [deleteOrder]);
@@ -113,5 +120,6 @@ export function useHeldOrders() {
     deleteOrder,
     updateCart,
     removeOrder,
+    setOdooOrderId, // ✅ export
   };
 }

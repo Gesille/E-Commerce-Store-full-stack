@@ -243,7 +243,15 @@ export const posApi = apiSlice.injectEndpoints({
 
       transformResponse: (res: any) => res.order,
     }),
-    holdOrder: builder.mutation({
+getHeldOrders: builder.query<any, void>({
+  query: () => ({
+    url: "pos-held-orders",
+    method: "GET",
+    credentials: "include" as const,
+  }),
+  providesTags: ["HeldOrders"],
+}),
+holdOrder: builder.mutation({
   query: (body: {
     cart: {
       productId: number;
@@ -256,11 +264,12 @@ export const posApi = apiSlice.injectEndpoints({
     customerId: number;
     orderName: string;
   }) => ({
-    url: "pos/hold-order",
+    url: "pos-hold-order",
     method: "POST",
     body,
     credentials: "include" as const,
   }),
+  invalidatesTags: ["HeldOrders"],
 }),
 
 createOrGetCustomer: builder.mutation({
@@ -273,7 +282,7 @@ createOrGetCustomer: builder.mutation({
     country?: string;
     company?: string;
   }) => ({
-    url: "pos/customer",
+    url: "pos-customer",
     method: "POST",
     body,
     credentials: "include" as const,
@@ -301,13 +310,14 @@ export const {
   useGetPosOrdersQuery,
   useGetPosOrderByIdQuery,
   useGetProductsQuery,
-useHoldOrderMutation,
+useGetHeldOrdersQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
 useCreateOrGetCustomerMutation,
   useGetPaymentMethodsQuery,
-
+useHoldOrderMutation,
   useGetPOSConfigsQuery,
+  useLazyGetHeldOrdersQuery
 } = posApi;
 
 export default posApi;
