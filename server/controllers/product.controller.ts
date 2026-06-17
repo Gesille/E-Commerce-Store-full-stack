@@ -182,6 +182,7 @@ export const createProduct = async (req: Request, res: Response) => {
       purchase_ok: true,
       categ_id: categoryId,
       image_1920: base64Image || false,
+       x_supplier_invoice_number: supplierId || false, 
     }]);
 
     if (!createdProductTemplateId)

@@ -624,10 +624,10 @@ export const trackOrder = CatchAsyncError(
 export const getInventoryReport = async (
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
-    // 1. Fetch products
+    // 1. Fetch products with custom invoice field
     const products = await odooRequest(
       "product.template",
       "search_read",
@@ -640,65 +640,45 @@ export const getInventoryReport = async (
           "qty_available",
           "list_price",
           "standard_price",
+          "x_supplier_invoice_number",  // ← custom field
         ],
-      },
-    );
-
-    // 2. Fetch supplier info (product_code = invoice number)
-    const supplierInfos = await odooRequest(
-      "product.supplierinfo",
-      "search_read",
-      [[]],
-      { fields: ["product_tmpl_id", "product_code"] },
-    );
-
-    // 3. Build invoice map: templateId → invoice number
-    const invoiceMap: Record<number, string> = {};
-    for (const si of supplierInfos) {
-      const tmplId = Array.isArray(si.product_tmpl_id)
-        ? si.product_tmpl_id[0]
-        : si.product_tmpl_id;
-      if (si.product_code) {
-        invoiceMap[tmplId] = si.product_code;
       }
-    }
+    );
 
-    // 4. Fetch stock quants to get shelf/warehouse per product
+    // 2. Fetch stock quants for location info
     const quants = await odooRequest(
       "stock.quant",
       "search_read",
       [[["location_id.usage", "=", "internal"]]],
-      { fields: ["product_id", "location_id", "quantity"] },
+      { fields: ["product_id", "location_id", "quantity"] }
     );
 
-    // 5. Fetch all internal locations to resolve warehouse
+    // 3. Fetch all internal locations
     const locations = await odooRequest(
       "stock.location",
       "search_read",
       [[["usage", "=", "internal"]]],
-      { fields: ["id", "name", "complete_name", "location_id"] },
+      { fields: ["id", "name", "complete_name"] }
     );
 
+    // 4. Build locationMap: locationId → { shelfName, warehouseName }
     const locationMap: Record<number, { shelfName: string; warehouseName: string }> = {};
     for (const loc of locations) {
-      const fullPath: string = loc.complete_name ?? loc.name ?? "";
-      const parts = fullPath.split("/");
+      const parts = (loc.complete_name ?? loc.name ?? "").split("/");
       locationMap[loc.id] = {
         warehouseName: parts[0]?.trim() ?? "",
         shelfName: parts[parts.length - 1]?.trim() ?? "",
       };
     }
 
-    // 6. Build location map: product template id → location info
-    // stock.quant uses product.product (variant) id, need to map via product_tmpl_id
+    // 5. Map variant ids → template ids
     const variantIds = [...new Set(quants.map((q: any) => q.product_id[0]))];
-
     const variants = variantIds.length
       ? await odooRequest(
           "product.product",
           "search_read",
           [[["id", "in", variantIds]]],
-          { fields: ["id", "product_tmpl_id"] },
+          { fields: ["id", "product_tmpl_id"] }
         )
       : [];
 
@@ -709,10 +689,10 @@ export const getInventoryReport = async (
         : v.product_tmpl_id;
     }
 
+    // 6. Build productLocationMap: templateId → { shelfName, warehouseName }
     const productLocationMap: Record<number, { shelfName: string; warehouseName: string }> = {};
     for (const quant of quants) {
-      const variantId = quant.product_id[0];
-      const tmplId = variantToTemplate[variantId];
+      const tmplId = variantToTemplate[quant.product_id[0]];
       const locId = Array.isArray(quant.location_id)
         ? quant.location_id[0]
         : quant.location_id;
@@ -721,10 +701,15 @@ export const getInventoryReport = async (
       }
     }
 
-    // 7. Merge everything
+    // 7. Merge and return
     const enriched = products.map((p: any) => ({
-      ...p,
-      supplier_invoice_number: invoiceMap[p.id] ?? "",
+      id: p.id,
+      name: p.name,
+      default_code: p.default_code || "",
+      qty_available: p.qty_available ?? 0,
+      list_price: p.list_price ?? 0,
+      standard_price: p.standard_price ?? 0,
+      supplier_invoice_number: p.x_supplier_invoice_number || "",
       warehouseName: productLocationMap[p.id]?.warehouseName ?? "",
       shelfName: productLocationMap[p.id]?.shelfName ?? "",
     }));
