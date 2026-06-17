@@ -245,7 +245,7 @@ export const posApi = apiSlice.injectEndpoints({
     }),
 getHeldOrders: builder.query<any, void>({
   query: () => ({
-    url: "pos-hold-orders",
+    url: "pos-held-orders",
     method: "GET",
     credentials: "include" as const,
   }),
