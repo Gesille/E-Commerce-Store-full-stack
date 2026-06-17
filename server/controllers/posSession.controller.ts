@@ -1539,7 +1539,7 @@ export const holdOrderToOdoo = CatchAsyncError(
     const saleOrderId = await odooRequest("sale.order", "create", [{
       partner_id: customerId,
       state: "draft",          // quotation = unpaid held order
-      origin: orderName || "POS_HOLD",
+       origin: `POS_HOLD:${orderName || "Unnamed"}`,
       note: `Held POS order: ${orderName}`,
     }]);
 
@@ -1573,15 +1573,18 @@ export const holdOrderToOdoo = CatchAsyncError(
 export const getHeldOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const orders = await odooRequest(
-      "sale.order",
-      "search_read",
-      [[["state", "=", "draft"], ["origin", "ilike", "POS_HOLD"]]],
-      {
-        fields: ["id", "name", "partner_id", "date_order", "amount_total", "origin", "order_line"],
-        order: "date_order desc",
-        limit: 50,
-      }
-    );
+  "sale.order",
+  "search_read",
+  [[
+    ["state", "=", "draft"],
+    ["origin", "like", "POS_HOLD%"],  
+  ]],
+  {
+    fields: ["id", "name", "partner_id", "date_order", "amount_total", "origin", "order_line"],
+    order: "date_order desc",
+    limit: 50,
+  }
+);
 
     if (!orders.length) {
       return res.json({ success: true, orders: [] });
