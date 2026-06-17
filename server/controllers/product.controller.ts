@@ -95,30 +95,38 @@ const toBase64 = async (url: string) => {
   return Buffer.from(res.data, "binary").toString("base64");
 };
 
-const createOrGetAttribute = async (name: string) => {
-  const result = await odooRequest("product.attribute", "search_read", [
-    [["name", "=", name]],
-  ]);
+const createOrGetAttribute = async (name: string): Promise<number> => {
+  // Exact match only — never ilike
+  const existing = await odooRequest(
+    "product.attribute",
+    "search_read",
+    [[["name", "=", name]]],
+    { fields: ["id", "name"], limit: 1 }
+  );
 
-  if (result.length) return result[0].id;
+  if (existing[0]) return existing[0].id;
 
-  return await odooRequest("product.attribute", "create", [
-    { name, create_variant: "always" },
-  ]);
+  // Create if not found
+  return await odooRequest("product.attribute", "create", [{ name }]);
 };
 
-const createAttributeValue = async (attributeId: number, value: string) => {
-  const result = await odooRequest("product.attribute.value", "search_read", [
-    [["name", "=", value]],
-  ]);
+const createAttributeValue = async (
+  attributeId: number,
+  value: string
+): Promise<number> => {
+  // MUST scope by attribute_id — otherwise finds "Small" from a different attribute
+  const existing = await odooRequest(
+    "product.attribute.value",
+    "search_read",
+    [[["attribute_id", "=", attributeId], ["name", "=", value]]],
+    { fields: ["id", "name"], limit: 1 }
+  );
 
-  if (result.length) return result[0].id;
+  if (existing[0]) return existing[0].id;
 
+  // Create scoped to this attribute
   return await odooRequest("product.attribute.value", "create", [
-    {
-      name: value,
-      attribute_id: attributeId,
-    },
+    { attribute_id: attributeId, name: value },
   ]);
 };
 
