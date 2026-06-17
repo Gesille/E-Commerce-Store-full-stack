@@ -16,14 +16,14 @@ export interface IProduct extends Document {
   location: {
   
     warehouseName?: string;
-   
+ odooLocationId?: number | null;
     shelfName?: string;
   };
   supplierPrice?: number;
   shippingCost?: number;
   currency?: string;
   finalPriceXCD?: number;
-  supplierId?: number;
+  supplierId?: string;
   supplierName?: string;
   odooProductId: number;
   odooCategoryId?: number;
@@ -45,14 +45,14 @@ const productSchema: Schema<IProduct> = new Schema(
     location: {
      
       warehouseName: { type: String },
-      
+      odooLocationId: { type: Number }, 
       shelfName: { type: String },
     },
     supplierPrice: { type: Number },
     shippingCost: { type: Number, default: 0 },
     currency: { type: String, default: "USD" },
     finalPriceXCD: { type: Number },
-    supplierId: { type: Number },
+     supplierId: { type: String },  
     supplierName: { type: String },
     odooProductId: { type: Number, required: true },
     odooCategoryId: { type: Number },

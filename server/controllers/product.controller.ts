@@ -355,33 +355,33 @@ export const createProduct = async (req: Request, res: Response) => {
     await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
     // ── Save to MongoDB ───────────────────────────────────────────────────
-    await Product.create({
-      name,
-      reference: reference || "",
-      itemNumber: itemNumber || "",
-      barcode: barcode || "",
-      price: Number(price),
-      stock: Number(stock),
-      image: image || "",
-      attributes: {
-        colors: attributes?.colors ?? [],
-        sizes: attributes?.sizes ?? [],
-        materials: attributes?.materials ?? [],
-      },
-      location: {
-        shelfName: resolvedShelfName,
-        warehouseName: resolvedWarehouseName,
-        odooLocationId: resolvedLocationId,
-      },
-      supplierPrice: Number(supplierPrice) || 0,
-      shippingCost: Number(shippingCost) || 0,
-      currency: currency || "USD",
-      finalPriceXCD,
-      supplierId: supplierId || null,
-      supplierName: supplierName || "",
-      odooProductId: createdProductTemplateId,
-      odooCategoryId: categoryId,
-    });
+  await Product.create({
+  name,
+  reference: reference || "",
+  itemNumber: itemNumber || "",
+  barcode: barcode || "",
+  price: Number(price),
+  stock: Number(stock),
+  image: image || "",
+  attributes: {
+    colors: attributes?.colors ?? [],
+    sizes: attributes?.sizes ?? [],
+    materials: attributes?.materials ?? [],
+  },
+  location: {
+    shelfName:      resolvedShelfName,      // ← resolved from Odoo, not user input
+    warehouseName:  resolvedWarehouseName,  // ← resolved from Odoo, not user input
+    odooLocationId: resolvedLocationId,
+  },
+  supplierPrice:  Number(supplierPrice) || 0,
+  shippingCost:   Number(shippingCost) || 0,
+  currency:       currency || "USD",
+  finalPriceXCD,
+  supplierId:     supplierId || null,       // string — invoice number like "INV-001"
+  supplierName:   supplierName || "",       // ← this is what shows as "supplier" in response
+  odooProductId:  createdProductTemplateId,
+  odooCategoryId: categoryId,
+});;
 
     // ── Response ──────────────────────────────────────────────────────────
     res.json({
