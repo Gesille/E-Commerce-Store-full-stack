@@ -198,9 +198,9 @@ if (supplierId) {
   await odooRequest("product.supplierinfo", "create", [
     {
       product_tmpl_id: createdProductTemplateId,
-      partner_id: 1,           // generic supplier partner, or keep a default
+      partner_id: 1,
       price: Number(supplierPrice) || 0,
-      ref: supplierId,   // ← Odoo's built-in "Supplier Product Code" field
+      product_code: supplierId,  
     },
   ]);
 }

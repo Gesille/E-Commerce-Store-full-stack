@@ -644,13 +644,13 @@ export const getInventoryReport = async (
       },
     );
 
-    // 2. Fetch all supplier info records (ref = invoice number)
+    // 2. Fetch all supplier info records
     const supplierInfos = await odooRequest(
       "product.supplierinfo",
       "search_read",
       [[]],
       {
-        fields: ["product_tmpl_id", "ref"],
+        fields: ["product_tmpl_id", "product_code"],
       },
     );
 
@@ -661,8 +661,8 @@ export const getInventoryReport = async (
         ? si.product_tmpl_id[0]
         : si.product_tmpl_id;
 
-      if (si.ref) {
-        invoiceMap[tmplId] = si.ref;
+      if (si.product_code) {
+        invoiceMap[tmplId] = si.product_code;
       }
     }
 
