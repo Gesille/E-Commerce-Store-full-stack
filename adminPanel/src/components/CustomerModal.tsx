@@ -7,12 +7,17 @@ import {
   useCreateCustomerMutation,
 } from "@/redux/pos/Posapi";
 
+// Fix exportCustomersCSV
 function exportCustomersCSV(customers: Customer[]) {
-  const header = ["Name", "Email", "Phone"];
+  const header = ["Name", "Email", "Phone", "Company", "Street", "City", "Country"];
   const rows = customers.map((c) => [
     `"${c.name.replace(/"/g, '""')}"`,
     `"${(c.email ?? "").replace(/"/g, '""')}"`,
     `"${(c.phone ?? "").replace(/"/g, '""')}"`,
+    `"${(c.company ?? "").replace(/"/g, '""')}"`,   
+    `"${(c.street ?? "").replace(/"/g, '""')}"`,    
+    `"${(c.city ?? "").replace(/"/g, '""')}"`,     
+    `"${(c.country ?? "").replace(/"/g, '""')}"`,  
   ]);
   const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -48,39 +53,51 @@ export function CustomerModal({
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
 
   // Backend returns { customers: [...] }
-  const customers: Customer[] = (data?.customers ?? []).map((c: any) => ({
-    id: c.id,
-    name: c.name,
-    email: c.email || "",
-    phone: c.phone || "",
-  }));
+// In CustomerModal — fix the customers mapping
+const customers: Customer[] = (data?.customers ?? []).map((c: any) => ({
+  id: c.id,
+  name: c.name,
+  email: c.email || "",
+  phone: c.phone || "",
+  company: c.company || undefined,   
+  street: c.street || undefined,     
+  city: c.city || undefined,        
+  country: c.country || undefined,  
+}));
 
-  const handleCreate = async () => {
-    if (!newName.trim()) {
-      setCreateError("Name is required.");
-      return;
-    }
-    setCreateError("");
-    try {
-      const result = await createCustomer({
-        name: newName.trim(),
-        phone: newPhone.trim() || undefined,
-        email: newEmail.trim() || undefined,
-      }).unwrap();
+const handleCreate = async () => {
+  if (!newName.trim()) {
+    setCreateError("Name is required.");
+    return;
+  }
+  setCreateError("");
+  try {
+    const result = await createCustomer({
+      name: newName.trim(),
+      phone: newPhone.trim() || undefined,
+      email: newEmail.trim() || undefined,
+      company: newCompany.trim() || undefined, 
+      street: newStreet.trim() || undefined,     
+      city: newCity.trim() || undefined,         
+      country: newCountry.trim() || undefined,   
+    }).unwrap();
 
-      // Select the newly created customer and close
-      const created: Customer = {
-        id: result.customerId,
-        name: newName.trim(),
-        email: newEmail.trim(),
-        phone: newPhone.trim(),
-      };
-      onSelect(created);
-      onClose();
-    } catch (e: any) {
-      setCreateError(e?.data?.message ?? "Failed to create customer.");
-    }
-  };
+    const created: Customer = {
+      id: result.customerId,
+      name: newName.trim(),
+      email: newEmail.trim(),
+      phone: newPhone.trim(),
+      company: newCompany.trim() || undefined,   
+      street: newStreet.trim() || undefined,
+      city: newCity.trim() || undefined,
+      country: newCountry.trim() || undefined,
+    };
+    onSelect(created);
+    onClose();
+  } catch (e: any) {
+    setCreateError(e?.data?.message ?? "Failed to create customer.");
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
