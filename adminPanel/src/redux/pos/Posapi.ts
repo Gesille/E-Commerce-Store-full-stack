@@ -154,12 +154,17 @@ export const posApi = apiSlice.injectEndpoints({
         name: string;
         phone?: string;
         email?: string;
+         street?: string;
+        city?: string;
+        country?: string;
+        company?: string;
       }
     >({
       query: (body) => ({
         url: "customers",
         method: "POST",
         body,
+        credentials: "include" as const, 
       }),
       invalidatesTags: ["Customers"],
     }),
@@ -272,23 +277,7 @@ holdOrder: builder.mutation({
   invalidatesTags: ["HeldOrders"],
 }),
 
-createOrGetCustomer: builder.mutation({
-  query: (body: {
-    name: string;
-    email?: string;
-    phone?: string;
-    street?: string;
-    city?: string;
-    country?: string;
-    company?: string;
-  }) => ({
-    url: "pos-customer",
-    method: "POST",
-    body,
-    credentials: "include" as const,
-  }),
-  invalidatesTags: ["Customers"],
-}),
+
   }),
 });
 
@@ -313,7 +302,7 @@ export const {
 useGetHeldOrdersQuery,
   useGetCustomersQuery,
   useCreateCustomerMutation,
-useCreateOrGetCustomerMutation,
+
   useGetPaymentMethodsQuery,
 useHoldOrderMutation,
   useGetPOSConfigsQuery,

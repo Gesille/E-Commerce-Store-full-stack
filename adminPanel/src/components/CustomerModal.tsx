@@ -37,6 +37,10 @@ export function CustomerModal({
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newCompany, setNewCompany] = useState("");
+  const [newStreet, setNewStreet] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newCountry, setNewCountry] = useState("");
   const [createError, setCreateError] = useState("");
 
   // ── live search from Odoo via backend ────────────────────────────────────
@@ -131,7 +135,52 @@ export function CustomerModal({
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
               />
             </div>
-
+ <div>
+  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+    Company
+  </label>
+  <input
+    value={newCompany}
+    onChange={(e) => setNewCompany(e.target.value)}
+    placeholder="Company name"
+    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+  />
+</div>
+<div>
+  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+    Street
+  </label>
+  <input
+    value={newStreet}
+    onChange={(e) => setNewStreet(e.target.value)}
+    placeholder="Street address"
+    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+  />
+</div>
+<div className="flex gap-2">
+  <div className="flex-1">
+    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+      City
+    </label>
+    <input
+      value={newCity}
+      onChange={(e) => setNewCity(e.target.value)}
+      placeholder="City"
+      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+    />
+  </div>
+  <div className="flex-1">
+    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">
+      Country
+    </label>
+    <input
+      value={newCountry}
+      onChange={(e) => setNewCountry(e.target.value)}
+      placeholder="Country"
+      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
+    />
+  </div>
+</div>
             {createError && (
               <div className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">
                 {createError}

@@ -1227,7 +1227,13 @@ export const getCustomers = CatchAsyncError(
       "search_read",
       [domain],
       {
-        fields: ["id", "name", "phone", "email", "street", "city", "country_id", "company_name"],
+        fields: [
+          "id", "name", "phone", "email",
+          "street", "city", "country_id",
+          "commercial_company_name", // ✅ computed, read-only
+          "parent_id",               // ✅ actual company link
+          "is_company",
+        ],
         limit: 100,
       },
     );
@@ -1240,7 +1246,10 @@ export const getCustomers = CatchAsyncError(
       street: c.street || undefined,
       city: c.city || undefined,
       country: c.country_id ? c.country_id[1] : undefined,
-      company: c.company_name || undefined,
+      // Show parent company name, or the commercial_company_name fallback
+      company: c.parent_id
+        ? c.parent_id[1]
+        : c.commercial_company_name || undefined,
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
@@ -1251,6 +1260,7 @@ export const createCustomer = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { name, phone, email, street, city, country, company } = req.body;
     if (!name) return next(new ErrorHandler("Customer name is required", 400));
+
     let countryId: number | false = false;
     if (country) {
       const countryMatch = await odooRequest(
@@ -1261,7 +1271,28 @@ export const createCustomer = CatchAsyncError(
       );
       countryId = countryMatch[0]?.id ?? false;
     }
-     const customerId = await odooRequest("res.partner", "create", [
+
+    // If a company name is provided, find or create the company partner
+    let parentId: number | false = false;
+    if (company) {
+      const existingCompany = await odooRequest(
+        "res.partner",
+        "search_read",
+        [[["name", "=", company], ["is_company", "=", true]]],
+        { fields: ["id"], limit: 1 },
+      );
+
+      if (existingCompany.length > 0) {
+        parentId = existingCompany[0].id;
+      } else {
+        // Create the company partner first
+        parentId = await odooRequest("res.partner", "create", [
+          { name: company, is_company: true, customer_rank: 1 },
+        ]);
+      }
+    }
+
+    const customerId = await odooRequest("res.partner", "create", [
       {
         name,
         phone: phone ?? false,
@@ -1269,10 +1300,11 @@ export const createCustomer = CatchAsyncError(
         street: street ?? false,
         city: city ?? false,
         country_id: countryId,
-        company_name: company ?? false,
+        parent_id: parentId,   // ✅ replaces company_name
         customer_rank: 1,
       },
     ]);
+
     res.status(201).json({
       status: "success",
       message: "Customer created successfully",
@@ -1524,51 +1556,7 @@ export const getPosOrderById = CatchAsyncError(
   },
 );
 
-// Create or get customer in Odoo
-export const createOrGetCustomer = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const { name, email, phone, street, city, country, company } = req.body;
 
-    // Search if customer exists
-    const existing = await odooRequest(
-      "res.partner",
-      "search_read",
-      [[["email", "=", email]]],
-      {
-        fields: [
-          "id",
-          "name",
-          "email",
-          "phone",
-          "street",
-          "city",
-          "country_id",
-          "company_name",
-        ],
-        limit: 1,
-      },
-    );
-
-    if (existing.length) {
-      return res.json({ success: true, customer: existing[0] });
-    }
-
-    // Create new customer
-    const customerId = await odooRequest("res.partner", "create", [
-      {
-        name,
-        email: email || false,
-        phone: phone || false,
-        street: street || false,
-        city: city || false,
-        company_name: company || false,
-        customer_rank: 1,
-      },
-    ]);
-
-    res.json({ success: true, customerId });
-  },
-);
 
 // Save held order to Odoo as draft quotation
 export const holdOrderToOdoo = CatchAsyncError(

@@ -22,11 +22,9 @@ import {
   createOdooInvoice,
   getPOSConfigs,
   getPosOrders,
- 
   getPosOrderById,
   holdOrderToOdoo,
   getHeldOrders,
-
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -138,8 +136,23 @@ POSRouter.get(
 );
 
 // pos.routes.ts
-POSRouter.post("/pos-customer", isAuthenticated,authorizeRoles("admin","cashier"), createCustomer);
-POSRouter.post("/pos-hold-order", isAuthenticated,authorizeRoles("admin","cashier"), holdOrderToOdoo);
-POSRouter.get("/pos-held-orders",isAuthenticated,authorizeRoles("admin","cashier"), getHeldOrders);
+POSRouter.post(
+  "/pos-customer",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  createCustomer,
+);
+POSRouter.post(
+  "/pos-hold-order",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  holdOrderToOdoo,
+);
+POSRouter.get(
+  "/pos-held-orders",
+  isAuthenticated,
+  authorizeRoles("admin", "cashier"),
+  getHeldOrders,
+);
 
 export default POSRouter;
