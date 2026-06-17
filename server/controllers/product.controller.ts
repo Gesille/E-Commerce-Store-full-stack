@@ -190,32 +190,31 @@ export const createProduct = async (req: Request, res: Response) => {
     // ── Supplier: find or create partner in Odoo ──────────────────────────
     let resolvedSupplierId: number | null = null;
 
-    if (supplierName || supplierId) {
-      const suppliers = await odooRequest(
-        "res.partner",
-        "search_read",
-        [[[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]]],
-        { fields: ["id", "name", "ref"], limit: 1 }
-      );
+ if (supplierName || supplierId) {
+  const suppliers = await odooRequest(
+    "res.partner",
+    "search_read",
+    [[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]],
+    { fields: ["id", "name", "ref"], limit: 1 }
+  );
 
-      if (suppliers.length > 0) {
-        resolvedSupplierId = suppliers[0].id;
-      } else {
-        // Create supplier if not found
-        resolvedSupplierId = await odooRequest("res.partner", "create", [{
-          name: supplierName || "Unknown Supplier",
-          ref: supplierId || false,
-          supplier_rank: 1,
-        }]);
-      }
+  if (suppliers.length > 0) {
+    resolvedSupplierId = suppliers[0].id;
+  } else {
+    resolvedSupplierId = await odooRequest("res.partner", "create", [{
+      name: supplierName || "Unknown Supplier",
+      ref: supplierId || false,
+      supplier_rank: 1,
+    }]);
+  }
 
-      await odooRequest("product.supplierinfo", "create", [{
-        product_tmpl_id: createdProductTemplateId,
-        partner_id: resolvedSupplierId,
-        price: Number(supplierPrice) || 0,
-        product_code: supplierId || false,
-      }]);
-    }
+  await odooRequest("product.supplierinfo", "create", [{
+    product_tmpl_id: createdProductTemplateId,
+    partner_id: resolvedSupplierId,
+    price: Number(supplierPrice) || 0,
+    product_code: supplierId || false,
+  }]);
+}
 
     // ── Attributes ────────────────────────────────────────────────────────
     const ATTRIBUTE_NAME_MAP: Record<string, string> = {
