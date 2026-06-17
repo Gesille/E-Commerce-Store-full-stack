@@ -20,7 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Product } from "@/app/(dashboard)/products/columns";
-import { useUpdateProductMutation } from "@/redux/product/productApi";
+import {
+  useUpdateProductMutation,
+  useGetAttributeOptionsQuery, // ← جديد
+} from "@/redux/product/productApi";
 import toast from "react-hot-toast";
 import { BarcodeSticker } from "../BarcodeSticker";
 import {
@@ -41,8 +44,6 @@ import {
   X,
 } from "lucide-react";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 const COLOR_OPTIONS = [
   "red", "orange", "amber", "yellow", "blue", "purple",
   "cyan", "black", "white", "gray", "green", "pink",
@@ -56,16 +57,12 @@ const CURRENCIES = ["USD", "EUR"] as const;
 
 const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 interface Props {
   product: Product | null;
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
-
-// ── Section wrapper ────────────────────────────────────────────────────────────
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="space-y-4">
@@ -75,8 +72,6 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
     {children}
   </div>
 );
-
-// ── Tag input (free-text chips) ────────────────────────────────────────────────
 
 const TagInput = ({
   values,
@@ -123,7 +118,6 @@ const TagInput = ({
 
   return (
     <div className="space-y-2">
-      {/* Chip row */}
       <div
         className={`min-h-[40px] flex flex-wrap gap-1.5 px-3 py-2 bg-white border rounded-lg cursor-text ${borderMap[color] ?? borderMap.indigo}`}
         onClick={() => inputRef.current?.focus()}
@@ -154,7 +148,6 @@ const TagInput = ({
         />
       </div>
 
-      {/* Preset quick-add */}
       {presets && (
         <div className="flex flex-wrap gap-1.5">
           {presets
@@ -175,46 +168,44 @@ const TagInput = ({
   );
 };
 
-// ── Main component ─────────────────────────────────────────────────────────────
-
 export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props) => {
 
-  // Identity
   const [name, setName] = useState("");
   const [reference, setReference] = useState("");
   const [itemNumber, setItemNumber] = useState("");
   const [barcode, setBarcode] = useState("");
 
-  // Pricing
   const [price, setPrice] = useState(0);
   const [supplierPrice, setSupplierPrice] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [currency, setCurrency] = useState<"USD" | "EUR">("USD");
 
-  // Inventory
   const [stock, setStock] = useState(0);
 
-  // Location
   const [warehouseName, setWarehouseName] = useState("");
   const [shelfName, setShelfName] = useState("");
 
-  // Supplier
   const [supplierId, setSupplierId] = useState("");
   const [supplierName, setSupplierName] = useState("");
 
-  // Attributes
   const [colors, setColors] = useState<string[]>([]);
   const [sizes, setSizes] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
 
-  // Image
   const [image, setImage] = useState<string | null>(null);
   const [preview, setPreview] = useState<string>("");
   const [imageChanged, setImageChanged] = useState(false);
 
   const [updateProduct, { isLoading }] = useUpdateProductMutation();
 
-  // XCD preview
+  // ── جديد: جلب القيم الحقيقية الموجودة في Odoo ─────────────────────────
+  const { data: sizeData } = useGetAttributeOptionsQuery("sizes");
+  const { data: materialData } = useGetAttributeOptionsQuery("materials");
+
+  const sizePresets = sizeData?.values?.length ? sizeData.values : SIZE_OPTIONS;
+  const materialPresets = materialData?.values?.length ? materialData.values : MATERIAL_OPTIONS;
+  // ──────────────────────────────────────────────────────────────────
+
   const calculatedXCD = ((supplierPrice + shippingCost) * (XCD_RATES[currency] ?? 2.7)).toFixed(2);
   const [useFinalAsPrice, setUseFinalAsPrice] = useState(false);
 
@@ -222,7 +213,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
     if (useFinalAsPrice) setPrice(Number(calculatedXCD));
   }, [calculatedXCD, useFinalAsPrice]);
 
-  // Populate from product
   useEffect(() => {
     if (!product) return;
     const p = product as any;
@@ -311,7 +301,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0 overflow-hidden bg-gradient-to-b from-indigo-50 via-white to-purple-50 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
 
-        {/* Header */}
         <DialogHeader className="px-6 py-5 bg-blue-50 border-b border-blue-100 shrink-0">
           <DialogTitle className="text-xl font-semibold flex items-center gap-2 text-slate-800">
             <Edit3 size={18} className="text-indigo-600" />
@@ -320,10 +309,8 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
           <p className="text-sm text-slate-500 mt-0.5">Edit and sync with Odoo</p>
         </DialogHeader>
 
-        {/* Scrollable body */}
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-8">
 
-          {/* ── 1. Identity ──────────────────────────────────── */}
           <Section title="Product Identity">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-indigo-700 text-sm font-medium">
@@ -351,7 +338,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
                 className={`${fieldClass} border-indigo-200`} />
             </div>
 
-            {/* Barcode */}
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-indigo-700 text-sm font-medium">
                 <ScanBarcode size={13} /> Barcode
@@ -381,7 +367,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
             </div>
           </Section>
 
-          {/* ── 2. Pricing ────────────────────────────────────── */}
           <Section title="Pricing & Cost">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
@@ -424,7 +409,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
                 className={`${fieldClass} border-emerald-200`} />
             </div>
 
-            {/* XCD preview */}
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Final Price (XCD)</span>
@@ -440,7 +424,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
             </div>
           </Section>
 
-          {/* ── 3. Inventory ──────────────────────────────────── */}
           <Section title="Inventory">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-purple-700 text-sm font-medium">
@@ -451,7 +434,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
                 className={`${fieldClass} border-purple-200`} />
             </div>
 
-            {/* Category read-only */}
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-pink-600 text-sm font-medium">
                 <Tag size={13} /> Category
@@ -464,7 +446,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
             </div>
           </Section>
 
-          {/* ── 4. Location ───────────────────────────────────── */}
           <Section title="Storage Location">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-sky-700 text-sm font-medium">
@@ -485,7 +466,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
             </div>
           </Section>
 
-          {/* ── 5. Supplier ───────────────────────────────────── */}
           <Section title="Supplier">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-orange-600 text-sm font-medium">
@@ -507,7 +487,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
             </div>
           </Section>
 
-          {/* ── 6. Attributes ─────────────────────────────────── */}
           <Section title="Attributes">
             <div className="space-y-1.5">
               <Label className="flex items-center gap-2 text-indigo-700 text-sm font-medium">
@@ -532,7 +511,7 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
                 values={sizes}
                 onChange={setSizes}
                 placeholder="Type a size…"
-                presets={SIZE_OPTIONS}
+                presets={sizePresets}
                 color="emerald"
               />
             </div>
@@ -546,13 +525,12 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
                 values={materials}
                 onChange={setMaterials}
                 placeholder="Type a material…"
-                presets={MATERIAL_OPTIONS}
+                presets={materialPresets}
                 color="purple"
               />
             </div>
           </Section>
 
-          {/* ── 7. Image ──────────────────────────────────────── */}
           <Section title="Product Image">
             <div className="space-y-2">
               <Label className="flex items-center gap-2 text-pink-600 text-sm font-medium">
@@ -569,7 +547,6 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
 
         </div>
 
-        {/* Footer */}
         <DialogFooter className="px-6 py-4 border-t border-indigo-100 bg-white/60 shrink-0 flex gap-2">
           <Button variant="outline" onClick={onClose}
             className="border-slate-200 text-slate-600 hover:bg-slate-50">

@@ -152,6 +152,9 @@ getOdooLocations: builder.query<{ id: number; name: string; complete_name: strin
   }),
   transformResponse: (res: any) => res.locations,
 }),
+getAttributeOptions: builder.query<{ values: string[] }, "colors" | "sizes" | "materials">({
+  query: (type) => `attributes/${type}`,
+}),
   }),
 });
 
@@ -163,5 +166,6 @@ export const {
   useGetLowStockAlertsQuery,
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
-  useGetOdooLocationsQuery
+  useGetOdooLocationsQuery,
+  useGetAttributeOptionsQuery 
 } = productApi;

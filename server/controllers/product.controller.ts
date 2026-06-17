@@ -12,6 +12,7 @@ import axios from "axios";
 
 import Order from "../models/order.model.js";
 import cloudinary, { uploadImage } from "../utils/uploadImages.js";
+import { ensureOdooAttributeValues } from "../utils/odooAttributes.js";
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -410,15 +411,16 @@ export const decreaseStock = async (productId: number, qty: number) => {
 };
 
 // update product
+
+
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    console.log("Schema paths:", Object.keys(Product.schema.paths));
-    console.log("odooProductId type:", Product.schema.path("odooProductId"));
     const raw = await Product.collection.findOne({ odooProductId: Number(id) });
-    console.log("Raw result:", raw);
+
     const { name, price, stock, colors, sizes, materials, reference, barcode } =
       req.body;
+
     const exists = await odooRequest(
       "product.template",
       "search_read",
@@ -430,18 +432,23 @@ export const updateProduct = async (req: Request, res: Response) => {
     let base64Image = null;
 
     if (req.body.image) {
-      // 1. Upload to Cloudinary
       const uploaded = await uploadImage(req.body.image);
-
       imageUrl = uploaded.url;
 
-      // 2. Convert to base64 for Odoo
       const response = await axios.get(imageUrl, {
         responseType: "arraybuffer",
       });
 
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
+
+    
+    const [finalColors, finalSizes, finalMaterials] = await Promise.all([
+      ensureOdooAttributeValues("Color", colors ?? []),
+      ensureOdooAttributeValues("Size", sizes ?? []),
+      ensureOdooAttributeValues("Material", materials ?? []),
+    ]);
+    // ──────────────────────────────────────────────────────────────────
 
     // ✅ Update in Odoo
     await odooRequest("product.template", "write", [
@@ -467,9 +474,9 @@ export const updateProduct = async (req: Request, res: Response) => {
           stock: Number(stock),
           ...(imageUrl && { image: imageUrl }),
           attributes: {
-            colors: colors ?? [],
-            sizes: sizes ?? [],
-            materials: materials ?? [],
+            colors: finalColors,     // ← غيّرت من colors إلى finalColors
+            sizes: finalSizes,       // ← غيّرت من sizes إلى finalSizes
+            materials: finalMaterials, // ← غيّرت من materials إلى finalMaterials
           },
         },
       },
