@@ -100,8 +100,6 @@ async function populateShift(shiftId: any) {
     .lean();
 }
 
-
-
 export const openSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { configId, cashierId } = req.body;
@@ -1228,29 +1226,28 @@ export const getCustomers = CatchAsyncError(
       "res.partner",
       "search_read",
       [domain],
-      { fields: ["id", "name", "phone", "email", "street"], limit: 100 },
+      {
+        fields: ["id", "name", "phone", "email", "street", "city", "country_id", "company_name"],
+        limit: 100,
+      },
     );
-    res
-      .status(200)
-      .json({ status: "success", count: customers.length, customers });
+
+    const formatted = customers.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone || undefined,
+      email: c.email || undefined,
+      street: c.street || undefined,
+      city: c.city || undefined,
+      country: c.country_id ? c.country_id[1] : undefined,
+      company: c.company_name || undefined,
+    }));
+
+    res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
   },
 );
 
-export const createCustomer = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const { name, phone, email } = req.body;
-    if (!name) return next(new ErrorHandler("Customer name is required", 400));
 
-    const customerId = await odooRequest("res.partner", "create", [
-      { name, phone: phone ?? false, email: email ?? false, customer_rank: 1 },
-    ]);
-    res.status(201).json({
-      status: "success",
-      message: "Customer created successfully",
-      customerId,
-    });
-  },
-);
 
 export const getPaymentMethods = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -1496,35 +1493,81 @@ export const getPosOrderById = CatchAsyncError(
 );
 
 
-
-// create or get customer in odoo
 // Create or get customer in Odoo
 export const createOrGetCustomer = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { name, email, phone, street, city, country, company } = req.body;
 
-    // Search if customer exists
-    const existing = await odooRequest("res.partner", "search_read", [
-      [["email", "=", email]],
-    ], { fields: ["id", "name", "email", "phone", "street", "city", "country_id", "company_name"], limit: 1 });
+    if (!name) return next(new ErrorHandler("Customer name is required", 400));
 
-    if (existing.length) {
-      return res.json({ success: true, customer: existing[0] });
+    const orConditions: any[] = [];
+    if (email) orConditions.push(["email", "=", email]);
+    if (phone) orConditions.push(["phone", "=", phone]);
+
+    if (orConditions.length) {
+      const domain = orConditions.length === 1 ? orConditions : ["|", ...orConditions];
+
+      const existing = await odooRequest(
+        "res.partner",
+        "search_read",
+        [domain],
+        {
+          fields: ["id", "name", "email", "phone", "street", "city", "country_id", "company_name"],
+          limit: 1,
+        },
+      );
+
+      if (existing.length) {
+        const c = existing[0];
+        return res.json({
+          success: true,
+          created: false,
+          customerId: c.id,
+          customer: {
+            id: c.id,
+            name: c.name,
+            email: c.email || undefined,
+            phone: c.phone || undefined,
+            street: c.street || undefined,
+            city: c.city || undefined,
+            country: c.country_id ? c.country_id[1] : undefined,
+            company: c.company_name || undefined,
+          },
+        });
+      }
     }
 
-    // Create new customer
-    const customerId = await odooRequest("res.partner", "create", [{
-      name,
-      email: email || false,
-      phone: phone || false,
-      street: street || false,
-      city: city || false,
-      company_name: company || false,
-      customer_rank: 1,
-    }]);
+    let countryId: number | false = false;
+    if (country) {
+      const countryMatch = await odooRequest(
+        "res.country",
+        "search_read",
+        [[["name", "=", country]]],
+        { fields: ["id"], limit: 1 },
+      );
+      countryId = countryMatch[0]?.id ?? false;
+    }
 
-    res.json({ success: true, customerId });
-  }
+    const customerId = await odooRequest("res.partner", "create", [
+      {
+        name,
+        email: email || false,
+        phone: phone || false,
+        street: street || false,
+        city: city || false,
+        country_id: countryId,
+        company_name: company || false,
+        customer_rank: 1,
+      },
+    ]);
+
+    res.status(201).json({
+      success: true,
+      created: true,
+      customerId,
+      customer: { id: customerId, name, email, phone, street, city, country, company },
+    });
+  },
 );
 
 // Save held order to Odoo as draft quotation
@@ -1532,34 +1575,42 @@ export const holdOrderToOdoo = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { cart, customerId, orderName, discount } = req.body;
 
-    if (!customerId) return next(new ErrorHandler("Customer required to hold order", 400));
+    if (!customerId)
+      return next(new ErrorHandler("Customer required to hold order", 400));
     if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
 
     // 1. Create draft sale order
-    const saleOrderId = await odooRequest("sale.order", "create", [{
-      partner_id: customerId,
-      state: "draft",          // quotation = unpaid held order
-       origin: `POS_HOLD:${orderName || "Unnamed"}`,
-      note: `Held POS order: ${orderName}`,
-    }]);
+    const saleOrderId = await odooRequest("sale.order", "create", [
+      {
+        partner_id: customerId,
+        state: "draft", // quotation = unpaid held order
+        origin: `POS_HOLD:${orderName || "Unnamed"}`,
+        note: `Held POS order: ${orderName}`,
+      },
+    ]);
 
     // 2. Add lines
     for (const item of cart) {
       // get variant
-      const variant = await odooRequest("product.product", "search_read", [
-        [["product_tmpl_id", "=", item.productId]],
-      ], { fields: ["id"], limit: 1 });
+      const variant = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["product_tmpl_id", "=", item.productId]]],
+        { fields: ["id"], limit: 1 },
+      );
 
       if (!variant[0]) continue;
 
-      await odooRequest("sale.order.line", "create", [{
-        order_id: saleOrderId,
-        product_id: variant[0].id,
-        product_uom_qty: item.qty,
-        price_unit: item.price,
-        discount: item.discount || 0,
-        name: item.note ? `${item.name} - ${item.note}` : item.name,
-      }]);
+      await odooRequest("sale.order.line", "create", [
+        {
+          order_id: saleOrderId,
+          product_id: variant[0].id,
+          product_uom_qty: item.qty,
+          price_unit: item.price,
+          discount: item.discount || 0,
+          name: item.note ? `${item.name} - ${item.note}` : item.name,
+        },
+      ]);
     }
 
     res.json({
@@ -1567,24 +1618,34 @@ export const holdOrderToOdoo = CatchAsyncError(
       message: "Order held in Odoo",
       odooOrderId: saleOrderId,
     });
-  }
+  },
 );
 
 export const getHeldOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const orders = await odooRequest(
-  "sale.order",
-  "search_read",
-  [[
-    ["state", "=", "draft"],
-    ["origin", "like", "POS_HOLD:%"],  
-  ]],
-  {
-    fields: ["id", "name", "partner_id", "date_order", "amount_total", "origin", "order_line"],
-    order: "date_order desc",
-    limit: 50,
-  }
-);
+      "sale.order",
+      "search_read",
+      [
+        [
+          ["state", "=", "draft"],
+          ["origin", "like", "POS_HOLD:%"],
+        ],
+      ],
+      {
+        fields: [
+          "id",
+          "name",
+          "partner_id",
+          "date_order",
+          "amount_total",
+          "origin",
+          "order_line",
+        ],
+        order: "date_order desc",
+        limit: 50,
+      },
+    );
 
     if (!orders.length) {
       return res.json({ success: true, orders: [] });
@@ -1597,7 +1658,17 @@ export const getHeldOrders = CatchAsyncError(
           "sale.order.line",
           "search_read",
           [[["id", "in", allLineIds]]],
-          { fields: ["id", "order_id", "product_id", "product_uom_qty", "price_unit", "discount", "name"] }
+          {
+            fields: [
+              "id",
+              "order_id",
+              "product_id",
+              "product_uom_qty",
+              "price_unit",
+              "discount",
+              "name",
+            ],
+          },
         )
       : [];
 
@@ -1617,16 +1688,17 @@ export const getHeldOrders = CatchAsyncError(
     const result = orders.map((o: any) => ({
       odooOrderId: o.id,
       name: o.name,
-      customer: o.partner_id ? { id: o.partner_id[0], name: o.partner_id[1] } : null,
+      customer: o.partner_id
+        ? { id: o.partner_id[0], name: o.partner_id[1] }
+        : null,
       date: o.date_order,
       total: o.amount_total,
       lines: linesByOrder[o.id] ?? [],
     }));
 
     res.json({ success: true, orders: result });
-  }
+  },
 );
-
 
 export const debugHeldOrders = CatchAsyncError(
   async (req: Request, res: Response) => {
@@ -1639,8 +1711,8 @@ export const debugHeldOrders = CatchAsyncError(
         fields: ["id", "name", "origin", "note", "state"],
         order: "id desc",
         limit: 5,
-      }
+      },
     );
     res.json(orders);
-  }
+  },
 );

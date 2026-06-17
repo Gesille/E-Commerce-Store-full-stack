@@ -48,12 +48,17 @@ export interface Customer {
   name: string;
   email?: string;
   phone?: string;
-   street?: string;       
+  street?: string;       
   city?: string;         
   country?: string;    
   company?: string;  
 }
-
+export interface CreateOrGetCustomerResponse {
+  success: boolean;
+  created: boolean;
+  customerId: number;
+  customer: Customer;
+}
 export function fmt(n: number) {
   return n.toFixed(2);
 }

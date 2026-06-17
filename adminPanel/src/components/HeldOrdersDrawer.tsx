@@ -45,7 +45,7 @@ export function HeldOrdersDrawer({
             {/* Header */}
             <div className="h-14 border-b border-gray-100 flex items-center justify-between px-5 shrink-0">
               <div>
-                <div className="text-[14px] font-bold text-gray-900">Held Orders</div>
+                <div className="text-[14px] font-bold text-gray-900">Hold Orders</div>
                 <div className="text-[11px] text-gray-400">Draft quotations saved in Odoo</div>
               </div>
               <div className="flex items-center gap-2">
