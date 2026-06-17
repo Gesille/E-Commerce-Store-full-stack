@@ -1225,19 +1225,19 @@ export const getCustomers = CatchAsyncError(
     const customers = await odooRequest(
       "res.partner",
       "search_read",
-       [[["id", "=", 21]]],
+      [domain],  // ← was hardcoded [[["id", "=", 21]]], now back to real domain
       {
         fields: [
           "id", "name", "phone", "email",
           "street", "city", "country_id",
-          "commercial_company_name", 
-          "parent_id",               
+          "parent_id",
           "is_company",
+          // commercial_company_name REMOVED
         ],
         limit: 100,
       },
     );
-console.log("[DEBUG CUSTOMER 21]", JSON.stringify(customers[0], null, 2));
+
     const formatted = customers.map((c: any) => ({
       id: c.id,
       name: c.name,
@@ -1246,10 +1246,7 @@ console.log("[DEBUG CUSTOMER 21]", JSON.stringify(customers[0], null, 2));
       street: c.street || undefined,
       city: c.city || undefined,
       country: c.country_id ? c.country_id[1] : undefined,
-      // Show parent company name, or the commercial_company_name fallback
-      company: c.parent_id
-        ? c.parent_id[1]
-        : c.commercial_company_name || undefined,
+      company: c.parent_id ? c.parent_id[1] : undefined,
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
@@ -1266,7 +1263,7 @@ export const createCustomer = CatchAsyncError(
       const countryMatch = await odooRequest(
         "res.country",
         "search_read",
-        [[["name", "=", country]]],
+        [[["name", "ilike", country]]],
         { fields: ["id"], limit: 1 },
       );
       countryId = countryMatch[0]?.id ?? false;
