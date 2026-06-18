@@ -9,8 +9,8 @@ const orderRouter = express.Router();
 
 orderRouter.post("/create-order",isAuthenticated, createOrder);
 
-orderRouter.get("/manager-confirm/:orderId" ,isAuthenticated,authorizeRoles("admin"),managerConfirmOrder);
-orderRouter.get("/manager-cancel/:orderId",isAuthenticated,authorizeRoles("admin"), managerCancelOrder);
+orderRouter.get("/manager-confirm/:orderId" ,managerConfirmOrder);
+orderRouter.get("/manager-cancel/:orderId",managerCancelOrder);
 orderRouter.get("/admin-orders", isAuthenticated, authorizeRoles("admin"), getAdminOrders);
 
 orderRouter.get("/admin-orders/:id", isAuthenticated, authorizeRoles("admin"), getAdminOrderDetail); 
