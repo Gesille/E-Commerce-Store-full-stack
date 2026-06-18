@@ -4,7 +4,6 @@ import {
   Inbox,
   Calendar,
   Search,
- 
   User2,
   ChevronUp,
   Plus,
@@ -15,6 +14,7 @@ import {
   ShoppingBasket,
   ListOrdered,
   RotateCcw,
+  Upload,
 } from "lucide-react";
 import {
   Sidebar,
@@ -36,11 +36,7 @@ import {
 } from "./ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  DropdownMenu,
-  
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 import { Sheet, SheetTrigger } from "./ui/sheet";
 import { RootState } from "@/redux/store";
@@ -72,8 +68,7 @@ const items = [
     icon: Calendar,
   },
 
- 
-   {
+  {
     title: "POS",
     url: "/pos",
     icon: ListOrdered,
@@ -160,7 +155,6 @@ const AppSidebar = () => {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-
               <SidebarMenuItem>
                 <Sheet>
                   <SheetTrigger asChild>
@@ -171,6 +165,19 @@ const AppSidebar = () => {
                   </SheetTrigger>
                   <AddProduct />
                 </Sheet>
+              </SidebarMenuItem>
+              // In AppSidebar.tsx, inside the Products SidebarMenu, after "Add
+              Product":
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link
+                    href="/import"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
+                  >
+                    <Upload size={16} />
+                    <span className="text-sm">Import Products</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <Sheet>
@@ -227,7 +234,6 @@ const AppSidebar = () => {
 
           <SidebarGroupContent>
             <SidebarMenu>
-             
               <Sheet>
                 <SheetTrigger asChild>
                   <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
