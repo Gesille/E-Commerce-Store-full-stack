@@ -255,9 +255,9 @@ function PendingApprovalModal({
   const order: OdooOrderDetail | undefined = data?.order;
 
   // We need the mongo _id from origin field: "WEB_ORDER_<mongoId>"
-  const mongoId = order?.origin?.startsWith("WEB_ORDER_")
-    ? order.origin.replace("WEB_ORDER_", "")
-    : null;
+ const mongoId = typeof order?.origin === "string" && order.origin.startsWith("WEB_ORDER_")
+  ? order.origin.replace("WEB_ORDER_", "")
+  : null;
 
   const [confirmOrder, { isLoading: confirming }] = useConfirmOrderMutation();
   const [cancelOrder,  { isLoading: cancelling  }] = useCancelOrderMutation();
@@ -477,9 +477,9 @@ function OdooOrderCard({
             <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 20, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
               {cfg.label}
             </span>
-            {order.origin?.startsWith("WEB_ORDER") && (
-              <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>From Store</span>
-            )}
+           {typeof order.origin === "string" && order.origin.startsWith("WEB_ORDER") && (
+  <span style={{ fontSize: 10, fontWeight: 600, color: "#7c3aed" }}>From Store</span>
+)}
             {isPending && (
               <span style={{ fontSize: 11, color: "#d97706" }}>· click to review</span>
             )}
@@ -588,18 +588,16 @@ export default function OrderPage() {
 
   // ── Filter by tab ──
   const displayedOrders = useMemo(() => {
-    if (activeTab === "all") return allOrders;
-    if (activeTab === "pending") {
-      // Pending = draft orders that came from WEB_ORDER origin
-      return allOrders.filter(o => o.state === "draft" && o.origin?.startsWith("WEB_ORDER"));
-    }
-    return allOrders.filter(o => o.state === activeTab);
-  }, [allOrders, activeTab]);
-
-  const pendingOrders = useMemo(
-    () => allOrders.filter(o => o.state === "draft" && o.origin?.startsWith("WEB_ORDER")),
-    [allOrders]
-  );
+  if (activeTab === "all") return allOrders;
+  if (activeTab === "pending") {
+    return allOrders.filter(o => o.state === "draft" && typeof o.origin === "string" && o.origin.startsWith("WEB_ORDER"));
+  }
+  return allOrders.filter(o => o.state === activeTab);
+}, [allOrders, activeTab]);
+const pendingOrders = useMemo(
+  () => allOrders.filter(o => o.state === "draft" && typeof o.origin === "string" && o.origin.startsWith("WEB_ORDER")),
+  [allOrders]
+);
 
   // ── Analytics ──
   const stats = useMemo(() => {
