@@ -119,42 +119,11 @@
     }
     .bill-name { font-weight: 700; font-size: 13px; color: #111111; }
     .bill-detail { color: #444444; font-size: 12px; line-height: 1.6; }
-    .bill-abst { margin-top: 6px; font-size: 11px; color: #555555; }
 
     .order-detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .order-detail-table td { padding: 2px 0; vertical-align: top; }
     .order-detail-table td:first-child { color: #666666; width: 80px; }
     .order-detail-table td:last-child { text-align: right; color: #111111; }
-
-    /* ── PO / Terms Row ── */
-    .po-head {
-      background: #e0e0e0;
-      border-top: 1px solid #bbbbbb;
-      border-bottom: 1px solid #bbbbbb;
-      display: flex;
-    }
-    .po-head-cell {
-      flex: 1;
-      padding: 4px 20px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-right: 1px solid #bbbbbb;
-    }
-    .po-head-cell:last-child { border-right: none; }
-    .po-values-row {
-      display: flex;
-      border-bottom: 2px solid #111111;
-    }
-    .po-cell {
-      flex: 1;
-      padding: 6px 20px;
-      border-right: 1px solid #bbbbbb;
-      font-size: 12px;
-      color: #111111;
-    }
-    .po-cell:last-child { border-right: none; }
 
     /* ── Items Table ── */
     .items-area { border-bottom: 1px solid #bbbbbb; min-height: 100px; }
@@ -233,8 +202,6 @@
       .invoice-label { text-align: left; }
       .bill-order-row { flex-direction: column; }
       .bill-section { border-right: none; border-bottom: 1px solid #bbbbbb; }
-      .po-head, .po-values-row { flex-direction: column; }
-      .po-head-cell, .po-cell { border-right: none; border-bottom: 1px solid #bbbbbb; }
       .order-info-row { flex-wrap: wrap; gap: 12px; }
     }
   </style>
@@ -253,9 +220,9 @@
           <div class="shop-tagline"><%= shopTagline %></div>
         <% } %>
         <div class="shop-contact">
-          <!-- <% if (shopPhone) { %>Phone #&nbsp;&nbsp;<%= shopPhone %><% if (shopFax) { %> &nbsp;&nbsp;Fax #&nbsp;&nbsp;<%= shopFax %><% } %><br><% } %> -->
+          Phone #&nbsp;&nbsp;560-2433 &nbsp;&nbsp;Fax #&nbsp;&nbsp;560-2433<br>
           <% if (shopEmail) { %><%= shopEmail %><br><% } %>
-          <!-- <% if (shopAbst) { %>ABST # <%= shopAbst %><br><% } %> -->
+          ABST # 0161466<br>
           <% if (shopAddress) { %><%= shopAddress %><% } %>
         </div>
       </div>
@@ -286,12 +253,6 @@
         <span class="info-label">Order Type</span>
         <span class="info-value"><%= orderType %></span>
       </div>
-      <% if (posReference) { %>
-      <div class="info-item">
-        <span class="info-label">POS Ref</span>
-        <span class="info-value"><%= posReference %></span>
-      </div>
-      <% } %>
     </div>
 
     <!-- ══ BILL TO / ORDER DETAILS ══ -->
@@ -300,12 +261,6 @@
         <div class="section-label">Bill To</div>
         <% if (customerName) { %>
           <div class="bill-name"><%= customerName %></div>
-          <% if (customerAddress) { %>
-            <div class="bill-detail"><%= customerAddress %></div>
-          <% } %>
-          <% if (customerAbst) { %>
-            <div class="bill-abst">Cust ABST #&nbsp;&nbsp;<%= customerAbst %></div>
-          <% } %>
         <% } else { %>
           <div class="bill-detail" style="color: #999;">Walk-in Customer</div>
         <% } %>
@@ -321,32 +276,8 @@
             <td>Date</td>
             <td><%= dateOrder %></td>
           </tr>
-          <% if (sessionId) { %>
-          <tr>
-            <td>Session</td>
-            <td><%= sessionId %></td>
-          </tr>
-          <% } %>
-          <% if (configId) { %>
-          <tr>
-            <td>Register</td>
-            <td><%= configId %></td>
-          </tr>
-          <% } %>
         </table>
       </div>
-    </div>
-
-    <!-- ══ PO / TERMS ══ -->
-    <div class="po-head">
-      <div class="po-head-cell">P.O. No</div>
-      <div class="po-head-cell">Terms</div>
-      <div class="po-head-cell">Project</div>
-    </div>
-    <div class="po-values-row">
-      <div class="po-cell"><%= poNumber || '&mdash;' %></div>
-      <div class="po-cell"><%= paymentTerms || '&mdash;' %></div>
-      <div class="po-cell"><%= project || '' %></div>
     </div>
 
     <!-- ══ ITEMS ══ -->
@@ -381,7 +312,7 @@
       </table>
     </div>
 
-   
+    <!-- ══ TOTALS ══ -->
     <div class="totals-section">
       <table class="totals-table">
         <tr class="row-subtotal">
