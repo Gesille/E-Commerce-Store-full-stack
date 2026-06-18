@@ -255,10 +255,11 @@ function PendingApprovalModal({
   const order: OdooOrderDetail | undefined = data?.order;
 
   // We need the mongo _id from origin field: "WEB_ORDER_<mongoId>"
- const mongoId = typeof order?.origin === "string" && typeof order?.origin === "string" &&
-order.origin.startsWith("WEB_ORDER_")
-  ? order.origin.replace("WEB_ORDER_", "")
-  : null;
+const mongoId =
+  typeof order?.origin === "string" &&
+  order.origin.startsWith("WEB_ORDER_")
+    ? order.origin.replace("WEB_ORDER_", "")
+    : null;
 
   const [confirmOrder, { isLoading: confirming }] = useConfirmOrderMutation();
   const [cancelOrder,  { isLoading: cancelling  }] = useCancelOrderMutation();
@@ -885,8 +886,10 @@ const pendingOrders = useMemo(
 
       {/* Modals */}
       {pendingModalId !== null && (() => {
-        const order = allOrders.find(o => o.id === pendingModalId);
-       const isPending =
+      const order = allOrders.find(o => o.id === pendingModalId);
+
+const isPending =
+  !!order &&
   order.state === "draft" &&
   typeof order.origin === "string" &&
   order.origin.startsWith("WEB_ORDER");
