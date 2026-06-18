@@ -235,7 +235,105 @@ const cancelledCount = cancelledData?.orders?.length ?? 0;
           </SidebarGroupContent>
         </SidebarGroup>
         {/* ORDERS */}
-       Orders
+      {/* ORDERS */}
+<SidebarGroup className="mt-2">
+  <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
+    Orders
+  </SidebarGroupLabel>
+
+  <SidebarGroupContent>
+    <SidebarMenu>
+      {/* Add Order */}
+      <Sheet>
+        <SheetTrigger asChild>
+          <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
+            <Plus size={16} />
+            <span className="text-sm">Add Orders</span>
+          </SidebarMenuButton>
+        </SheetTrigger>
+        <CreateOrderForUser />
+      </Sheet>
+
+      {/* Return Order */}
+      <Sheet>
+        <SheetTrigger asChild>
+          <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
+            <RotateCcw size={16} />
+            <span className="text-sm">Return Orders</span>
+          </SidebarMenuButton>
+        </SheetTrigger>
+        <ReturnOrder />
+      </Sheet>
+
+      {/* All Orders collapsible */}
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          onClick={() => setOrdersOpen(!ordersOpen)}
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
+        >
+          <ListOrdered size={16} />
+          <span className="text-sm">All Orders</span>
+          <ChevronDown
+            size={14}
+            className={`ml-auto transition-transform ${ordersOpen ? "rotate-180" : ""}`}
+          />
+        </SidebarMenuButton>
+
+        {ordersOpen && (
+          <SidebarMenuSub>
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild>
+                <Link
+                  href="/order?status=pending"
+                  className="flex items-center justify-between px-2 py-1 text-sm"
+                >
+                  <span>Pending</span>
+                  {pendingCount > 0 && (
+                    <span className="text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 rounded-full px-2 py-0.5 font-medium">
+                      {pendingCount}
+                    </span>
+                  )}
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild>
+                <Link
+                  href="/order?status=confirmed"
+                  className="flex items-center justify-between px-2 py-1 text-sm"
+                >
+                  <span>Confirmed</span>
+                  {confirmedCount > 0 && (
+                    <span className="text-[10px] bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full px-2 py-0.5 font-medium">
+                      {confirmedCount}
+                    </span>
+                  )}
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild>
+                <Link
+                  href="/order?status=cancelled"
+                  className="flex items-center justify-between px-2 py-1 text-sm"
+                >
+                  <span>Cancelled</span>
+                  {cancelledCount > 0 && (
+                    <span className="text-[10px] bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-full px-2 py-0.5 font-medium">
+                      {cancelledCount}
+                    </span>
+                  )}
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          </SidebarMenuSub>
+        )}
+      </SidebarMenuItem>
+    </SidebarMenu>
+  </SidebarGroupContent>
+</SidebarGroup>
         {/* INVENTORY */}
         <SidebarGroup className="mt-2">
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
