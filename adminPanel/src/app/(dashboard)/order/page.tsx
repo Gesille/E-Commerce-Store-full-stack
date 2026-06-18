@@ -187,29 +187,47 @@ function MongoOrderCard({
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleConfirm = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await confirmOrder(order._id).unwrap();
-      setLocalStatus("confirmed");
-      showToast("Order confirmed and synced to Odoo.", true);
-      refetch();
-    } catch {
-      showToast("Failed to confirm order. Try again.", false);
-    }
-  };
+const handleConfirm = async (e: React.MouseEvent) => {
+  e.stopPropagation();
 
-  const handleCancel = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await cancelOrder(order._id).unwrap();
-      setLocalStatus("cancelled");
-      showToast("Order cancelled. Customer notified.", true);
-      refetch();
-    } catch {
-      showToast("Failed to cancel order. Try again.", false);
-    }
-  };
+  const scrollY = window.scrollY;
+
+  try {
+    await confirmOrder(order._id).unwrap();
+    setLocalStatus("confirmed");
+
+    await refetch();
+
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollY);
+    });
+
+    showToast("Order confirmed and synced to Odoo.", true);
+  } catch {
+    showToast("Failed to confirm order. Try again.", false);
+  }
+};
+
+const handleCancel = async (e: React.MouseEvent) => {
+  e.stopPropagation();
+
+  const scrollY = window.scrollY;
+
+  try {
+    await cancelOrder(order._id).unwrap();
+    setLocalStatus("cancelled");
+
+    await refetch();
+
+    requestAnimationFrame(() => {
+      window.scrollTo(0, scrollY);
+    });
+
+    showToast("Order cancelled. Customer notified.", true);
+  } catch {
+    showToast("Failed to cancel order. Try again.", false);
+  }
+};
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
