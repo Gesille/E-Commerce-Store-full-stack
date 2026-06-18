@@ -53,11 +53,11 @@ const STATUS_CFG = {
 };
 
 const ODOO_STATE_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 dark:bg-gray-800",
-  sent:  "bg-blue-100 text-blue-600",
-  sale:  "bg-green-100 text-green-600",
-  done:  "bg-violet-100 text-violet-600",
-  cancel:"bg-red-100 text-red-500",
+  draft:  "bg-gray-100 text-gray-600 dark:bg-gray-800",
+  sent:   "bg-blue-100 text-blue-600",
+  sale:   "bg-green-100 text-green-600",
+  done:   "bg-violet-100 text-violet-600",
+  cancel: "bg-red-100 text-red-500",
 };
 const ODOO_STATE_LABELS: Record<string, string> = {
   draft: "Draft", sent: "Sent", sale: "Confirmed", done: "Done", cancel: "Cancelled",
@@ -166,13 +166,274 @@ function OdooOrderModal({ orderId, onClose }: { orderId: number; onClose: () => 
   );
 }
 
+// ─── Pending Order Modal ──────────────────────────────────────────────────────
+function PendingOrderModal({
+  order,
+  onClose,
+  onConfirm,
+  onCancel,
+  confirming,
+  cancelling,
+}: {
+  order: MongoOrder;
+  onClose: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirming: boolean;
+  cancelling: boolean;
+}) {
+  const isActing = confirming || cancelling;
+
+  return createPortal(
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.5)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: "var(--card)",
+          borderRadius: 18,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          width: "100%",
+          maxWidth: 640,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          border: "1px solid var(--border)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── Modal Header ── */}
+        <div style={{
+          padding: "20px 24px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          position: "sticky",
+          top: 0,
+          background: "var(--card)",
+          zIndex: 1,
+        }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
+              <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 15, color: "var(--foreground)" }}>
+                #{order._id.slice(-10).toUpperCase()}
+              </span>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20,
+                color: "#d97706", background: "rgba(217,119,6,0.1)",
+                border: "1px solid rgba(217,119,6,0.25)",
+                textTransform: "uppercase", letterSpacing: "0.05em",
+              }}>
+                Pending Approval
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--muted-foreground)", margin: 0, display: "flex", alignItems: "center", gap: 5 }}>
+              <Calendar size={11} /> {fmtD(order.createdAt)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              padding: 8, borderRadius: 9, border: "1px solid var(--border)",
+              background: "var(--muted)", cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--muted-foreground)",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+          {/* ── Summary cards ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <div style={{ background: "var(--muted)", borderRadius: 10, padding: "12px 14px" }}>
+              <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Items</p>
+              <p style={{ fontWeight: 700, fontSize: 18, margin: 0, color: "var(--foreground)" }}>
+                {order.items.reduce((s, i) => s + i.quantity, 0)}
+              </p>
+            </div>
+            <div style={{ background: "var(--muted)", borderRadius: 10, padding: "12px 14px" }}>
+              <p style={{ fontSize: 11, color: "var(--muted-foreground)", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Products</p>
+              <p style={{ fontWeight: 700, fontSize: 18, margin: 0, color: "var(--foreground)" }}>
+                {order.items.length}
+              </p>
+            </div>
+            <div style={{ background: "rgba(5,150,105,0.08)", border: "1px solid rgba(5,150,105,0.2)", borderRadius: 10, padding: "12px 14px" }}>
+              <p style={{ fontSize: 11, color: "#059669", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>Order Total</p>
+              <p style={{ fontWeight: 800, fontSize: 18, margin: 0, color: "#059669", fontFamily: "monospace" }}>
+                {fmt(order.total)}
+              </p>
+            </div>
+          </div>
+
+          {/* ── Shipping address ── */}
+          <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
+            <p style={{
+              fontSize: 11, color: "var(--muted-foreground)", textTransform: "uppercase",
+              letterSpacing: "0.05em", margin: "0 0 10px", fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <MapPin size={12} /> Shipping Address
+            </p>
+            <p style={{ fontSize: 13, color: "var(--foreground)", margin: 0, lineHeight: 1.5 }}>
+              {order.shippingAddress || "No address provided"}
+            </p>
+          </div>
+
+          {/* ── Items table ── */}
+          <div>
+            <p style={{
+              fontSize: 11, color: "var(--muted-foreground)", textTransform: "uppercase",
+              letterSpacing: "0.05em", margin: "0 0 10px", fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <Package size={12} /> Items Ordered
+            </p>
+            <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+              {/* Table header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 52px 90px 90px",
+                gap: 8, padding: "9px 16px",
+                background: "var(--muted)",
+                fontSize: 11, fontWeight: 600,
+                color: "var(--muted-foreground)",
+                textTransform: "uppercase", letterSpacing: "0.05em",
+              }}>
+                <span>Product</span>
+                <span style={{ textAlign: "center" }}>Qty</span>
+                <span style={{ textAlign: "right" }}>Unit Price</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+              </div>
+
+              {/* Table rows */}
+              {order.items.map((item, i) => (
+                <div key={i} style={{
+                  display: "grid", gridTemplateColumns: "1fr 52px 90px 90px",
+                  gap: 8, padding: "13px 16px", fontSize: 13,
+                  alignItems: "center",
+                  borderTop: "1px solid var(--border)",
+                  background: i % 2 !== 0 ? "rgba(0,0,0,0.015)" : "transparent",
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: "var(--foreground)" }}>
+                      {item.name || `Product #${item.productId}`}
+                    </div>
+                    {item.reference && (
+                      <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace", marginTop: 2 }}>
+                        SKU: {item.reference}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "center", fontWeight: 700, color: "var(--foreground)" }}>
+                    {item.quantity}
+                  </div>
+                  <div style={{ textAlign: "right", color: "var(--muted-foreground)", fontFamily: "monospace", fontSize: 12 }}>
+                    {fmt(item.price)}
+                  </div>
+                  <div style={{ textAlign: "right", fontWeight: 700, fontFamily: "monospace" }}>
+                    {fmt(item.price * item.quantity)}
+                  </div>
+                </div>
+              ))}
+
+              {/* Table footer total */}
+              <div style={{
+                display: "flex", justifyContent: "space-between",
+                padding: "12px 16px", borderTop: "1px solid var(--border)",
+                background: "var(--muted)", alignItems: "center",
+              }}>
+                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                  {order.items.length} product{order.items.length !== 1 ? "s" : ""} · {order.items.reduce((s, i) => s + i.quantity, 0)} unit{order.items.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""}
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Order Total</span>
+                  <span style={{ fontWeight: 800, fontSize: 17, fontFamily: "monospace" }}>{fmt(order.total)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Action buttons ── */}
+          <div style={{
+            display: "flex", gap: 10, justifyContent: "flex-end",
+            paddingTop: 8, borderTop: "1px solid var(--border)",
+          }}>
+            <button
+              onClick={onClose}
+              disabled={isActing}
+              style={{
+                padding: "10px 20px", borderRadius: 9,
+                border: "1px solid var(--border)",
+                background: "transparent", color: "var(--muted-foreground)",
+                fontSize: 13, fontWeight: 600,
+                cursor: isActing ? "not-allowed" : "pointer",
+                opacity: isActing ? 0.5 : 1,
+                transition: "all 0.15s",
+              }}
+            >
+              Close
+            </button>
+            <button
+              onClick={onCancel}
+              disabled={isActing}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "10px 20px", borderRadius: 9,
+                border: "1px solid rgba(225,29,72,0.3)",
+                background: "rgba(225,29,72,0.06)", color: "#e11d48",
+                fontSize: 13, fontWeight: 600,
+                cursor: isActing ? "not-allowed" : "pointer",
+                opacity: isActing ? 0.6 : 1,
+                transition: "all 0.15s",
+              }}
+            >
+              <XCircle size={15} />
+              {cancelling ? "Cancelling…" : "Cancel Order"}
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={isActing}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "10px 24px", borderRadius: 9,
+                border: "none", background: "#059669", color: "#fff",
+                fontSize: 13, fontWeight: 600,
+                cursor: isActing ? "not-allowed" : "pointer",
+                opacity: isActing ? 0.6 : 1,
+                boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+                transition: "all 0.15s",
+              }}
+            >
+              <CheckCircle2 size={15} />
+              {confirming ? "Confirming…" : "Confirm Order"}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ─── MongoDB order card ───────────────────────────────────────────────────────
 function MongoOrderCard({
-  order, refetch,
+  order,
+  refetch,
 }: {
   order: MongoOrder;
   refetch: () => void;
 }) {
+  const [modalOpen, setModalOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [localStatus, setLocalStatus] = useState(order.status);
   const [confirmOrder, { isLoading: confirming }] = useConfirmOrderMutation();
@@ -187,169 +448,218 @@ function MongoOrderCard({
     setTimeout(() => setToast(null), 3500);
   };
 
-const handleConfirm = async (e: React.MouseEvent) => {
-  e.stopPropagation();
+  const handleConfirm = async () => {
+    try {
+      await confirmOrder(order._id).unwrap();
+      setLocalStatus("confirmed");
+      setModalOpen(false);
+      showToast("Order confirmed and synced to Odoo.", true);
+      refetch();
+    } catch {
+      showToast("Failed to confirm order. Try again.", false);
+    }
+  };
 
-  const scrollY = window.scrollY;
+  const handleCancel = async () => {
+    try {
+      await cancelOrder(order._id).unwrap();
+      setLocalStatus("cancelled");
+      setModalOpen(false);
+      showToast("Order cancelled. Customer notified.", true);
+      refetch();
+    } catch {
+      showToast("Failed to cancel order. Try again.", false);
+    }
+  };
 
-  try {
-    await confirmOrder(order._id).unwrap();
-    setLocalStatus("confirmed");
-
-    await refetch();
-
-    requestAnimationFrame(() => {
-      window.scrollTo(0, scrollY);
-    });
-
-    showToast("Order confirmed and synced to Odoo.", true);
-  } catch {
-    showToast("Failed to confirm order. Try again.", false);
-  }
-};
-
-const handleCancel = async (e: React.MouseEvent) => {
-  e.stopPropagation();
-
-  const scrollY = window.scrollY;
-
-  try {
-    await cancelOrder(order._id).unwrap();
-    setLocalStatus("cancelled");
-
-    await refetch();
-
-    requestAnimationFrame(() => {
-      window.scrollTo(0, scrollY);
-    });
-
-    showToast("Order cancelled. Customer notified.", true);
-  } catch {
-    showToast("Failed to cancel order. Try again.", false);
-  }
-};
+  const handleCardClick = () => {
+    if (localStatus === "pending") {
+      setModalOpen(true);
+    } else {
+      setExpanded((e) => !e);
+    }
+  };
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          padding: "10px 16px", fontSize: 13, fontWeight: 500,
-          background: toast.ok ? "rgba(5,150,105,0.1)" : "rgba(225,29,72,0.08)",
-          color: toast.ok ? "#059669" : "#e11d48",
-          borderBottom: `1px solid ${toast.ok ? "rgba(5,150,105,0.2)" : "rgba(225,29,72,0.15)"}`,
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          {toast.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
-          {toast.msg}
-        </div>
+    <>
+      {/* Pending modal */}
+      {modalOpen && localStatus === "pending" && (
+        <PendingOrderModal
+          order={order}
+          onClose={() => setModalOpen(false)}
+          onConfirm={handleConfirm}
+          onCancel={handleCancel}
+          confirming={confirming}
+          cancelling={cancelling}
+        />
       )}
 
-      {/* Header row */}
-      <div
-        onClick={() => setExpanded(e => !e)}
-        style={{ padding: "15px 20px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", userSelect: "none" }}
-      >
-        <div style={{ width: 9, height: 9, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
+      <div style={{
+        background: "var(--card)", border: "1px solid var(--border)",
+        borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      }}>
+        {/* Toast */}
+        {toast && (
+          <div style={{
+            padding: "10px 16px", fontSize: 13, fontWeight: 500,
+            background: toast.ok ? "rgba(5,150,105,0.1)" : "rgba(225,29,72,0.08)",
+            color: toast.ok ? "#059669" : "#e11d48",
+            borderBottom: `1px solid ${toast.ok ? "rgba(5,150,105,0.2)" : "rgba(225,29,72,0.15)"}`,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            {toast.ok ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+            {toast.msg}
+          </div>
+        )}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: "var(--foreground)" }}>
-              #{order._id.slice(-8).toUpperCase()}
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 20, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
-              {cfg.label}
-            </span>
-            {order.odooSaleOrderId && (
-              <span style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace" }}>
-                Odoo #{order.odooSaleOrderId}
+        {/* Header row */}
+        <div
+          onClick={handleCardClick}
+          style={{
+            padding: "15px 20px", display: "flex", alignItems: "center",
+            gap: 14, cursor: "pointer", userSelect: "none",
+          }}
+        >
+          <div style={{ width: 9, height: 9, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 13, color: "var(--foreground)" }}>
+                #{order._id.slice(-8).toUpperCase()}
               </span>
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: "2px 9px", borderRadius: 20,
+                color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`,
+              }}>
+                {cfg.label}
+              </span>
+              {order.odooSaleOrderId && (
+                <span style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace" }}>
+                  Odoo #{order.odooSaleOrderId}
+                </span>
+              )}
+              {/* Hint for pending cards */}
+              {localStatus === "pending" && (
+                <span style={{
+                  fontSize: 11, color: "#d97706",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  · click to review
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Calendar size={11} />{fmtD(order.createdAt)}
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Package size={11} />{order.items.length} item{order.items.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+
+          <span style={{ fontWeight: 800, fontSize: 15, fontFamily: "monospace", color: "var(--foreground)", flexShrink: 0 }}>
+            {fmt(order.total)}
+          </span>
+
+          {/* For non-pending: show expand icon. For pending: show arrow hint */}
+          <div style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>
+            {localStatus === "pending" ? (
+              <ChevronRight size={16} style={{ color: "#d97706" }} />
+            ) : expanded ? (
+              <ChevronUp size={16} />
+            ) : (
+              <ChevronDown size={16} />
             )}
           </div>
-          <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 3, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Calendar size={11} />{fmtD(order.createdAt)}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Package size={11} />{order.items.length} item{order.items.length !== 1 ? "s" : ""}</span>
-          </div>
         </div>
 
-        <span style={{ fontWeight: 800, fontSize: 15, fontFamily: "monospace", color: "var(--foreground)", flexShrink: 0 }}>
-          {fmt(order.total)}
-        </span>
-        <div style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </div>
-      </div>
-
-      {/* Expanded body */}
-      {expanded && (
-        <div style={{ borderTop: "1px solid var(--border)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Address */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
-            <MapPin size={14} style={{ marginTop: 1, flexShrink: 0 }} />
-            <span>{order.shippingAddress || "No address provided"}</span>
-          </div>
-
-          {/* Items table */}
-          <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 48px 80px 80px", gap: 12, padding: "9px 14px", background: "var(--muted)", fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              <span>Product</span><span style={{ textAlign: "center" }}>Qty</span><span style={{ textAlign: "right" }}>Unit</span><span style={{ textAlign: "right" }}>Total</span>
+        {/* Expanded body — only for non-pending orders */}
+        {expanded && localStatus !== "pending" && (
+          <div style={{ borderTop: "1px solid var(--border)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Address */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
+              <MapPin size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+              <span>{order.shippingAddress || "No address provided"}</span>
             </div>
-            {order.items.map((item, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 48px 80px 80px", gap: 12, padding: "10px 14px", fontSize: 13, alignItems: "center", borderTop: i > 0 ? "1px solid var(--border)" : undefined, background: i % 2 !== 0 ? "rgba(0,0,0,0.015)" : "transparent" }}>
-                <div>
-                  <div style={{ fontWeight: 500, color: "var(--foreground)" }}>{item.name || `Product #${item.productId}`}</div>
-                  {item.reference && <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace", marginTop: 2 }}>SKU: {item.reference}</div>}
-                </div>
-                <div style={{ textAlign: "center", fontWeight: 600 }}>{item.quantity}</div>
-                <div style={{ textAlign: "right", color: "var(--muted-foreground)", fontFamily: "monospace" }}>{fmt(item.price)}</div>
-                <div style={{ textAlign: "right", fontWeight: 700, fontFamily: "monospace" }}>{fmt(item.price * item.quantity)}</div>
+
+            {/* Items table */}
+            <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 48px 80px 80px", gap: 12,
+                padding: "9px 14px", background: "var(--muted)",
+                fontSize: 11, fontWeight: 600, color: "var(--muted-foreground)",
+                textTransform: "uppercase", letterSpacing: "0.05em",
+              }}>
+                <span>Product</span>
+                <span style={{ textAlign: "center" }}>Qty</span>
+                <span style={{ textAlign: "right" }}>Unit</span>
+                <span style={{ textAlign: "right" }}>Total</span>
               </div>
-            ))}
-            <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 14px", borderTop: "1px solid var(--border)", background: "var(--muted)", gap: 24, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Order Total</span>
-              <span style={{ fontWeight: 800, fontSize: 15, fontFamily: "monospace" }}>{fmt(order.total)}</span>
+              {order.items.map((item, i) => (
+                <div key={i} style={{
+                  display: "grid", gridTemplateColumns: "1fr 48px 80px 80px", gap: 12,
+                  padding: "10px 14px", fontSize: 13, alignItems: "center",
+                  borderTop: i > 0 ? "1px solid var(--border)" : undefined,
+                  background: i % 2 !== 0 ? "rgba(0,0,0,0.015)" : "transparent",
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: "var(--foreground)" }}>
+                      {item.name || `Product #${item.productId}`}
+                    </div>
+                    {item.reference && (
+                      <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontFamily: "monospace", marginTop: 2 }}>
+                        SKU: {item.reference}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ textAlign: "center", fontWeight: 600 }}>{item.quantity}</div>
+                  <div style={{ textAlign: "right", color: "var(--muted-foreground)", fontFamily: "monospace" }}>{fmt(item.price)}</div>
+                  <div style={{ textAlign: "right", fontWeight: 700, fontFamily: "monospace" }}>{fmt(item.price * item.quantity)}</div>
+                </div>
+              ))}
+              <div style={{
+                display: "flex", justifyContent: "flex-end",
+                padding: "10px 14px", borderTop: "1px solid var(--border)",
+                background: "var(--muted)", gap: 24, alignItems: "center",
+              }}>
+                <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Order Total</span>
+                <span style={{ fontWeight: 800, fontSize: 15, fontFamily: "monospace" }}>{fmt(order.total)}</span>
+              </div>
             </div>
-          </div>
 
-          {/* Action buttons — only for pending */}
-          {localStatus === "pending" && (
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button
-                onClick={handleCancel}
-                disabled={isActing}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 20px", borderRadius: 9, border: "1px solid rgba(225,29,72,0.3)", background: "rgba(225,29,72,0.06)", color: "#e11d48", fontSize: 13, fontWeight: 600, cursor: isActing ? "not-allowed" : "pointer", opacity: isActing ? 0.6 : 1, transition: "all 0.15s" }}
-              >
-                <XCircle size={15} />
-                {cancelling ? "Cancelling…" : "Cancel Order"}
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={isActing}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 20px", borderRadius: 9, border: "none", background: "#059669", color: "#fff", fontSize: 13, fontWeight: 600, cursor: isActing ? "not-allowed" : "pointer", opacity: isActing ? 0.6 : 1, transition: "all 0.15s", boxShadow: "0 2px 8px rgba(5,150,105,0.3)" }}
-              >
+            {/* Status banners for non-pending */}
+            {localStatus === "confirmed" && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "10px 14px", borderRadius: 9,
+                background: "rgba(5,150,105,0.08)", border: "1px solid rgba(5,150,105,0.2)",
+                fontSize: 13, color: "#059669", fontWeight: 500,
+              }}>
                 <CheckCircle2 size={15} />
-                {confirming ? "Confirming…" : "Confirm Order"}
-              </button>
-            </div>
-          )}
-
-          {/* Status banners */}
-          {localStatus === "confirmed" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 9, background: "rgba(5,150,105,0.08)", border: "1px solid rgba(5,150,105,0.2)", fontSize: 13, color: "#059669", fontWeight: 500 }}>
-              <CheckCircle2 size={15} />
-              Order confirmed — synced to Odoo
-              {order.odooSaleOrderId && <span style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 12 }}>Sale Order #{order.odooSaleOrderId}</span>}
-            </div>
-          )}
-          {localStatus === "cancelled" && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 9, background: "rgba(225,29,72,0.06)", border: "1px solid rgba(225,29,72,0.15)", fontSize: 13, color: "#e11d48", fontWeight: 500 }}>
-              <XCircle size={15} />
-              Order cancelled — customer has been notified by email
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+                Order confirmed — synced to Odoo
+                {order.odooSaleOrderId && (
+                  <span style={{ marginLeft: "auto", fontFamily: "monospace", fontSize: 12 }}>
+                    Sale Order #{order.odooSaleOrderId}
+                  </span>
+                )}
+              </div>
+            )}
+            {localStatus === "cancelled" && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "10px 14px", borderRadius: 9,
+                background: "rgba(225,29,72,0.06)", border: "1px solid rgba(225,29,72,0.15)",
+                fontSize: 13, color: "#e11d48", fontWeight: 500,
+              }}>
+                <XCircle size={15} />
+                Order cancelled — customer has been notified by email
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -376,9 +686,9 @@ export default function OrderPage() {
     useGetOrdersByStatusQuery(activeTab === "all" ? "all" : activeTab);
   const { data: pendingData } = useGetOrdersByStatusQuery("pending");
 
-  const odooOrders: any[]    = adminData?.orders ?? [];
+  const odooOrders: any[]         = adminData?.orders ?? [];
   const mongoOrders: MongoOrder[] = mongoData?.orders ?? [];
-  const pendingCount          = pendingData?.orders?.length ?? 0;
+  const pendingCount               = pendingData?.orders?.length ?? 0;
 
   // ── Analytics ──
   const stats = useMemo(() => {
@@ -400,11 +710,17 @@ export default function OrderPage() {
     const last7 = Array.from({ length: 7 }, (_, i) => {
       const day = subDays(now, 6 - i);
       const dayOrders = odooOrders.filter((o: any) => isSameDay(new Date(o.date_order), day));
-      return { day: format(day, "EEE"), orders: dayOrders.length, revenue: dayOrders.reduce((s: number, o: any) => s + o.amount_total, 0) };
+      return {
+        day: format(day, "EEE"),
+        orders: dayOrders.length,
+        revenue: dayOrders.reduce((s: number, o: any) => s + o.amount_total, 0),
+      };
     });
 
     const byState = Object.entries(
-      odooOrders.reduce((acc: Record<string, number>, o: any) => { acc[o.state] = (acc[o.state] || 0) + 1; return acc; }, {})
+      odooOrders.reduce((acc: Record<string, number>, o: any) => {
+        acc[o.state] = (acc[o.state] || 0) + 1; return acc;
+      }, {})
     ).map(([state, count]) => ({ state: ODOO_STATE_LABELS[state] || state, count }));
 
     const uniqueCustomers = new Set(thisMonth.map((o: any) => o.partner_id?.[0])).size;
@@ -435,7 +751,10 @@ export default function OrderPage() {
             Overview of sales, revenue, and order management
           </p>
         </div>
-        <button onClick={() => refetch()} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "1px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 13, cursor: "pointer" }}>
+        <button
+          onClick={() => refetch()}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9, border: "1px solid var(--border)", background: "transparent", color: "var(--foreground)", fontSize: 13, cursor: "pointer" }}
+        >
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
@@ -445,10 +764,10 @@ export default function OrderPage() {
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 20 }}>
         {[
-          { label: "Orders this month", value: stats.thisMonth.length, Icon: ShoppingBag, color: "#7c3aed", bg: "rgba(124,58,237,0.08)" },
-          { label: "Revenue this month", value: fmt(stats.totalRevenue), Icon: DollarSign, color: "#059669", bg: "rgba(5,150,105,0.08)" },
-          { label: "Month-on-month growth", value: `${stats.revenueGrowth}%`, Icon: TrendingUp, color: "#e11d48", bg: "rgba(225,29,72,0.08)" },
-          { label: "Unique customers", value: stats.uniqueCustomers, Icon: Users, color: "#3b82f6", bg: "rgba(59,130,246,0.08)" },
+          { label: "Orders this month",    value: stats.thisMonth.length,        Icon: ShoppingBag, color: "#7c3aed", bg: "rgba(124,58,237,0.08)" },
+          { label: "Revenue this month",   value: fmt(stats.totalRevenue),       Icon: DollarSign,  color: "#059669", bg: "rgba(5,150,105,0.08)" },
+          { label: "Month-on-month growth",value: `${stats.revenueGrowth}%`,     Icon: TrendingUp,  color: "#e11d48", bg: "rgba(225,29,72,0.08)" },
+          { label: "Unique customers",     value: stats.uniqueCustomers,         Icon: Users,       color: "#3b82f6", bg: "rgba(59,130,246,0.08)" },
         ].map((s) => (
           <div key={s.label} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ width: 40, height: 40, borderRadius: 10, background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -464,7 +783,6 @@ export default function OrderPage() {
 
       {/* Charts row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-        {/* Area chart */}
         <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 20px 14px" }}>
           <p style={{ fontWeight: 600, fontSize: 13, margin: "0 0 16px", color: "var(--foreground)" }}>Revenue — Last 7 Days</p>
           <ResponsiveContainer width="100%" height={170}>
@@ -484,7 +802,6 @@ export default function OrderPage() {
           </ResponsiveContainer>
         </div>
 
-        {/* Bar chart */}
         <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 20px 14px" }}>
           <p style={{ fontWeight: 600, fontSize: 13, margin: "0 0 16px", color: "var(--foreground)" }}>Orders by Status</p>
           <ResponsiveContainer width="100%" height={170}>
@@ -516,9 +833,9 @@ export default function OrderPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
             {Array.from({ length: startPad }).map((_, i) => <div key={`p${i}`} />)}
             {calDays.map(day => {
-              const key = format(day, "yyyy-MM-dd");
-              const count = daysWithOrders[key] || 0;
-              const isSel = isSameDay(day, selectedDate);
+              const key    = format(day, "yyyy-MM-dd");
+              const count  = daysWithOrders[key] || 0;
+              const isSel  = isSameDay(day, selectedDate);
               const isToday = isSameDay(day, new Date());
               return (
                 <button key={key} onClick={() => setSelectedDate(day)}
@@ -570,8 +887,10 @@ export default function OrderPage() {
                     )}
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 600, ...(ODOO_STATE_COLORS[order.state] ? {} : {}) }}
-                      className={`${ODOO_STATE_COLORS[order.state] || "bg-gray-100"}`}>
+                    <span
+                      style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}
+                      className={`${ODOO_STATE_COLORS[order.state] || "bg-gray-100"}`}
+                    >
                       {ODOO_STATE_LABELS[order.state] || order.state}
                     </span>
                     <p style={{ fontWeight: 700, fontSize: 13, margin: "4px 0 0", fontFamily: "monospace" }}>${order.amount_total?.toFixed(2)}</p>
@@ -600,7 +919,9 @@ export default function OrderPage() {
               >
                 {tab.label}
                 {tab.key === "pending" && pendingCount > 0 && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: "#d97706", color: "#fff" }}>{pendingCount}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: "#d97706", color: "#fff" }}>
+                    {pendingCount}
+                  </span>
                 )}
               </button>
             );
@@ -611,7 +932,7 @@ export default function OrderPage() {
         {activeTab === "pending" && pendingCount > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.25)", marginBottom: 14, fontSize: 13, color: "#d97706", fontWeight: 500 }}>
             <AlertCircle size={15} />
-            {pendingCount} order{pendingCount !== 1 ? "s" : ""} waiting for your approval — expand each card to confirm or cancel.
+            {pendingCount} order{pendingCount !== 1 ? "s" : ""} waiting for your approval — click any order to review and confirm or cancel.
           </div>
         )}
 
