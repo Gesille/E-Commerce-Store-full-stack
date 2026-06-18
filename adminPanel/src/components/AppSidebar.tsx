@@ -166,8 +166,7 @@ const AppSidebar = () => {
                   <AddProduct />
                 </Sheet>
               </SidebarMenuItem>
-              // In AppSidebar.tsx, inside the Products SidebarMenu, after "Add
-              Product":
+             
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link
