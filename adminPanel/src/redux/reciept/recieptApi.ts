@@ -1,7 +1,7 @@
 import { apiSlice } from "../api/apiSlice";
 
 // ── Types ───────────────────────────────────────────────────────────────
-export interface SendReceiptEmailResponse {
+export interface SendReceiptEmailTestResponse {
   success: boolean;
   message: string;
 } 
@@ -106,7 +106,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
       }),
     }),
     sendReceiptByEmail: builder.mutation<
-  SendReceiptEmailResponse,
+  SendReceiptEmailTestResponse,
   { receiptId: number; email: string }
 >({
   query: ({ receiptId, email }) => ({
