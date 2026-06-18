@@ -870,7 +870,7 @@ const pendingOrders = useMemo(
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {displayedOrders.map(order => {
-              const isPending = order.state === "draft" && !!order.origin?.startsWith("WEB_ORDER");
+              const isPending = order.state === "draft" && typeof order.origin === "string" && order.origin.startsWith("WEB_ORDER")
               return (
                 <OdooOrderCard
                   key={order.id}
