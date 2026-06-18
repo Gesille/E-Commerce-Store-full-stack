@@ -1074,3 +1074,20 @@ export const managerCreateOrder = CatchAsyncError(
     });
   }
 );
+
+
+
+export const getOrdersByStatus = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { status } = req.query;
+
+    const filter: any = {};
+    if (status && status !== "all") {
+      filter.status = status;
+    }
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, orders });
+  }
+);

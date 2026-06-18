@@ -50,6 +50,8 @@ import { useGetAllMessagesQuery } from "@/redux/contact/contactApi";
 import ReturnOrder from "./ReturnOrders";
 import CreateOrderForUser from "./CreateOrderForUser";
 import AddUser from "./AddUser";
+import { useState } from "react";
+import { useGetOrdersByStatusQuery } from "@/redux/order/orderApi";
 const clientUrl = process.env.NEXT_PUBLIC_CLIENT_URL!;
 const items = [
   {
@@ -77,8 +79,15 @@ const items = [
 
 const AppSidebar = () => {
   const user = useSelector((state: RootState) => state?.auth.user as any);
+const [ordersOpen, setOrdersOpen] = useState(false);
 
-  const firstLetter = user?.name?.charAt(0)?.toUpperCase() || "?";
+const { data: pendingData } = useGetOrdersByStatusQuery("pending");
+const { data: confirmedData } = useGetOrdersByStatusQuery("confirmed");
+const { data: cancelledData } = useGetOrdersByStatusQuery("cancelled");
+
+const pendingCount = pendingData?.orders?.length ?? 0;
+const confirmedCount = confirmedData?.orders?.length ?? 0;
+const cancelledCount = cancelledData?.orders?.length ?? 0;
   const { data: messagesData } = useGetAllMessagesQuery({});
   const unreadCount = messagesData?.unreadCount ?? 0;
   return (
@@ -226,35 +235,7 @@ const AppSidebar = () => {
           </SidebarGroupContent>
         </SidebarGroup>
         {/* ORDERS */}
-        <SidebarGroup className="mt-2">
-          <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
-            Orders
-          </SidebarGroupLabel>
-
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <Sheet>
-                <SheetTrigger asChild>
-                  <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
-                    <Plus size={16} />
-                    <span className="text-sm"> Add Orders</span>
-                  </SidebarMenuButton>
-                </SheetTrigger>
-                <CreateOrderForUser />
-              </Sheet>
-
-              <Sheet>
-                <SheetTrigger asChild>
-                  <SidebarMenuButton className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition">
-                    <RotateCcw size={16} />
-                    <span className="text-sm">Return Orders</span>
-                  </SidebarMenuButton>
-                </SheetTrigger>
-                <ReturnOrder />
-              </Sheet>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+       Orders
         {/* INVENTORY */}
         <SidebarGroup className="mt-2">
           <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">

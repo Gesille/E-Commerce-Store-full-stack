@@ -2,7 +2,7 @@ import express from "express";
 
 import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
 
-import { createOrder, exportInventory, getAdminOrderDetail, getAdminOrders, getInventoryReport, getLatestTransactions, getMonthlyRevenue, getOrderStatusStats, managerCancelOrder, managerConfirmOrder, managerCreateOrder, returnOrderItems, trackOrder} from "../controllers/order.controller.js";
+import { createOrder, exportInventory, getAdminOrderDetail, getAdminOrders, getInventoryReport, getLatestTransactions, getMonthlyRevenue, getOrdersByStatus, getOrderStatusStats, managerCancelOrder, managerConfirmOrder, managerCreateOrder, returnOrderItems, trackOrder} from "../controllers/order.controller.js";
 
 
 const orderRouter = express.Router();
@@ -30,4 +30,5 @@ orderRouter.get("/dashboard/order-status",isAuthenticated,authorizeRoles("admin"
 orderRouter.get("/dashboard/latest-transactions", isAuthenticated,authorizeRoles("admin"),getLatestTransactions);
 orderRouter.post("/order-return",isAuthenticated,authorizeRoles("admin"),returnOrderItems)
 orderRouter.post("/manager-create-order", isAuthenticated, authorizeRoles("admin"), managerCreateOrder);
+orderRouter.get("/orders/by-status", isAuthenticated, authorizeRoles("admin"), getOrdersByStatus);
 export default orderRouter;

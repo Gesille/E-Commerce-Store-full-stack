@@ -58,10 +58,16 @@ export const orderApi = apiSlice.injectEndpoints({
       }),
     }),
     managerCreateOrder: builder.mutation({
-  query: (data) => ({
-    url: "manager-create-order", 
-    method: "POST",
-    body: data,
+      query: (data) => ({
+        url: "manager-create-order",
+        method: "POST",
+        body: data,
+      }),
+    }),
+    getOrdersByStatus: builder.query<{ orders: any[] }, string>({
+  query: (status) => ({
+    url: `orders/by-status?status=${status}`,
+    method: "GET",
   }),
 }),
   }),
@@ -74,5 +80,6 @@ export const {
   useGetAdminOrderDetailQuery,
   useGetMonthlyRevenueQuery,
   useReturnOrderMutation,
-  useManagerCreateOrderMutation
+  useManagerCreateOrderMutation,
+  useGetOrdersByStatusQuery
 } = orderApi;
