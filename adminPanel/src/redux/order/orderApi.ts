@@ -70,6 +70,20 @@ export const orderApi = apiSlice.injectEndpoints({
     method: "GET",
   }),
 }),
+confirmOrder: builder.mutation({
+  query: (orderId: string) => ({
+    url: `manager-confirm/${orderId}`,
+    method: "GET", // keep GET since your route is GET
+    credentials: "include" as const,
+  }),
+}),
+cancelOrder: builder.mutation({
+  query: (orderId: string) => ({
+    url: `manager-cancel/${orderId}`,
+    method: "GET",
+    credentials: "include" as const,
+  }),
+}),
   }),
 });
 
@@ -81,5 +95,7 @@ export const {
   useGetMonthlyRevenueQuery,
   useReturnOrderMutation,
   useManagerCreateOrderMutation,
-  useGetOrdersByStatusQuery
+  useGetOrdersByStatusQuery,
+   useConfirmOrderMutation,
+  useCancelOrderMutation,
 } = orderApi;

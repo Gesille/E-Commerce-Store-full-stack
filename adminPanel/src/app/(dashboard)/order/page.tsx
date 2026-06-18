@@ -1,560 +1,847 @@
-// app/calendar/page.tsx
 "use client";
-import { createPortal } from "react-dom";
-import { useState, useMemo } from "react";
-import { useGetAdminOrdersQuery } from "@/redux/order/orderApi";
-import { format, isSameDay, subDays } from "date-fns";
+
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
-  ShoppingBag,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Package,
+  User,
+  MapPin,
+  Hash,
+  Calendar,
   DollarSign,
-  Users,
+  RefreshCw,
+  Inbox,
+  AlertCircle,
+  Filter,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
-import { useGetAdminOrderDetailQuery } from "@/redux/order/orderApi";
-import { X, Package } from "lucide-react";
+import { useGetOrdersByStatusQuery } from "@/redux/order/orderApi";
 
-const STATE_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 dark:bg-gray-800",
-  sent: "bg-blue-100 text-blue-600",
-  sale: "bg-green-100 text-green-600",
-  done: "bg-violet-100 text-violet-600",
-  cancel: "bg-red-100 text-red-500",
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface OrderItem {
+  productId: number;
+  name: string;
+  reference?: string;
+  price: number;
+  quantity: number;
+}
+
+interface Order {
+  _id: string;
+  userId: string;
+  odooPartnerId?: number;
+  items: OrderItem[];
+  shippingAddress: string;
+  total: number;
+  status: "pending" | "confirmed" | "cancelled" | "processing" | "done";
+  odooSaleOrderId?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+const STATUS_CONFIG = {
+  pending: {
+    label: "Pending",
+    icon: Clock,
+    color: "#d97706",
+    bg: "rgba(217,119,6,0.08)",
+    border: "rgba(217,119,6,0.2)",
+    dot: "#d97706",
+  },
+  confirmed: {
+    label: "Confirmed",
+    icon: CheckCircle2,
+    color: "#059669",
+    bg: "rgba(5,150,105,0.08)",
+    border: "rgba(5,150,105,0.2)",
+    dot: "#059669",
+  },
+  cancelled: {
+    label: "Cancelled",
+    icon: XCircle,
+    color: "#e11d48",
+    bg: "rgba(225,29,72,0.08)",
+    border: "rgba(225,29,72,0.2)",
+    dot: "#e11d48",
+  },
+  processing: {
+    label: "Processing",
+    icon: RefreshCw,
+    color: "#3b82f6",
+    bg: "rgba(59,130,246,0.08)",
+    border: "rgba(59,130,246,0.2)",
+    dot: "#3b82f6",
+  },
+  done: {
+    label: "Done",
+    icon: CheckCircle2,
+    color: "#7c3aed",
+    bg: "rgba(124,58,237,0.08)",
+    border: "rgba(124,58,237,0.2)",
+    dot: "#7c3aed",
+  },
 };
 
-const STATE_LABELS: Record<string, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  sale: "Confirmed",
-  done: "Done",
-  cancel: "Cancelled",
-};
+const TABS = [
+  { key: "all", label: "All Orders" },
+  { key: "pending", label: "Pending" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "cancelled", label: "Cancelled" },
+];
 
-export default function CalendarPage() {
-  const { data, isLoading } = useGetAdminOrdersQuery({});
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const orders = data?.orders || [];
+function fmt(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(n ?? 0);
+}
 
-  // ── ANALYTICS ──────────────────────────────────────────
-  const stats = useMemo(() => {
-    const now = new Date();
-    const thisMonth = orders.filter(
-      (o: any) =>
-        new Date(o.date_order).getMonth() === now.getMonth() &&
-        new Date(o.date_order).getFullYear() === now.getFullYear(),
-    );
-    const lastMonth = orders.filter((o: any) => {
-      const d = new Date(o.date_order);
-      const lm = new Date(now.getFullYear(), now.getMonth() - 1);
-      return (
-        d.getMonth() === lm.getMonth() && d.getFullYear() === lm.getFullYear()
-      );
-    });
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
-    const totalRevenue = thisMonth.reduce(
-      (s: number, o: any) => s + o.amount_total,
-      0,
-    );
-    const lastRevenue = lastMonth.reduce(
-      (s: number, o: any) => s + o.amount_total,
-      0,
-    );
-    const revenueGrowth =
-      lastRevenue > 0
-        ? (((totalRevenue - lastRevenue) / lastRevenue) * 100).toFixed(1)
-        : "0";
+// ─── Confirm/Cancel action hook ───────────────────────────────────────────────
+function useOrderAction() {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [done, setDone] = useState<Record<string, "confirmed" | "cancelled">>({});
 
-    // last 7 days chart data
-    const last7 = Array.from({ length: 7 }, (_, i) => {
-      const day = subDays(now, 6 - i);
-      const dayOrders = orders.filter((o: any) =>
-        isSameDay(new Date(o.date_order), day),
-      );
-      return {
-        day: format(day, "EEE"),
-        orders: dayOrders.length,
-        revenue: dayOrders.reduce((s: number, o: any) => s + o.amount_total, 0),
-      };
-    });
+  const baseUrl = process.env.NEXT_PUBLIC_SERVER_URI ?? "";
 
-    // orders by state for bar chart
-    const byState = Object.entries(
-      orders.reduce((acc: Record<string, number>, o: any) => {
-        acc[o.state] = (acc[o.state] || 0) + 1;
-        return acc;
-      }, {}),
-    ).map(([state, count]) => ({
-      state: STATE_LABELS[state] || state,
-      count,
-    }));
+  const confirm = async (orderId: string) => {
+    setLoading(orderId);
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/manager-confirm/${orderId}`);
+      if (res.ok) setDone((p) => ({ ...p, [orderId]: "confirmed" }));
+    } finally {
+      setLoading(null);
+    }
+  };
 
-    // unique customers this month
-    const uniqueCustomers = new Set(
-      thisMonth.map((o: any) => o.partner_id?.[0]),
-    ).size;
+  const cancel = async (orderId: string) => {
+    setLoading(orderId);
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/manager-cancel/${orderId}`);
+      if (res.ok) setDone((p) => ({ ...p, [orderId]: "cancelled" }));
+    } finally {
+      setLoading(null);
+    }
+  };
 
-    return {
-      thisMonth,
-      totalRevenue,
-      revenueGrowth,
-      last7,
-      byState,
-      uniqueCustomers,
-    };
-  }, [orders, currentMonth]);
+  return { confirm, cancel, loading, done };
+}
 
-  // ── CALENDAR DATA ──────────────────────────────────────
-  const dayOrders = orders.filter((o: any) =>
-    isSameDay(new Date(o.date_order), selectedDate),
-  );
-
-  const daysWithOrders = orders.reduce(
-    (acc: Record<string, number>, o: any) => {
-      const day = format(new Date(o.date_order), "yyyy-MM-dd");
-      acc[day] = (acc[day] || 0) + 1;
-      return acc;
-    },
-    {},
-  );
-
-  const firstDay = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth(),
-    1,
-  );
-  const lastDay = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() + 1,
-    0,
-  );
-  const startPad = firstDay.getDay();
-  const days = Array.from(
-    { length: lastDay.getDate() },
-    (_, i) =>
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i + 1),
-  );
-
-  if (isLoading)
-    return <p className="p-6 text-muted-foreground">Loading orders...</p>;
+// ─── Order Card ───────────────────────────────────────────────────────────────
+function OrderCard({
+  order,
+  onConfirm,
+  onCancel,
+  actionLoading,
+  overrideStatus,
+}: {
+  order: Order;
+  onConfirm: (id: string) => void;
+  onCancel: (id: string) => void;
+  actionLoading: string | null;
+  overrideStatus?: "confirmed" | "cancelled";
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const status = overrideStatus ?? order.status;
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
+  const isLoading = actionLoading === order._id;
+  const isPending = status === "pending";
 
   return (
-    <div className="relative p-6 max-w-7xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Orders & Analytics</h1>
+    <div
+      style={{
+        background: "var(--card)",
+        border: `1px solid var(--border)`,
+        borderRadius: 14,
+        overflow: "hidden",
+        transition: "box-shadow 0.2s",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      }}
+    >
+      {/* ── Card header ── */}
+      <div
+        style={{
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          cursor: "pointer",
+          userSelect: "none",
+        }}
+        onClick={() => setExpanded((e) => !e)}
+      >
+        {/* Status dot */}
+        <div
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: cfg.dot,
+            flexShrink: 0,
+          }}
+        />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Total Orders",
-            value: stats.thisMonth.length,
-            icon: ShoppingBag,
-            color: "text-violet-500",
-            bg: "bg-violet-50 dark:bg-violet-950",
-          },
-          {
-            label: "Revenue",
-            value: `$${stats.totalRevenue.toFixed(2)}`,
-            icon: DollarSign,
-            color: "text-green-500",
-            bg: "bg-green-50 dark:bg-green-950",
-          },
-          {
-            label: "Growth",
-            value: `${stats.revenueGrowth}%`,
-            icon: TrendingUp,
-            color: "text-pink-500",
-            bg: "bg-pink-50 dark:bg-pink-950",
-          },
-          {
-            label: "Customers",
-            value: stats.uniqueCustomers,
-            icon: Users,
-            color: "text-blue-500",
-            bg: "bg-blue-50 dark:bg-blue-950",
-          },
-        ].map((s) => (
+        {/* Order ID */}
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div
-            key={s.label}
-            className="bg-background border rounded-2xl p-4 flex items-center gap-3"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
           >
-            <div className={`${s.bg} p-2.5 rounded-xl`}>
-              <s.icon size={20} className={s.color} />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className="font-bold text-lg">{s.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── CHARTS ROW ── */}
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* AREA CHART — revenue last 7 days */}
-        <div className="bg-background border rounded-2xl p-5">
-          <p className="font-semibold mb-4 text-sm">Revenue — Last 7 Days</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={stats.last7}>
-              <defs>
-                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="currentColor"
-                strokeOpacity={0.05}
-              />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                formatter={(v: any) => [`$${Number(v).toFixed(2)}`, "Revenue"]}
-                contentStyle={{ borderRadius: 12, border: "1px solid #e5e7eb" }}
-              />
-              <Area
-                type="monotone"
-                dataKey="revenue"
-                stroke="#8b5cf6"
-                strokeWidth={2}
-                fill="url(#colorRevenue)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* BAR CHART — orders by state */}
-        <div className="bg-background border rounded-2xl p-5">
-          <p className="font-semibold mb-4 text-sm">Orders by Status</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={stats.byState} barSize={32}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="currentColor"
-                strokeOpacity={0.05}
-              />
-              <XAxis
-                dataKey="state"
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                formatter={(v: any) => [v, "Orders"]}
-                contentStyle={{ borderRadius: 12, border: "1px solid #e5e7eb" }}
-              />
-              <Bar dataKey="count" fill="#ec4899" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* ── CALENDAR + ORDER LIST (your existing code) ── */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* CALENDAR */}
-        <div className="bg-background border rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() =>
-                setCurrentMonth(
-                  new Date(
-                    currentMonth.getFullYear(),
-                    currentMonth.getMonth() - 1,
-                  ),
-                )
-              }
-              className="p-1.5 hover:bg-muted rounded-lg transition"
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontWeight: 700,
+                fontSize: 13,
+                color: "var(--foreground)",
+              }}
             >
-              <ChevronLeft size={18} />
-            </button>
-            <p className="font-semibold">{format(currentMonth, "MMMM yyyy")}</p>
-            <button
-              onClick={() =>
-                setCurrentMonth(
-                  new Date(
-                    currentMonth.getFullYear(),
-                    currentMonth.getMonth() + 1,
-                  ),
-                )
-              }
-              className="p-1.5 hover:bg-muted rounded-lg transition"
+              #{order._id.slice(-8).toUpperCase()}
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 9px",
+                borderRadius: 20,
+                color: cfg.color,
+                background: cfg.bg,
+                border: `1px solid ${cfg.border}`,
+              }}
             >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 mb-1">
-            {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-              <div
-                key={d}
-                className="text-center text-xs text-muted-foreground py-1"
+              {cfg.label}
+            </span>
+            {order.odooSaleOrderId && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted-foreground)",
+                  fontFamily: "monospace",
+                }}
               >
-                {d}
-              </div>
-            ))}
+                Odoo #{order.odooSaleOrderId}
+              </span>
+            )}
           </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: startPad }).map((_, i) => (
-              <div key={`pad-${i}`} />
-            ))}
-            {days.map((day) => {
-              const key = format(day, "yyyy-MM-dd");
-              const count = daysWithOrders[key] || 0;
-              const isSelected = isSameDay(day, selectedDate);
-              const isToday = isSameDay(day, new Date());
-              return (
-                <button
-                  key={key}
-                  onClick={() => setSelectedDate(day)}
-                  className={`relative flex flex-col items-center justify-center h-10 rounded-xl text-sm font-medium transition
-                    ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : isToday
-                          ? "border border-primary text-primary"
-                          : "hover:bg-muted"
-                    }`}
-                >
-                  {day.getDate()}
-                  {count > 0 && (
-                    <span
-                      className={`absolute bottom-1 w-1.5 h-1.5 rounded-full
-                      ${isSelected ? "bg-white" : "bg-primary"}`}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-2 text-sm">
-            <div className="bg-muted rounded-xl p-3">
-              <p className="text-muted-foreground text-xs">Orders this month</p>
-              <p className="font-bold text-lg">{stats.thisMonth.length}</p>
-            </div>
-            <div className="bg-muted rounded-xl p-3">
-              <p className="text-muted-foreground text-xs">
-                Revenue this month
-              </p>
-              <p className="font-bold text-lg">
-                ${stats.totalRevenue.toFixed(2)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* ORDER LIST */}
-        <div className="bg-background border rounded-2xl p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold">
-              {format(selectedDate, "MMMM d, yyyy")}
-            </h2>
-            <span className="text-xs bg-muted px-2 py-1 rounded-full">
-              {dayOrders.length} orders · $
-              {dayOrders
-                .reduce((s: number, o: any) => s + o.amount_total, 0)
-                .toFixed(2)}
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--muted-foreground)",
+              marginTop: 3,
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <Calendar size={11} />
+              {fmtDate(order.createdAt)}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <Package size={11} />
+              {order.items.length} item{order.items.length !== 1 ? "s" : ""}
             </span>
           </div>
+        </div>
 
-          {dayOrders.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-              No orders on this day
+        {/* Total */}
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: 15,
+              color: "var(--foreground)",
+              fontFamily: "monospace",
+            }}
+          >
+            {fmt(order.total)}
+          </div>
+        </div>
+
+        {/* Chevron */}
+        <div style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>
+          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
+      </div>
+
+      {/* ── Expanded body ── */}
+      {expanded && (
+        <div
+          style={{
+            borderTop: "1px solid var(--border)",
+            padding: "18px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          {/* Shipping */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              fontSize: 13,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            <MapPin size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+            <span>{order.shippingAddress || "No address provided"}</span>
+          </div>
+
+          {/* Items table */}
+          <div
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              overflow: "hidden",
+            }}
+          >
+            {/* Table header */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto auto",
+                gap: 12,
+                padding: "9px 14px",
+                background: "var(--muted)",
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--muted-foreground)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              <span>Product</span>
+              <span style={{ textAlign: "center" }}>Qty</span>
+              <span style={{ textAlign: "right" }}>Unit</span>
+              <span style={{ textAlign: "right" }}>Total</span>
             </div>
-          ) : (
-            <div className="flex flex-col gap-2 overflow-y-auto max-h-[420px] pr-1">
-              {dayOrders.map((order: any) => (
-                <div
-                  key={order.id}
-                  onClick={() => setSelectedOrderId(Number(order.id))}
-                  className="flex items-center justify-between p-3 rounded-xl border
-      hover:bg-muted hover:border-primary cursor-pointer transition" // 👈 add cursor-pointer
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <p className="font-semibold text-sm">{order.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {order.partner_id?.[1]} ·{" "}
-                      {format(new Date(order.date_order), "h:mm a")}
-                    </p>
-                    {order.origin?.startsWith("WEB_ORDER") && (
-                      <span className="text-[10px] text-violet-500">
-                        From store
-                      </span>
-                    )}
+
+            {/* Rows */}
+            {order.items.map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto auto auto",
+                  gap: 12,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  alignItems: "center",
+                  borderTop: i > 0 ? "1px solid var(--border)" : undefined,
+                  background:
+                    i % 2 === 0 ? "transparent" : "rgba(0,0,0,0.015)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{ fontWeight: 500, color: "var(--foreground)" }}
+                  >
+                    {item.name || `Product #${item.productId}`}
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span
-                      className={`text-[11px] px-2 py-0.5 rounded-full capitalize font-medium
-                      ${STATE_COLORS[order.state] || "bg-gray-100"}`}
+                  {item.reference && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--muted-foreground)",
+                        fontFamily: "monospace",
+                        marginTop: 2,
+                      }}
                     >
-                      {STATE_LABELS[order.state] || order.state}
-                    </span>
-                    <span className="font-bold text-sm">
-                      ${order.amount_total.toFixed(2)}
-                    </span>
-                  </div>
+                      SKU: {item.reference}
+                    </div>
+                  )}
                 </div>
-              ))}
+                <div
+                  style={{
+                    textAlign: "center",
+                    fontWeight: 600,
+                    color: "var(--foreground)",
+                  }}
+                >
+                  {item.quantity}
+                </div>
+                <div
+                  style={{
+                    textAlign: "right",
+                    color: "var(--muted-foreground)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {fmt(item.price)}
+                </div>
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontWeight: 700,
+                    color: "var(--foreground)",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {fmt(item.price * item.quantity)}
+                </div>
+              </div>
+            ))}
+
+            {/* Total row */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                padding: "10px 14px",
+                borderTop: "1px solid var(--border)",
+                background: "var(--muted)",
+                gap: 24,
+                alignItems: "center",
+              }}
+            >
+              <span
+                style={{ fontSize: 12, color: "var(--muted-foreground)" }}
+              >
+                Order Total
+              </span>
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: 15,
+                  fontFamily: "monospace",
+                  color: "var(--foreground)",
+                }}
+              >
+                {fmt(order.total)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons — only for pending orders */}
+          {isPending && (
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+                paddingTop: 4,
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel(order._id);
+                }}
+                disabled={isLoading}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "9px 18px",
+                  borderRadius: 9,
+                  border: "1px solid rgba(225,29,72,0.3)",
+                  background: "rgba(225,29,72,0.06)",
+                  color: "#e11d48",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  opacity: isLoading ? 0.6 : 1,
+                  transition: "all 0.15s",
+                }}
+              >
+                <XCircle size={15} />
+                {isLoading ? "Processing…" : "Cancel Order"}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfirm(order._id);
+                }}
+                disabled={isLoading}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "9px 18px",
+                  borderRadius: 9,
+                  border: "none",
+                  background: "#059669",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  opacity: isLoading ? 0.6 : 1,
+                  transition: "all 0.15s",
+                  boxShadow: "0 2px 8px rgba(5,150,105,0.3)",
+                }}
+              >
+                <CheckCircle2 size={15} />
+                {isLoading ? "Processing…" : "Confirm Order"}
+              </button>
+            </div>
+          )}
+
+          {/* Confirmed/cancelled info banners */}
+          {status === "confirmed" && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 14px",
+                borderRadius: 9,
+                background: "rgba(5,150,105,0.08)",
+                border: "1px solid rgba(5,150,105,0.2)",
+                fontSize: 13,
+                color: "#059669",
+                fontWeight: 500,
+              }}
+            >
+              <CheckCircle2 size={15} />
+              Order confirmed — synced to Odoo
+              {order.odooSaleOrderId && (
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                  }}
+                >
+                  Sale Order #{order.odooSaleOrderId}
+                </span>
+              )}
+            </div>
+          )}
+          {status === "cancelled" && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 14px",
+                borderRadius: 9,
+                background: "rgba(225,29,72,0.06)",
+                border: "1px solid rgba(225,29,72,0.15)",
+                fontSize: 13,
+                color: "#e11d48",
+                fontWeight: 500,
+              }}
+            >
+              <XCircle size={15} />
+              Order cancelled — customer has been notified by email
             </div>
           )}
         </div>
-      </div>
-      {selectedOrderId && (
-        <OrderDetailModal
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-        />
       )}
     </div>
   );
 }
 
+// ─── Empty state ──────────────────────────────────────────────────────────────
+function EmptyState({ status }: { status: string }) {
+  const messages: Record<string, { icon: any; title: string; sub: string }> = {
+    pending: {
+      icon: Clock,
+      title: "No pending orders",
+      sub: "New orders from customers will appear here waiting for your approval.",
+    },
+    confirmed: {
+      icon: CheckCircle2,
+      title: "No confirmed orders yet",
+      sub: "Orders you approve will appear here along with their Odoo sync status.",
+    },
+    cancelled: {
+      icon: XCircle,
+      title: "No cancelled orders",
+      sub: "Orders you cancel will be kept here for reference.",
+    },
+    all: {
+      icon: Inbox,
+      title: "No orders yet",
+      sub: "Orders placed by customers or created by managers will appear here.",
+    },
+  };
 
+  const m = messages[status] ?? messages.all;
+  const Icon = m.icon;
 
-function OrderDetailModal({ orderId, onClose }: { orderId: number; onClose: () => void }) {
-  const { data, isLoading } = useGetAdminOrderDetailQuery(orderId);
-  const order = data?.order;
-
-  return createPortal(
+  return (
     <div
-      className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4"
-      onClick={onClose}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "64px 24px",
+        gap: 12,
+        color: "var(--muted-foreground)",
+      }}
     >
       <div
-        className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: "50%",
+          background: "var(--muted)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading...</div>
-        ) : !order ? (
-          <div className="p-8 text-center text-muted-foreground">Order not found</div>
-        ) : (
-          <>
-            {/* HEADER */}
-            <div className="flex items-center justify-between p-6 border-b">
-              <div>
-                <h2 className="text-xl font-bold">{order.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {format(new Date(order.date_order), "MMMM d, yyyy · h:mm a")}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-3 py-1 rounded-full font-medium capitalize
-                  ${STATE_COLORS[order.state] || "bg-gray-100"}`}>
-                  {STATE_LABELS[order.state] || order.state}
-                </span>
-                <button onClick={onClose} className="p-2 hover:bg-muted rounded-xl transition">
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* CUSTOMER INFO */}
-            <div className="p-6 border-b grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs mb-1">Customer</p>
-                <p className="font-semibold">{order.partner_id?.[1]}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs mb-1">Salesperson</p>
-                <p className="font-semibold">{order.user_id?.[1] || "—"}</p>
-              </div>
-              {order.origin && (
-                <div>
-                  <p className="text-muted-foreground text-xs mb-1">Origin</p>
-                  <p className="font-semibold">{order.origin}</p>
-                </div>
-              )}
-            </div>
-
-            {/* ORDER LINES */}
-            <div className="p-6">
-              <p className="font-semibold mb-3 flex items-center gap-2">
-                <Package size={16} /> Products
-              </p>
-              <div className="border rounded-xl overflow-hidden">
-                <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-muted text-xs text-muted-foreground font-medium">
-                  <span className="col-span-5">Product</span>
-                  <span className="col-span-2 text-center">Qty</span>
-                  <span className="col-span-2 text-right">Unit Price</span>
-                  <span className="col-span-3 text-right">Subtotal</span>
-                </div>
-                {order.lines?.map((line: any, i: number) => (
-                  <div
-                    key={line.id || i}
-                    className={`grid grid-cols-12 gap-2 px-4 py-3 text-sm items-center
-                      ${i % 2 === 0 ? "" : "bg-muted/40"}`}
-                  >
-                    <div className="col-span-5">
-                      <p className="font-medium">{line.product_id?.[1]}</p>
-                      {line.name !== line.product_id?.[1] && (
-                        <p className="text-xs text-muted-foreground truncate">{line.name}</p>
-                      )}
-                    </div>
-                    <p className="col-span-2 text-center">{line.product_uom_qty}</p>
-                    <p className="col-span-2 text-right">${line.price_unit.toFixed(2)}</p>
-                    <p className="col-span-3 text-right font-semibold">
-                      ${line.price_subtotal.toFixed(2)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              {/* TOTALS */}
-              <div className="mt-4 flex flex-col items-end gap-1 text-sm">
-                <div className="flex gap-8">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>${order.amount_untaxed?.toFixed(2)}</span>
-                </div>
-                <div className="flex gap-8">
-                  <span className="text-muted-foreground">Tax</span>
-                  <span>${order.amount_tax?.toFixed(2)}</span>
-                </div>
-                <div className="flex gap-8 font-bold text-base border-t pt-2 mt-1">
-                  <span>Total</span>
-                  <span>${order.amount_total?.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {order.note && (
-                <div className="mt-4 p-3 bg-muted rounded-xl text-sm text-muted-foreground">
-                  <p className="font-medium text-foreground mb-1">Note</p>
-                  <p>{order.note}</p>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+        <Icon size={22} />
       </div>
-    </div>,
-    document.body  // ← renders at root, above everything
+      <p style={{ fontWeight: 600, fontSize: 14, color: "var(--foreground)" }}>
+        {m.title}
+      </p>
+      <p style={{ fontSize: 13, textAlign: "center", maxWidth: 320 }}>
+        {m.sub}
+      </p>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+export default function OrderPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const urlStatus = searchParams.get("status") ?? "all";
+  const [activeTab, setActiveTab] = useState(urlStatus);
+
+  // keep URL in sync with tab
+  useEffect(() => {
+    setActiveTab(urlStatus);
+  }, [urlStatus]);
+
+  const switchTab = (key: string) => {
+    setActiveTab(key);
+    router.push(key === "all" ? "/order" : `/order?status=${key}`);
+  };
+
+  // Fetch orders for the active status (RTK Query)
+  const { data, isLoading, isFetching, refetch } = useGetOrdersByStatusQuery(
+    activeTab === "all" ? "" : activeTab,
+  );
+
+  const orders: Order[] = data?.orders ?? [];
+
+  const { confirm, cancel, loading: actionLoading, done } = useOrderAction();
+
+  // Count badges
+  const { data: pendingData } = useGetOrdersByStatusQuery("pending");
+  const pendingCount = pendingData?.orders?.length ?? 0;
+
+  const handleConfirm = async (id: string) => {
+    await confirm(id);
+    refetch();
+  };
+
+  const handleCancel = async (id: string) => {
+    await cancel(id);
+    refetch();
+  };
+
+  return (
+    <div
+      style={{
+        maxWidth: 860,
+        margin: "0 auto",
+        padding: "28px 20px",
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+      }}
+    >
+      {/* ── Page header ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 24,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: "var(--foreground)",
+              margin: 0,
+            }}
+          >
+            Order Management
+          </h1>
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--muted-foreground)",
+              marginTop: 4,
+            }}
+          >
+            Review, confirm, or cancel orders from customers and managers
+          </p>
+        </div>
+
+        <button
+          onClick={() => refetch()}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            borderRadius: 9,
+            border: "1px solid var(--border)",
+            background: "transparent",
+            color: "var(--foreground)",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          <RefreshCw size={14} />
+          Refresh
+        </button>
+      </div>
+
+      {/* ── Tabs ── */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          marginBottom: 20,
+          borderBottom: "1px solid var(--border)",
+          paddingBottom: 0,
+        }}
+      >
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => switchTab(tab.key)}
+              style={{
+                padding: "9px 16px",
+                fontSize: 13,
+                fontWeight: isActive ? 700 : 500,
+                color: isActive
+                  ? "var(--foreground)"
+                  : "var(--muted-foreground)",
+                background: "none",
+                border: "none",
+                borderBottom: isActive
+                  ? "2px solid var(--foreground)"
+                  : "2px solid transparent",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                transition: "color 0.15s",
+                marginBottom: -1,
+              }}
+            >
+              {tab.label}
+              {tab.key === "pending" && pendingCount > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "1px 7px",
+                    borderRadius: 20,
+                    background: "#d97706",
+                    color: "#fff",
+                  }}
+                >
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Alert for pending ── */}
+      {activeTab === "pending" && pendingCount > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: "rgba(217,119,6,0.08)",
+            border: "1px solid rgba(217,119,6,0.25)",
+            marginBottom: 16,
+            fontSize: 13,
+            color: "#d97706",
+            fontWeight: 500,
+          }}
+        >
+          <AlertCircle size={15} />
+          {pendingCount} order{pendingCount !== 1 ? "s" : ""} waiting for your
+          approval — expand each card to confirm or cancel.
+        </div>
+      )}
+
+      {/* ── Order count ── */}
+      {!isLoading && orders.length > 0 && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--muted-foreground)",
+            marginBottom: 12,
+          }}
+        >
+          Showing {orders.length} order{orders.length !== 1 ? "s" : ""}
+          {activeTab !== "all" && ` · ${activeTab}`}
+        </div>
+      )}
+
+      {/* ── Order list ── */}
+      {isLoading || isFetching ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                height: 72,
+                borderRadius: 14,
+                background: "var(--muted)",
+                animation: "pulse 1.5s ease-in-out infinite",
+                opacity: 1 - i * 0.15,
+              }}
+            />
+          ))}
+        </div>
+      ) : orders.length === 0 ? (
+        <EmptyState status={activeTab} />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {orders.map((order) => (
+            <OrderCard
+              key={order._id}
+              order={order}
+              onConfirm={handleConfirm}
+              onCancel={handleCancel}
+              actionLoading={actionLoading}
+              overrideStatus={done[order._id]}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

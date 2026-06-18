@@ -92,30 +92,20 @@ export const createOrder = CatchAsyncError(
   }
 );
 
-// ===============================
-// ✅ MANAGER CONFIRM → ODOO
-// ===============================
+// order.controller.ts
+
 export const managerConfirmOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const userRole = req.user?.role;
-
-    if (userRole !== "user" && userRole !== "admin") {
-      return next(new ErrorHandler("Not authorized", 403));
-    }
-
-    const user = req.user;
-
-    if (!user) {
-      return next(new ErrorHandler("Not authenticated", 401));
-    }
     const { orderId } = req.params;
-
     const order = await Order.findById(orderId);
 
     if (!order) return next(new ErrorHandler("Order not found", 404));
 
     if (order.status !== "pending") {
-      return res.send(`<h2>Already ${order.status}</h2>`);
+      return res.status(400).json({
+        success: false,
+        message: `Order already ${order.status}`,
+      });
     }
 
     try {
@@ -129,19 +119,15 @@ export const managerConfirmOrder = CatchAsyncError(
 
       // 2. Add Products
       for (const item of order.items) {
-        // 🔥 Get correct variant
         const variant = await odooRequest(
           "product.product",
           "search_read",
           [[["product_tmpl_id", "=", item.productId]]],
-          { fields: ["id", "qty_available"], limit: 1 },
+          { fields: ["id", "qty_available"], limit: 1 }
         );
 
         const product = variant[0];
-
-        if (!product)
-          throw new Error(`Product not found in Odoo: ${item.productId}`);
-
+        if (!product) throw new Error(`Product not found in Odoo: ${item.productId}`);
         if (product.qty_available < item.quantity) {
           throw new Error(`Not enough stock for product ${item.productId}`);
         }
@@ -163,36 +149,25 @@ export const managerConfirmOrder = CatchAsyncError(
         "stock.picking",
         "search_read",
         [[["sale_id", "=", saleOrderId]]],
-        { fields: ["id", "state"] },
+        { fields: ["id", "state"] }
       );
 
       if (pickings.length > 0) {
         const pickingId = pickings[0].id;
-
-        // ✅ make sure it's assigned
         await odooRequest("stock.picking", "action_assign", [[pickingId]]);
 
-        let moves = await odooRequest(
+        const moves = await odooRequest(
           "stock.move",
           "search_read",
           [[["picking_id", "=", pickingId]]],
-          {
-            fields: [
-              "id",
-              "product_id",
-              "product_uom_qty",
-
-              "location_id",
-              "location_dest_id",
-            ],
-          },
+          { fields: ["id", "product_id", "product_uom_qty", "location_id", "location_dest_id"] }
         );
 
         const existingLines = await odooRequest(
           "stock.move.line",
           "search_read",
           [[["picking_id", "=", pickingId]]],
-          { fields: ["id", "quantity"] },
+          { fields: ["id", "quantity"] }
         );
 
         if (existingLines.length === 0) {
@@ -219,101 +194,87 @@ export const managerConfirmOrder = CatchAsyncError(
 
         await odooRequest("stock.picking", "button_validate", [[pickingId]]);
       }
-      // 5. Update Mongo
+
+      // 4. Update MongoDB
       order.status = "confirmed";
       order.odooSaleOrderId = saleOrderId;
       await order.save();
 
-      // 6. Email user
-      const user = await userModel.findById(order.userId);
-
-      // Before sendMail to client
+      // 5. Email customer
+      const customer = await userModel.findById(order.userId);
       const itemsWithNames = await Promise.all(
         order.items.map(async (item: any) => {
           const product = await odooRequest(
             "product.template",
             "search_read",
             [[["id", "=", item.productId]]],
-            { fields: ["name", "default_code"], limit: 1 },
+            { fields: ["name", "default_code"], limit: 1 }
           );
           return {
             ...item.toObject(),
             name: product[0]?.name || `Product #${item.productId}`,
             reference: product[0]?.default_code || null,
           };
-        }),
+        })
       );
 
       await sendMail({
-        email: user?.email!,
+        email: customer?.email!,
         subject: "✅ Order Confirmed",
         template: "order-confirmed-client.ejs",
         data: {
           order: {
             ...order.toObject(),
             date: new Date().toLocaleDateString(),
-            items: itemsWithNames, // ✅ items now have name
+            items: itemsWithNames,
           },
         },
       });
 
-      return res.send(`
-        <div style="text-align:center;padding:40px">
-          <h1 style="color:green">Order Confirmed</h1>
-          <p>#${order._id}</p>
-        </div>
-      `);
+      return res.status(200).json({
+        success: true,
+        message: "Order confirmed successfully",
+        orderId: order._id,
+        status: "confirmed",
+      });
     } catch (error: any) {
       return next(new ErrorHandler(`Odoo Sync Failed: ${error.message}`, 500));
     }
-  },
+  }
 );
 
 export const managerCancelOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    // 🔐 logged-in manager/admin
-    const manager = req.user;
-
-    if (!manager) {
-      return next(new ErrorHandler("Not authenticated", 401));
-    }
-
     const { orderId } = req.params;
 
     const order = await Order.findById(orderId);
-    if (!order) {
-      return next(new ErrorHandler("Order not found", 404));
-    }
+    if (!order) return next(new ErrorHandler("Order not found", 404));
 
-    // ❌ FIXED STATUS CHECK
     if (order.status !== "pending") {
-      return res.send(`<h2>Already ${order.status}</h2>`);
+      return res.status(400).json({
+        success: false,
+        message: `Order already ${order.status}`,
+      });
     }
 
-    // 👤 customer who placed order
     const customer = await userModel.findById(order.userId);
-    if (!customer) {
-      return next(new ErrorHandler("Customer not found", 404));
-    }
+    if (!customer) return next(new ErrorHandler("Customer not found", 404));
 
-    // 🧾 fetch product names from Odoo
     const itemsWithNames = await Promise.all(
       order.items.map(async (item: any) => {
         const product = await odooRequest(
           "product.template",
           "search_read",
           [[["id", "=", item.productId]]],
-          { fields: ["name"], limit: 1 },
+          { fields: ["name"], limit: 1 }
         );
-
         return {
           ...item.toObject(),
           name: product[0]?.name || `Product #${item.productId}`,
         };
-      }),
+      })
     );
 
-    // 📧 send email BEFORE deleting
     await sendMail({
       email: customer.email,
       subject: "❌ Your Order Has Been Cancelled",
@@ -327,24 +288,19 @@ export const managerCancelOrder = CatchAsyncError(
       },
     });
 
-    // 🗑 remove order from user
     await userModel.findByIdAndUpdate(order.userId, {
       $pull: { orders: order._id },
     });
 
-    // 🗑 delete order
     await Order.findByIdAndDelete(orderId);
 
-    return res.send(`
-      <div style="font-family:sans-serif;text-align:center;padding:60px;background:#fef2f2;min-height:100vh">
-        <div style="font-size:56px">❌</div>
-        <h1 style="color:#dc2626">Order Rejected</h1>
-        <p style="color:#4b5563">
-          Order <strong>#${orderId}</strong> has been deleted and the customer has been notified.
-        </p>
-      </div>
-    `);
-  },
+    return res.status(200).json({
+      success: true,
+      message: "Order cancelled and customer notified",
+      orderId,
+      status: "cancelled",
+    });
+  }
 );
 
 // return product
