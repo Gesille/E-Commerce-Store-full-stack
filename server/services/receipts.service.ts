@@ -281,7 +281,7 @@ export async function sendReceiptByEmailService(
   };
 
   
-  const templatePath = path.join(__dirname, "../mails/ReceiptEmailTest.ejs");
+  const templatePath = path.join(__dirname, "../mails/receiptEmail.ejs");
   const htmlBody = await ejs.renderFile(templatePath, templateData);
 
   const mailId = await odooRequest(
