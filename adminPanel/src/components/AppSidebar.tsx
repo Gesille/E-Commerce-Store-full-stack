@@ -50,8 +50,6 @@ import { useGetAllMessagesQuery } from "@/redux/contact/contactApi";
 import ReturnOrder from "./ReturnOrders";
 import CreateOrderForUser from "./CreateOrderForUser";
 import AddUser from "./AddUser";
-import { useState } from "react";
-import { useGetOrdersByStatusQuery } from "@/redux/order/orderApi";
 const clientUrl = process.env.NEXT_PUBLIC_CLIENT_URL!;
 const items = [
   {
@@ -79,15 +77,8 @@ const items = [
 
 const AppSidebar = () => {
   const user = useSelector((state: RootState) => state?.auth.user as any);
-const [ordersOpen, setOrdersOpen] = useState(false);
 
-const { data: pendingData } = useGetOrdersByStatusQuery("pending");
-const { data: confirmedData } = useGetOrdersByStatusQuery("confirmed");
-const { data: cancelledData } = useGetOrdersByStatusQuery("cancelled");
-
-const pendingCount = pendingData?.orders?.length ?? 0;
-const confirmedCount = confirmedData?.orders?.length ?? 0;
-const cancelledCount = cancelledData?.orders?.length ?? 0;
+  const firstLetter = user?.name?.charAt(0)?.toUpperCase() || "?";
   const { data: messagesData } = useGetAllMessagesQuery({});
   const unreadCount = messagesData?.unreadCount ?? 0;
   return (
