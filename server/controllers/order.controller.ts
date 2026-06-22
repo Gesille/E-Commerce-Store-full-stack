@@ -1047,3 +1047,16 @@ export const getOrdersByStatus = CatchAsyncError(
     res.status(200).json({ success: true, orders });
   }
 );
+
+
+
+export const removeHeldOrder = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { odooOrderId } = req.params;
+
+    await odooRequest("sale.order", "action_cancel", [[Number(odooOrderId)]]);
+    await odooRequest("sale.order", "unlink", [[Number(odooOrderId)]]);
+
+    res.status(200).json({ success: true, message: "Held order removed" });
+  }
+);

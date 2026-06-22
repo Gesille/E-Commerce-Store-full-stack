@@ -84,6 +84,12 @@ cancelOrder: builder.mutation({
     credentials: "include" as const,
   }),
 }),
+removeHeldOrder: builder.mutation<void, number>({
+  query: (odooOrderId) => ({
+    url: `/held-order/${odooOrderId}`,
+    method: "DELETE",
+  }),
+}),
   }),
 });
 
@@ -98,4 +104,5 @@ export const {
   useGetOrdersByStatusQuery,
    useConfirmOrderMutation,
   useCancelOrderMutation,
+  useRemoveHeldOrderMutation
 } = orderApi;
