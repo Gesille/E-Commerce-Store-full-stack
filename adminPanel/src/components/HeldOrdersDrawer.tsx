@@ -118,7 +118,7 @@ export function HeldOrdersDrawer({ onRestore }: { onRestore?: (order: any) => vo
 
                           {/* ← new remove button */}
                           <button
-                            onClick={() => handleRemove(order.odooOrderId)}
+                            onClick={() => handleRemove(order.id)}
                             disabled={removingId === order.odooOrderId}
                             className="text-[11px] bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-red-100 transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
                           >

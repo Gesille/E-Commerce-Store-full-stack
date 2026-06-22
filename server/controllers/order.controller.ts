@@ -1052,10 +1052,14 @@ export const getOrdersByStatus = CatchAsyncError(
 
 export const removeHeldOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { odooOrderId } = req.params;
-  console.log("Removing order with ID:", odooOrderId);
-    await odooRequest("sale.order", "action_cancel", [[Number(odooOrderId)]]);
-    await odooRequest("sale.order", "unlink", [[Number(odooOrderId)]]);
+    const id = Number(req.params.odooOrderId);
+
+    if (!id || isNaN(id)) {
+      return next(new ErrorHandler("Invalid order ID", 400));
+    }
+
+    await odooRequest("sale.order", "action_cancel", [[id]]);
+    await odooRequest("sale.order", "unlink", [[id]]);
 
     res.status(200).json({ success: true, message: "Held order removed" });
   }
