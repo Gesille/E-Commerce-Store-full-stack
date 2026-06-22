@@ -70,7 +70,7 @@ export function calcLineTotal(item: CartItem) {
   return base - (base * discount) / 100;
 }
 
-export const TAX_RATE = 0.1; 
+export const TAX_RATE = 0.17; 
 
 export function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce(

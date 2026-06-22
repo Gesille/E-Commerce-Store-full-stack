@@ -13,7 +13,7 @@ function calcLineTotal(item: CartItem) {
 
 function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
-  const tax = subtotal * 0.1;
+  const tax = subtotal * 0.17;
   const total = subtotal + tax;
   return { subtotal, tax, total };
 }
@@ -150,7 +150,7 @@ export function ReceiptModal({
               <span>${fmt(subtotal)}</span>
             </div>
             <div className="flex justify-between text-[12px] text-gray-500">
-              <span>Tax (10%)</span>
+              <span>Tax (17%)</span>
               <span>${fmt(tax)}</span>
             </div>
             <div className="flex justify-between text-[14px] font-bold text-gray-900 pt-1">

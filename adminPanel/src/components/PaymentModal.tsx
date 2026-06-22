@@ -8,7 +8,7 @@ export type PaymentLine = {
   amount: number;
 };
 
-const TAX_RATE = 0.1; // 10% — keep in sync with backend
+const TAX_RATE = 0.17; 
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;

@@ -95,6 +95,32 @@ const formSchema = z.object({
   sizes: z.array(z.enum(sizes)),
   colors: z.array(z.enum(colors)),
   images: z.record(z.string(), z.any()).optional(),
+
+  // local costs
+  transportationStorageLocal: z.coerce.number().min(0).optional(),
+  brokerageHandlingLocal: z.coerce.number().min(0).optional(),
+  customsDutiesLocal: z.coerce.number().min(0).optional(),
+  portFeesLocal: z.coerce.number().min(0).optional(),
+  tariffsLocal: z.coerce.number().min(0).optional(),
+  insurancesLocal: z.coerce.number().min(0).optional(),
+  vatTaxesLocal: z.coerce.number().min(0).optional(),
+  documentationCosts: z.coerce.number().min(0).optional(),
+  internalFees: z.coerce.number().min(0).optional(),
+
+  // international costs
+  freightInternational: z.coerce.number().min(0).optional(),
+  transportationStorageInternational: z.coerce.number().min(0).optional(),
+  portFeesInternational: z.coerce.number().min(0).optional(),
+  brokerageHandlingInternational: z.coerce.number().min(0).optional(),
+  customsDutiesInternational: z.coerce.number().min(0).optional(),
+  tariffsInternational: z.coerce.number().min(0).optional(),
+  insurancesInternational: z.coerce.number().min(0).optional(),
+  vatTaxesInternational: z.coerce.number().min(0).optional(),
+  currencyConversion: z.coerce.number().min(0).optional(),
+  paymentProcessing: z.coerce.number().min(0).optional(),
+  bankCharges: z.coerce.number().min(0).optional(),
+  // markup
+  markup: z.coerce.number().min(1).default(1),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -140,6 +166,28 @@ const AddProduct = () => {
       sizes: [],
       colors: [],
       images: {},
+
+      transportationStorageLocal: 0,
+      brokerageHandlingLocal: 0,
+      customsDutiesLocal: 0,
+      portFeesLocal:0,
+      tariffsLocal:0,
+      insurancesLocal:0,
+      vatTaxesLocal:0,
+      documentationCosts:0,
+      internalFees:0,
+      freightInternational:0,
+      transportationStorageInternational:0,
+      portFeesInternational:0,
+      brokerageHandlingInternational:0,
+      customsDutiesInternational:0,
+      tariffsInternational:0,
+      insurancesInternational:0,
+      vatTaxesInternational:0,
+      currencyConversion:0,
+      paymentProcessing:0,
+      bankCharges:0,
+      markup: 1,
     },
   });
 
@@ -240,7 +288,7 @@ const AddProduct = () => {
         supplierPrice: data.supplierPrice,
         shippingCost: data.shippingCost,
         currency: data.currency,
- supplierId: data.supplierId,
+        supplierId: data.supplierId,
         warehouseName: data.warehouseName,
         shelfName: data.shelfName,
 

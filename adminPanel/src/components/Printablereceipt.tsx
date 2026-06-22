@@ -4,7 +4,8 @@ import { CartItem, Customer, PaymentLine } from "@/types/pos";
 const shopName    = "CHEF'S WORLD";
 const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "Epicurean Drive ,Saint John ";
-const shopPhone   = "(555) 123-4567";
+const shopPhone   = "560-2433";
+const shopABST = "0161466";
 
 const fmt = (n: number) => n.toFixed(2);
 
@@ -14,7 +15,7 @@ function calcLineTotal(item: CartItem) {
 
 function calcOrderTotals(cart: CartItem[]) {
   const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
-  const tax      = subtotal * 0.1;
+  const tax      = subtotal * 0.17;
   const total    = subtotal + tax;
   return { subtotal, tax, total };
 }
@@ -156,6 +157,7 @@ function buildReceiptHTML(
     <div class="shop-sub font-bold">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
     <div class="shop-sub">${shopPhone}</div>
+    <div class=""shop-sub>${shopABST}</div>
   </div>
 
   <div class="thick-divider"></div>
@@ -188,7 +190,7 @@ function buildReceiptHTML(
       <span>$${fmt(subtotal)}</span>
     </div>
     <div class="flex-row" style="margin-top: 2px;">
-      <span>Tax (10%)</span>
+      <span>Tax (17%)</span>
       <span>$${fmt(tax)}</span>
     </div>
     <div class="flex-row total-row">
