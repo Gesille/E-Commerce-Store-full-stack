@@ -1050,35 +1050,3 @@ export const getOrdersByStatus = CatchAsyncError(
 
 
 
-export const removeHeldOrder = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const id = Number(req.params.odooOrderId);
-
-    if (!id || isNaN(id)) {
-      return next(new ErrorHandler("Invalid order ID", 400));
-    }
-
-    // Check the order state first
-    const orders = await odooRequest(
-      "sale.order",
-      "search_read",
-      [[["id", "=", id]]],
-      { fields: ["id", "state"], limit: 1 }
-    );
-
-    if (!orders.length) {
-      return next(new ErrorHandler("Order not found in Odoo", 404));
-    }
-
-    const state = orders[0].state;
-
-   
-    if (state !== "draft" && state !== "cancel") {
-      await odooRequest("sale.order", "action_cancel", [[id]]);
-    }
-
-    await odooRequest("sale.order", "unlink", [[id]]);
-
-    res.status(200).json({ success: true, message: "Held order removed" });
-  }
-);

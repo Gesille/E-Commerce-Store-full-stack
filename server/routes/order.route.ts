@@ -2,7 +2,8 @@ import express from "express";
 
 import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
 
-import { createOrder, exportInventory, getAdminOrderDetail, getAdminOrders, getInventoryReport, getLatestTransactions, getMonthlyRevenue, getOrdersByStatus, getOrderStatusStats, managerCancelOrder, managerConfirmOrder, managerCreateOrder, removeHeldOrder, returnOrderItems, trackOrder} from "../controllers/order.controller.js";
+import { createOrder, exportInventory, getAdminOrderDetail, getAdminOrders, getInventoryReport, getLatestTransactions, getMonthlyRevenue, getOrdersByStatus, getOrderStatusStats, managerCancelOrder, managerConfirmOrder, managerCreateOrder, returnOrderItems, trackOrder} from "../controllers/order.controller.js";
+import { removeHeldOrder } from "../controllers/posSession.controller.js";
 
 
 const orderRouter = express.Router();

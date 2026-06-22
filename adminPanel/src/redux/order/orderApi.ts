@@ -85,8 +85,8 @@ cancelOrder: builder.mutation({
   }),
 }),
 removeHeldOrder: builder.mutation<void, number>({
-  query: (odooOrderId) => ({
-    url: `/held-order/${odooOrderId}`,
+  query: (orderId) => ({
+    url: `/held-order/${orderId}`,
     method: "DELETE",
   }),
 }),
