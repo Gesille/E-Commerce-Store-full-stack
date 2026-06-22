@@ -1053,7 +1053,9 @@ export const getOrdersByStatus = CatchAsyncError(
 export const removeHeldOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const id = Number(req.params.odooOrderId);
-
+// add this at the top of removeHeldOrder
+console.log("Params:", req.params);
+console.log("Full URL:", req.url);
     if (!id || isNaN(id)) {
       return next(new ErrorHandler("Invalid order ID", 400));
     }
