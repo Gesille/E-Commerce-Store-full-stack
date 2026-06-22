@@ -1053,7 +1053,7 @@ export const getOrdersByStatus = CatchAsyncError(
 export const removeHeldOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { odooOrderId } = req.params;
-
+  console.log("Removing order with ID:", odooOrderId);
     await odooRequest("sale.order", "action_cancel", [[Number(odooOrderId)]]);
     await odooRequest("sale.order", "unlink", [[Number(odooOrderId)]]);
 
