@@ -2,7 +2,7 @@ import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TAX_RATE = 0.1;
+const TAX_RATE = 0.17;
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function round2(n) {
     return Math.round(n * 100) / 100;

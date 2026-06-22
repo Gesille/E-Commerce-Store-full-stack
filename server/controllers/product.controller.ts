@@ -7,12 +7,13 @@ import {
   getProductByIdService,
 } from "../services/product.service.js";
 import { odooRequest } from "../odoo/odoo.client.js";
-import Product from "../models/product.model.js";
+
 import axios from "axios";
 
 import Order from "../models/order.model.js";
 import cloudinary, { uploadImage } from "../utils/uploadImages.js";
 import { ensureOdooAttributeValues } from "../utils/odooAttributes.js";
+import { Product } from "../models/product.model.js";
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -98,27 +99,34 @@ const toBase64 = async (url: string) => {
 
 const createOrGetAttribute = async (name: string): Promise<number> => {
   const existing = await odooRequest(
-    "product.attribute", "search_read",
+    "product.attribute",
+    "search_read",
     [[["name", "=", name]]],
-    { fields: ["id", "name"], limit: 1 }
+    { fields: ["id", "name"], limit: 1 },
   );
   if (existing[0]) return existing[0].id;
-  return await odooRequest("product.attribute", "create", [{
-    name,
-    create_variant: "no_variant",
-  }]);
+  return await odooRequest("product.attribute", "create", [
+    {
+      name,
+      create_variant: "no_variant",
+    },
+  ]);
 };
 
 const createAttributeValue = async (
   attributeId: number,
-  value: string
+  value: string,
 ): Promise<number> => {
- 
   const existing = await odooRequest(
     "product.attribute.value",
     "search_read",
-    [[["attribute_id", "=", attributeId], ["name", "=", value]]],
-    { fields: ["id", "name"], limit: 1 }
+    [
+      [
+        ["attribute_id", "=", attributeId],
+        ["name", "=", value],
+      ],
+    ],
+    { fields: ["id", "name"], limit: 1 },
   );
 
   if (existing[0]) return existing[0].id;
@@ -134,14 +142,22 @@ const syncAttributeLine = async (
   valueIds: number[],
 ) => {
   const existingLine = await odooRequest(
-    "product.template.attribute.line", "search_read",
-    [[["product_tmpl_id", "=", productTemplateId], ["attribute_id", "=", attributeId]]],
-    { fields: ["id"], limit: 1 }
+    "product.template.attribute.line",
+    "search_read",
+    [
+      [
+        ["product_tmpl_id", "=", productTemplateId],
+        ["attribute_id", "=", attributeId],
+      ],
+    ],
+    { fields: ["id"], limit: 1 },
   );
 
   if (!valueIds.length) {
     if (existingLine.length) {
-      await odooRequest("product.template.attribute.line", "unlink", [[existingLine[0].id]]);
+      await odooRequest("product.template.attribute.line", "unlink", [
+        [existingLine[0].id],
+      ]);
     }
     return;
   }
@@ -152,16 +168,20 @@ const syncAttributeLine = async (
       { value_ids: [[6, 0, valueIds]] },
     ]);
   } else {
-    await odooRequest("product.template.attribute.line", "create", [{
-      product_tmpl_id: productTemplateId,
-      attribute_id: attributeId,
-      value_ids: [[6, 0, valueIds]],
-    }]);
+    await odooRequest("product.template.attribute.line", "create", [
+      {
+        product_tmpl_id: productTemplateId,
+        attribute_id: attributeId,
+        value_ids: [[6, 0, valueIds]],
+      },
+    ]);
   }
 };
 
 const ATTRIBUTE_NAME_MAP: Record<string, string> = {
-  colors: "Color", sizes: "Size", materials: "Material",
+  colors: "Color",
+  sizes: "Size",
+  materials: "Material",
 };
 const createAttributeLines = async (
   productTemplateId: number,
@@ -179,44 +199,142 @@ const createAttributeLines = async (
   }
 };
 
+
+
+// ─── Landed Cost Utility ─────────────────────────────────────────────────────
+
+
+const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+
+function calcLandedCost(body: Record<string, any>) {
+  const currency: string = body.currency ?? "USD";
+  const exchangeRate: number = XCD_RATES[currency] ?? 2.7;
+
+  // 1. Buy price converted to XCD
+  const supplierPrice = Number(body.supplierPrice) || 0;
+  const buyPriceXCD = supplierPrice * exchangeRate;
+
+  // 2. All landed costs (already entered in XCD by the user)
+  const internationalCosts =
+    (Number(body.freightInternational) || 0) +
+    (Number(body.transportationStorageInternational) || 0) +
+    (Number(body.portFeesInternational) || 0) +
+    (Number(body.brokerageHandlingInternational) || 0) +
+    (Number(body.customsDutiesInternational) || 0) +
+    (Number(body.tariffsInternational) || 0) +
+    (Number(body.insurancesInternational) || 0) +
+    (Number(body.vatTaxesInternational) || 0) +
+    (Number(body.currencyConversion) || 0) +
+    (Number(body.paymentProcessing) || 0) +
+    (Number(body.bankCharges) || 0);
+
+  const localCosts =
+    (Number(body.transportationStorageLocal) || 0) +
+    (Number(body.portFeesLocal) || 0) +
+    (Number(body.brokerageHandlingLocal) || 0) +
+    (Number(body.customsDutiesLocal) || 0) +
+    (Number(body.tariffsLocal) || 0) +
+    (Number(body.insurancesLocal) || 0) +
+    (Number(body.vatTaxesLocal) || 0) +
+    (Number(body.documentationCosts) || 0) +
+    (Number(body.internalFees) || 0);
+
+  const totalCostsXCD = internationalCosts + localCosts;
+
+  // 3. Landed cost = buy price + all costs ascribed to this unit
+  const landedCostXCD = buyPriceXCD + totalCostsXCD;
+
+  // 4. Final selling price = landed cost × markup
+  const markup = Number(body.markup) || 1;
+  const finalPriceXCD = landedCostXCD * markup;
+
+  return { buyPriceXCD, totalCostsXCD, landedCostXCD, finalPriceXCD, exchangeRate };
+}
+
+// ─── Controller ──────────────────────────────────────────────────────────────
+
 export const createProduct = async (req: Request, res: Response) => {
   let createdProductTemplateId: number | null = null;
 
   try {
     const {
-      name, price, stock, categoryId, image, attributes,
-      reference, barcode, itemNumber, locationId,
-      warehouseName, shelfName,
-      supplierPrice, shippingCost, currency,
-      supplierId, supplierName,
+      // Identity
+      name,
+      stock,
+      categoryId,
+      image,
+      attributes,
+      reference,
+      barcode,
+      itemNumber,
+
+      // Location
+      locationId,
+      warehouseName,
+      shelfName,
+
+      // Supplier
+      supplierId,
+      supplierName,
+
+      // Pricing inputs
+      supplierPrice,
+      currency,
+      markup,
+
+      // International Costs (XCD) — note: NO separate shippingCost; use freightInternational
+      freightInternational,
+      transportationStorageInternational,
+      portFeesInternational,
+      brokerageHandlingInternational,
+      customsDutiesInternational,
+      tariffsInternational,
+      insurancesInternational,
+      vatTaxesInternational,
+      currencyConversion,
+      paymentProcessing,
+      bankCharges,
+
+      // Local Costs (XCD)
+      transportationStorageLocal,
+      portFeesLocal,
+      brokerageHandlingLocal,
+      customsDutiesLocal,
+      tariffsLocal,
+      insurancesLocal,
+      vatTaxesLocal,
+      documentationCosts,
+      internalFees,
     } = req.body;
 
-    // ── XCD price ─────────────────────────────────────────────────────────
-    const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
-    const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
-    const finalPriceXCD =
-      ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+    // ── Landed cost calculation (matches Excel exactly) ───────────────────
+    const { buyPriceXCD, totalCostsXCD, landedCostXCD, finalPriceXCD, exchangeRate } =
+      calcLandedCost(req.body);
 
     // ── Image ─────────────────────────────────────────────────────────────
-    let base64Image = null;
+    let base64Image: string | null = null;
     if (image) base64Image = await toBase64(image);
 
     // ── Create product template in Odoo ───────────────────────────────────
-    createdProductTemplateId = await odooRequest("product.template", "create", [{
-      name,
-      list_price: price,
-      default_code: itemNumber || reference || false,
-      barcode: barcode || false,
-      standard_price: Number(supplierPrice) || 0,
-      type: "consu",
-      is_storable: true,
-      active: true,
-      sale_ok: true,
-      purchase_ok: true,
-      categ_id: categoryId,
-      image_1920: base64Image || false,
-       x_supplier_invoice_number: supplierId || false, 
-    }]);
+    // list_price  → finalPriceXCD  (calculated selling price, not a manual input)
+    // standard_price → buyPriceXCD (cost in XCD for Odoo's margin reports)
+    createdProductTemplateId = await odooRequest("product.template", "create", [
+      {
+        name,
+        list_price: parseFloat(finalPriceXCD.toFixed(2)),       // ← selling price from calc
+        standard_price: parseFloat(buyPriceXCD.toFixed(2)),     // ← cost in XCD
+        default_code: itemNumber || reference || false,
+        barcode: barcode || false,
+        type: "consu",
+        is_storable: true,
+        active: true,
+        sale_ok: true,
+        purchase_ok: true,
+        categ_id: categoryId,
+        image_1920: base64Image || false,
+        x_supplier_invoice_number: supplierId || false,
+      },
+    ]);
 
     if (!createdProductTemplateId)
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
@@ -224,46 +342,59 @@ export const createProduct = async (req: Request, res: Response) => {
     // ── Supplier: find or create partner in Odoo ──────────────────────────
     let resolvedSupplierId: number | null = null;
 
- if (supplierName || supplierId) {
-  const suppliers = await odooRequest(
-    "res.partner",
-    "search_read",
-    [[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]],
-    { fields: ["id", "name", "ref"], limit: 1 }
-  );
+    if (supplierName || supplierId) {
+      const suppliers = await odooRequest(
+        "res.partner",
+        "search_read",
+        [
+          [
+            "|",
+            ["name", "=", supplierName || ""],
+            ["ref", "=", supplierId || ""],
+          ],
+        ],
+        { fields: ["id", "name", "ref"], limit: 1 }
+      );
 
-  if (suppliers.length > 0) {
-    resolvedSupplierId = suppliers[0].id;
-  } else {
-    resolvedSupplierId = await odooRequest("res.partner", "create", [{
-      name: supplierName || "Unknown Supplier",
-      ref: supplierId || false,
-      supplier_rank: 1,
-    }]);
-  }
+      if (suppliers.length > 0) {
+        resolvedSupplierId = suppliers[0].id;
+      } else {
+        resolvedSupplierId = await odooRequest("res.partner", "create", [
+          {
+            name: supplierName || "Unknown Supplier",
+            ref: supplierId || false,
+            supplier_rank: 1,
+          },
+        ]);
+      }
 
-  await odooRequest("product.supplierinfo", "create", [{
-    product_tmpl_id: createdProductTemplateId,
-    partner_id: resolvedSupplierId,
-    price: Number(supplierPrice) || 0,
-    product_code: supplierId || false,
-  }]);
-}
+      await odooRequest("product.supplierinfo", "create", [
+        {
+          product_tmpl_id: createdProductTemplateId,
+          partner_id: resolvedSupplierId,
+          price: Number(supplierPrice) || 0,         // supplier's price in original currency
+          product_code: supplierId || false,
+        },
+      ]);
+    }
 
     // ── Attributes ────────────────────────────────────────────────────────
     const ATTRIBUTE_NAME_MAP: Record<string, string> = {
-      colors: "Color", sizes: "Size", materials: "Material",
+      colors: "Color",
+      sizes: "Size",
+      materials: "Material",
     };
 
     if (attributes) {
       for (const key in attributes) {
         const values = Array.isArray(attributes[key])
-          ? attributes[key] : [attributes[key]];
+          ? attributes[key]
+          : [attributes[key]];
         if (!values || values.length === 0) continue;
 
         const odooAttributeName = ATTRIBUTE_NAME_MAP[key] ?? key;
         const attributeId = await createOrGetAttribute(odooAttributeName);
-        const valueIds = [];
+        const valueIds: number[] = [];
         for (const val of values) {
           const id = await createAttributeValue(attributeId, val);
           valueIds.push(id);
@@ -274,7 +405,8 @@ export const createProduct = async (req: Request, res: Response) => {
 
     // ── Get product variant ───────────────────────────────────────────────
     const variant = await odooRequest(
-      "product.product", "search_read",
+      "product.product",
+      "search_read",
       [[["product_tmpl_id", "=", createdProductTemplateId]]],
       { fields: ["id"], limit: 1 }
     );
@@ -286,14 +418,13 @@ export const createProduct = async (req: Request, res: Response) => {
 
     // ── Resolve / Create Odoo location ────────────────────────────────────
     let resolvedLocationId: number | null = locationId ?? null;
-    // Always keep user-entered names as the source of truth
     let resolvedWarehouseName = warehouseName || "";
     let resolvedShelfName = shelfName || "";
 
     if (!resolvedLocationId && warehouseName && shelfName) {
-      // 1. Find or create warehouse location
       const warehouseResults = await odooRequest(
-        "stock.location", "search_read",
+        "stock.location",
+        "search_read",
         [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
         { fields: ["id", "name"], limit: 1 }
       );
@@ -303,50 +434,50 @@ export const createProduct = async (req: Request, res: Response) => {
       if (warehouseResults.length) {
         warehouseLocationId = warehouseResults[0].id;
       } else {
-        // Create it
-        warehouseLocationId = await odooRequest("stock.location", "create", [{
-          name: warehouseName,
-          usage: "internal",
-        }]);
+        warehouseLocationId = await odooRequest("stock.location", "create", [
+          { name: warehouseName, usage: "internal" },
+        ]);
       }
 
-      // 2. Find or create shelf inside that warehouse
       const shelfResults = await odooRequest(
-        "stock.location", "search_read",
-        [[
-          ["name", "=", shelfName],
-          ["location_id", "=", warehouseLocationId],
-          ["usage", "=", "internal"],
-        ]],
+        "stock.location",
+        "search_read",
+        [
+          [
+            ["name", "=", shelfName],
+            ["location_id", "=", warehouseLocationId],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 }
       );
 
       if (shelfResults.length) {
         resolvedLocationId = shelfResults[0].id;
       } else {
-        // Create shelf under warehouse
-        resolvedLocationId = await odooRequest("stock.location", "create", [{
-          name: shelfName,
-          location_id: warehouseLocationId,
-          usage: "internal",
-        }]);
+        resolvedLocationId = await odooRequest("stock.location", "create", [
+          {
+            name: shelfName,
+            location_id: warehouseLocationId,
+            usage: "internal",
+          },
+        ]);
       }
-
     } else if (!resolvedLocationId) {
-      // Fallback: only locationId or nothing was given — search by name
       if (shelfName) {
         const found = await odooRequest(
-          "stock.location", "search_read",
+          "stock.location",
+          "search_read",
           [[["usage", "=", "internal"], ["name", "=", shelfName]]],
           { fields: ["id"], limit: 1 }
         );
         if (found[0]) resolvedLocationId = found[0].id;
       }
 
-      // Last resort: first available internal location
       if (!resolvedLocationId) {
         const fallback = await odooRequest(
-          "stock.location", "search_read",
+          "stock.location",
+          "search_read",
           [[["usage", "=", "internal"]]],
           { fields: ["id", "name", "complete_name"], limit: 1 }
         );
@@ -357,21 +488,24 @@ export const createProduct = async (req: Request, res: Response) => {
     }
 
     // ── Set stock via stock.quant ─────────────────────────────────────────
-    const quantId = await odooRequest("stock.quant", "create", [{
-      product_id: productId,
-      location_id: resolvedLocationId,
-      inventory_quantity: Number(stock),
-    }]);
+    const quantId = await odooRequest("stock.quant", "create", [
+      {
+        product_id: productId,
+        location_id: resolvedLocationId,
+        inventory_quantity: Number(stock),
+      },
+    ]);
 
     await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
     // ── Save to MongoDB ───────────────────────────────────────────────────
     await Product.create({
+      // Identity
       name,
       reference: reference || "",
       itemNumber: itemNumber || "",
       barcode: barcode || "",
-      price: Number(price),
+      price: parseFloat(finalPriceXCD.toFixed(2)),  // stored as the final calculated price
       stock: Number(stock),
       image: image || "",
       attributes: {
@@ -379,17 +513,54 @@ export const createProduct = async (req: Request, res: Response) => {
         sizes: attributes?.sizes ?? [],
         materials: attributes?.materials ?? [],
       },
+
+      // Location
       location: {
-        shelfName: resolvedShelfName,         // user-entered value preserved
-        warehouseName: resolvedWarehouseName, // user-entered value preserved
+        shelfName: resolvedShelfName,
+        warehouseName: resolvedWarehouseName,
         odooLocationId: resolvedLocationId,
       },
-      supplierPrice: Number(supplierPrice) || 0,
-      shippingCost: Number(shippingCost) || 0,
+
+      // Pricing inputs
       currency: currency || "USD",
-      finalPriceXCD,
+      supplierPrice: Number(supplierPrice) || 0,
+      markup: Number(markup) || 1,
+
+      // International Costs
+      freightInternational: Number(freightInternational) || 0,
+      transportationStorageInternational: Number(transportationStorageInternational) || 0,
+      portFeesInternational: Number(portFeesInternational) || 0,
+      brokerageHandlingInternational: Number(brokerageHandlingInternational) || 0,
+      customsDutiesInternational: Number(customsDutiesInternational) || 0,
+      tariffsInternational: Number(tariffsInternational) || 0,
+      insurancesInternational: Number(insurancesInternational) || 0,
+      vatTaxesInternational: Number(vatTaxesInternational) || 0,
+      currencyConversion: Number(currencyConversion) || 0,
+      paymentProcessing: Number(paymentProcessing) || 0,
+      bankCharges: Number(bankCharges) || 0,
+
+      // Local Costs
+      transportationStorageLocal: Number(transportationStorageLocal) || 0,
+      portFeesLocal: Number(portFeesLocal) || 0,
+      brokerageHandlingLocal: Number(brokerageHandlingLocal) || 0,
+      customsDutiesLocal: Number(customsDutiesLocal) || 0,
+      tariffsLocal: Number(tariffsLocal) || 0,
+      insurancesLocal: Number(insurancesLocal) || 0,
+      vatTaxesLocal: Number(vatTaxesLocal) || 0,
+      documentationCosts: Number(documentationCosts) || 0,
+      internalFees: Number(internalFees) || 0,
+
+      // Calculated (never from client)
+      buyPriceXCD: parseFloat(buyPriceXCD.toFixed(2)),
+      totalCostsXCD: parseFloat(totalCostsXCD.toFixed(2)),
+      landedCostXCD: parseFloat(landedCostXCD.toFixed(2)),
+      finalPriceXCD: parseFloat(finalPriceXCD.toFixed(2)),
+
+      // Supplier
       supplierId: supplierId || "",
       supplierName: supplierName || "",
+
+      // Odoo refs
       odooProductId: createdProductTemplateId,
       odooCategoryId: categoryId,
     });
@@ -398,19 +569,29 @@ export const createProduct = async (req: Request, res: Response) => {
       success: true,
       productTemplateId: createdProductTemplateId,
       productId,
+      costing: {
+        supplierPrice: Number(supplierPrice) || 0,
+        currency: currency || "USD",
+        exchangeRate,
+        buyPriceXCD: parseFloat(buyPriceXCD.toFixed(2)),
+        totalCostsXCD: parseFloat(totalCostsXCD.toFixed(2)),
+        landedCostXCD: parseFloat(landedCostXCD.toFixed(2)),
+        markup: Number(markup) || 1,
+        finalPriceXCD: parseFloat(finalPriceXCD.toFixed(2)),
+      },
       location: {
         id: resolvedLocationId,
         shelfName: resolvedShelfName,
         warehouseName: resolvedWarehouseName,
       },
     });
-
   } catch (err: any) {
     console.error("Odoo Logic Failed:", err.message);
 
     if (createdProductTemplateId) {
-      await odooRequest("product.template", "unlink", [[createdProductTemplateId]])
-        .catch((e) => console.error("Critical: Cleanup failed!", e.message));
+      await odooRequest("product.template", "unlink", [
+        [createdProductTemplateId],
+      ]).catch((e) => console.error("Critical: Cleanup failed!", e.message));
     }
 
     res.status(500).json({
@@ -447,10 +628,20 @@ export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, price, stock, reference, barcode,
-      itemNumber, attributes, warehouseName, shelfName,
-      supplierId, supplierName, supplierPrice,
-      shippingCost, currency,
+      name,
+      price,
+      stock,
+      reference,
+      barcode,
+      itemNumber,
+      attributes,
+      warehouseName,
+      shelfName,
+      supplierId,
+      supplierName,
+      supplierPrice,
+      shippingCost,
+      currency,
     } = req.body;
 
     let imageUrl: string | null = null;
@@ -459,7 +650,9 @@ export const updateProduct = async (req: Request, res: Response) => {
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
       imageUrl = uploaded.url;
-      const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const response = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+      });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
 
@@ -503,23 +696,31 @@ export const updateProduct = async (req: Request, res: Response) => {
     // ✅ Update stock via stock.quant
     if (stock !== undefined && stock !== null) {
       const variant = await odooRequest(
-        "product.product", "search_read",
+        "product.product",
+        "search_read",
         [[["product_tmpl_id", "=", Number(id)]]],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
 
       if (variant.length) {
         const locations = await odooRequest(
-          "stock.location", "search_read",
+          "stock.location",
+          "search_read",
           [[["usage", "=", "internal"]]],
-          { fields: ["id"], limit: 1 }
+          { fields: ["id"], limit: 1 },
         );
 
         if (locations.length) {
           const existingQuant = await odooRequest(
-            "stock.quant", "search_read",
-            [[["product_id", "=", variant[0].id], ["location_id", "=", locations[0].id]]],
-            { fields: ["id"], limit: 1 }
+            "stock.quant",
+            "search_read",
+            [
+              [
+                ["product_id", "=", variant[0].id],
+                ["location_id", "=", locations[0].id],
+              ],
+            ],
+            { fields: ["id"], limit: 1 },
           );
 
           if (existingQuant.length) {
@@ -527,14 +728,20 @@ export const updateProduct = async (req: Request, res: Response) => {
               [existingQuant[0].id],
               { inventory_quantity: Number(stock) },
             ]);
-            await odooRequest("stock.quant", "action_apply_inventory", [[existingQuant[0].id]]);
+            await odooRequest("stock.quant", "action_apply_inventory", [
+              [existingQuant[0].id],
+            ]);
           } else {
-            const quantId = await odooRequest("stock.quant", "create", [{
-              product_id: variant[0].id,
-              location_id: locations[0].id,
-              inventory_quantity: Number(stock),
-            }]);
-            await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
+            const quantId = await odooRequest("stock.quant", "create", [
+              {
+                product_id: variant[0].id,
+                location_id: locations[0].id,
+                inventory_quantity: Number(stock),
+              },
+            ]);
+            await odooRequest("stock.quant", "action_apply_inventory", [
+              [quantId],
+            ]);
           }
         }
       }
@@ -543,47 +750,68 @@ export const updateProduct = async (req: Request, res: Response) => {
     // ✅ Update supplier info in Odoo
     if (supplierName || supplierId) {
       const suppliers = await odooRequest(
-        "res.partner", "search_read",
-        [["|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""]]],
-        { fields: ["id"], limit: 1 }
+        "res.partner",
+        "search_read",
+        [
+          [
+            "|",
+            ["name", "=", supplierName || ""],
+            ["ref", "=", supplierId || ""],
+          ],
+        ],
+        { fields: ["id"], limit: 1 },
       );
 
       let resolvedSupplierId: number;
       if (suppliers.length) {
         resolvedSupplierId = suppliers[0].id;
       } else {
-        resolvedSupplierId = await odooRequest("res.partner", "create", [{
-          name: supplierName || "Unknown Supplier",
-          ref: supplierId || false,
-          supplier_rank: 1,
-        }]);
+        resolvedSupplierId = await odooRequest("res.partner", "create", [
+          {
+            name: supplierName || "Unknown Supplier",
+            ref: supplierId || false,
+            supplier_rank: 1,
+          },
+        ]);
       }
 
       const existingSupplierInfo = await odooRequest(
-        "product.supplierinfo", "search_read",
-        [[["product_tmpl_id", "=", Number(id)], ["partner_id", "=", resolvedSupplierId]]],
-        { fields: ["id"], limit: 1 }
+        "product.supplierinfo",
+        "search_read",
+        [
+          [
+            ["product_tmpl_id", "=", Number(id)],
+            ["partner_id", "=", resolvedSupplierId],
+          ],
+        ],
+        { fields: ["id"], limit: 1 },
       );
 
       if (existingSupplierInfo.length) {
         await odooRequest("product.supplierinfo", "write", [
           [existingSupplierInfo[0].id],
-          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
+          {
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
         ]);
       } else {
-        await odooRequest("product.supplierinfo", "create", [{
-          product_tmpl_id: Number(id),
-          partner_id: resolvedSupplierId,
-          price: Number(supplierPrice) || 0,
-          product_code: supplierId || false,
-        }]);
+        await odooRequest("product.supplierinfo", "create", [
+          {
+            product_tmpl_id: Number(id),
+            partner_id: resolvedSupplierId,
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
+        ]);
       }
     }
 
     // ✅ Sync MongoDB — all fields match Odoo
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
-    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+    const finalPriceXCD =
+      ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
     const updated = await Product.findOneAndUpdate(
       { odooProductId: Number(id) },
@@ -592,7 +820,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           name,
           reference: reference || "",
           itemNumber: itemNumber || "",
-          supplierInvoiceNumber: supplierId || "",   // ← synced field
+          supplierInvoiceNumber: supplierId || "", // ← synced field
           barcode: barcode || false,
           price: Number(price) || 0,
           stock: Number(stock) || 0,
@@ -614,10 +842,14 @@ export const updateProduct = async (req: Request, res: Response) => {
           },
         },
       },
-      { new: true }
+      { new: true },
     );
 
-    res.json({ success: true, message: "Product updated successfully", product: updated });
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      product: updated,
+    });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

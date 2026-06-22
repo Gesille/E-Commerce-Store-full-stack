@@ -11,7 +11,7 @@ import POSOrder from "../models/POSOrder.js";
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TAX_RATE = 0.1;
+const TAX_RATE = 0.17;
 
 const PAYMENT_METHOD_IDS: Record<string, number> = {
   cash: 1,

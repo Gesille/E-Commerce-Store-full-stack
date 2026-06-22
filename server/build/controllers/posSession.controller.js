@@ -7,7 +7,7 @@ import POSOrder from "../models/POSOrder.js";
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-const TAX_RATE = 0.1;
+const TAX_RATE = 0.17;
 const PAYMENT_METHOD_IDS = {
     cash: 1,
     card: 2,

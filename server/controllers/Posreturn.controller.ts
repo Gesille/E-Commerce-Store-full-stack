@@ -5,7 +5,7 @@ import { odooRequest } from "../odoo/odoo.client.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TAX_RATE = 0.1;
+const TAX_RATE = 0.17;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

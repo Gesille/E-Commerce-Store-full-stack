@@ -4,7 +4,7 @@ const ReturnItemSchema = new Schema({
     name: { type: String, required: true },
     sku: { type: String, default: "" },
     unitPrice: { type: Number, required: true },
-    taxRate: { type: Number, required: true, default: 0.1 },
+    taxRate: { type: Number, required: true, default: 0.17 },
     qtyReturned: { type: Number, required: true, min: 1 },
     refundSubtotal: { type: Number, required: true },
     refundTax: { type: Number, required: true },
