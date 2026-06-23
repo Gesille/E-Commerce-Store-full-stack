@@ -665,7 +665,7 @@ if (stock !== undefined && stock !== null) {
       quantId = existingQuants[0].id;
       await odooRequest("stock.quant", "write", [
         [quantId],
-        { inventory_quantity: Number(stock) },
+        { inventory_quantity: Number(stock),quantity: Number(stock) },
       ]);
       console.log(`✅ Quant ${quantId} updated for variant ${v.id} (${v.display_name})`);
     } else {
