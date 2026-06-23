@@ -41,6 +41,7 @@ const { setLoginOpen } = useAuth(); // only modal
     { name: "categories", path: "/categories" },
     { name: "about", path: "/about" },
     { name: "contact", path: "/contact" },
+    { name: "Terms / Policy", path: "/policy" },
   ];
   const logout = () => {
   dispatch(userLoggedOut());
