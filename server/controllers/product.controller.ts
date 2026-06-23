@@ -694,13 +694,16 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-    // ✅ Update stock via stock.quant with full Odoo verification before MongoDB sync
+    // ✅ Track verified stock from Odoo
+    let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
+
+    // ✅ Update stock via stock.quant
     if (stock !== undefined && stock !== null) {
       const variant = await odooRequest(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", Number(id)]]],
-        { fields: ["id"], limit: 1 },
+        { fields: ["id"], limit: 1 }
       );
 
       if (!variant.length) {
@@ -711,7 +714,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         "stock.location",
         "search_read",
         [[["usage", "=", "internal"], ["company_id", "!=", false]]],
-        { fields: ["id", "name"], limit: 1 },
+        { fields: ["id", "name"], limit: 1 }
       );
 
       if (!locations.length) {
@@ -727,19 +730,17 @@ export const updateProduct = async (req: Request, res: Response) => {
             ["location_id", "=", locations[0].id],
           ],
         ],
-        { fields: ["id"], limit: 1 },
+        { fields: ["id"], limit: 1 }
       );
 
       let quantId: number;
 
       if (existingQuants.length) {
         quantId = existingQuants[0].id;
-
         await odooRequest("stock.quant", "write", [
           [quantId],
           { inventory_quantity: Number(stock) },
         ]);
-
         console.log("✅ Existing quant updated, ID:", quantId);
       } else {
         quantId = await odooRequest("stock.quant", "create", [
@@ -749,7 +750,6 @@ export const updateProduct = async (req: Request, res: Response) => {
             inventory_quantity: Number(stock),
           },
         ]);
-
         console.log("✅ New quant created, ID:", quantId);
       }
 
@@ -759,7 +759,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           "stock.quant",
           "action_apply_inventory",
           [[quantId]],
-          {},
+          {}
         );
 
         // ✅ Verify Odoo actually committed the stock change
@@ -767,7 +767,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           "stock.quant",
           "search_read",
           [[["id", "=", quantId]]],
-          { fields: ["quantity", "inventory_quantity"], limit: 1 },
+          { fields: ["quantity", "inventory_quantity"], limit: 1 }
         );
 
         if (!verifiedQuant.length) {
@@ -776,7 +776,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           );
         }
 
-        const actualQty = verifiedQuant[0].quantity; // confirmed on-hand qty in Odoo
+        const actualQty = verifiedQuant[0].quantity;
         const expectedQty = Number(stock);
 
         console.log(
@@ -788,6 +788,10 @@ export const updateProduct = async (req: Request, res: Response) => {
             `Odoo stock mismatch after apply: expected ${expectedQty}, got ${actualQty}. MongoDB will NOT be updated.`
           );
         }
+
+        // ✅ Use the ACTUAL verified quantity from Odoo (not what was sent in)
+        verifiedStock = actualQty;
+
       } catch (stockErr: any) {
         console.error("❌ Odoo stock apply/verify failed:", stockErr.message);
         throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
@@ -806,7 +810,7 @@ export const updateProduct = async (req: Request, res: Response) => {
             ["ref", "=", supplierId || ""],
           ],
         ],
-        { fields: ["id"], limit: 1 },
+        { fields: ["id"], limit: 1 }
       );
 
       let resolvedSupplierId: number;
@@ -831,7 +835,7 @@ export const updateProduct = async (req: Request, res: Response) => {
             ["partner_id", "=", resolvedSupplierId],
           ],
         ],
-        { fields: ["id"], limit: 1 },
+        { fields: ["id"], limit: 1 }
       );
 
       if (existingSupplierInfo.length) {
@@ -860,37 +864,49 @@ export const updateProduct = async (req: Request, res: Response) => {
     const finalPriceXCD =
       ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
+    const updatePayload: Record<string, any> = {
+      name,
+      reference: reference || "",
+      itemNumber: itemNumber || "",
+      supplierInvoiceNumber: supplierId || "",
+      barcode: barcode || false,
+      price: Number(price) || 0,
+      stock: verifiedStock, // ✅ use Odoo-verified quantity
+      supplierPrice: Number(supplierPrice) || 0,
+      shippingCost: Number(shippingCost) || 0,
+      currency: currency || "USD",
+      finalPriceXCD,
+      supplierId: supplierId || "",
+      supplierName: supplierName || "",
+      location: {
+        warehouseName: warehouseName || "",
+        shelfName: shelfName || "",
+      },
+      attributes: {
+        colors: finalColors,
+        sizes: finalSizes,
+        materials: finalMaterials,
+      },
+    };
+
+    if (imageUrl) {
+      updatePayload.image = imageUrl;
+    }
+
     const updated = await Product.findOneAndUpdate(
       { odooProductId: Number(id) },
-      {
-        $set: {
-          name,
-          reference: reference || "",
-          itemNumber: itemNumber || "",
-          supplierInvoiceNumber: supplierId || "",
-          barcode: barcode || false,
-          price: Number(price) || 0,
-          stock: Number(stock) || 0,
-          supplierPrice: Number(supplierPrice) || 0,
-          shippingCost: Number(shippingCost) || 0,
-          currency: currency || "USD",
-          finalPriceXCD,
-          supplierId: supplierId || "",
-          supplierName: supplierName || "",
-          location: {
-            warehouseName: warehouseName || "",
-            shelfName: shelfName || "",
-          },
-          ...(imageUrl && { image: imageUrl }),
-          attributes: {
-            colors: finalColors,
-            sizes: finalSizes,
-            materials: finalMaterials,
-          },
-        },
-      },
-      { returnDocument: "after" }, // ✅ fixed deprecated `new: true`
+      { $set: updatePayload },
+      { new: true } // ✅ use `new: true` — works in all Mongoose versions
     );
+
+    if (!updated) {
+      console.error(`❌ MongoDB product not found for odooProductId: ${id}`);
+      return res.status(404).json({
+        message: `Product with odooProductId ${id} not found in MongoDB`,
+      });
+    }
+
+    console.log(`✅ MongoDB updated, stock in DB: ${updated.stock}`);
 
     res.json({
       success: true,
