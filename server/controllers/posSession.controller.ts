@@ -836,7 +836,7 @@ export const getPaymentMethodsWithMapping = CatchAsyncError(
     });
   }
 );
-export const createPosOrder = CatchAsyncError(
+export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
       cart,
