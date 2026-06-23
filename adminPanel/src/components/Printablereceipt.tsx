@@ -215,6 +215,7 @@ function buildReceiptHTML(
   <div class="text-left footer">
     <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
     <div style="color: #222;">Please keep this receipt for your records.</div>
+    <div class="font-bold">Returns accepted within 7 days with proof of purchase. Items must be unused & in original packaging. Refunds issued in original payment form.</div>
     <div style="margin-top: 10px; font-size: 9pt; color: #555;">* ${receiptNo} *</div>
   </div>
 
