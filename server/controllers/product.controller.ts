@@ -623,7 +623,6 @@ export const decreaseStock = async (productId: number, qty: number) => {
   ]);
 };
 
-// update product
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -693,7 +692,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-    // ✅ Update stock via stock.quant
+    // ✅ Update stock via stock.quant (Odoo first, then Mongo)
     if (stock !== undefined && stock !== null) {
       const variant = await odooRequest(
         "product.product",
@@ -702,47 +701,84 @@ export const updateProduct = async (req: Request, res: Response) => {
         { fields: ["id"], limit: 1 },
       );
 
-      if (variant.length) {
-        const locations = await odooRequest(
-          "stock.location",
-          "search_read",
-          [[["usage", "=", "internal"]]],
-          { fields: ["id"], limit: 1 },
-        );
+      if (!variant.length) {
+        throw new Error(`No product variant found for template ID ${id}`);
+      }
 
-        if (locations.length) {
-          const existingQuant = await odooRequest(
+      const locations = await odooRequest(
+        "stock.location",
+        "search_read",
+        [[["usage", "=", "internal"], ["company_id", "!=", false]]],
+        { fields: ["id", "name"], limit: 1 },
+      );
+
+      if (!locations.length) {
+        throw new Error("No internal stock location found in Odoo");
+      }
+
+      const existingQuant = await odooRequest(
+        "stock.quant",
+        "search_read",
+        [
+          [
+            ["product_id", "=", variant[0].id],
+            ["location_id", "=", locations[0].id],
+          ],
+        ],
+        { fields: ["id", "quantity", "inventory_quantity"], limit: 1 },
+      );
+
+      if (existingQuant.length) {
+        // Update existing quant
+        await odooRequest("stock.quant", "write", [
+          [existingQuant[0].id],
+          {
+            inventory_quantity: Number(stock),
+            inventory_quantity_auto_apply: true,
+          },
+        ]);
+
+        try {
+          await odooRequest(
             "stock.quant",
-            "search_read",
-            [
-              [
-                ["product_id", "=", variant[0].id],
-                ["location_id", "=", locations[0].id],
-              ],
-            ],
-            { fields: ["id"], limit: 1 },
+            "action_apply_inventory",
+            [[existingQuant[0].id]],
+            {},
           );
+          console.log(
+            "✅ Stock updated in Odoo for quant:",
+            existingQuant[0].id,
+          );
+        } catch (stockErr: any) {
+          console.error("❌ Odoo stock apply failed:", stockErr.message);
+          throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
+        }
+      } else {
+        // Create new quant
+        const quantId = await odooRequest("stock.quant", "create", [
+          {
+            product_id: variant[0].id,
+            location_id: locations[0].id,
+            inventory_quantity: Number(stock),
+          },
+        ]);
 
-          if (existingQuant.length) {
-            await odooRequest("stock.quant", "write", [
-              [existingQuant[0].id],
-              { inventory_quantity: Number(stock) },
-            ]);
-            await odooRequest("stock.quant", "action_apply_inventory", [
-              [existingQuant[0].id],
-            ]);
-          } else {
-            const quantId = await odooRequest("stock.quant", "create", [
-              {
-                product_id: variant[0].id,
-                location_id: locations[0].id,
-                inventory_quantity: Number(stock),
-              },
-            ]);
-            await odooRequest("stock.quant", "action_apply_inventory", [
-              [quantId],
-            ]);
-          }
+        try {
+          await odooRequest(
+            "stock.quant",
+            "action_apply_inventory",
+            [[quantId]],
+            {},
+          );
+          console.log("✅ New stock quant created and applied in Odoo:", quantId);
+        } catch (stockErr: any) {
+          console.error(
+            "❌ Odoo new quant apply failed:",
+            stockErr.message,
+          );
+          throw new Error(
+            `Stock sync to Odoo failed: ${stockErr.message}`,
+          );
         }
       }
     }
@@ -807,7 +843,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ Sync MongoDB — all fields match Odoo
+    // ✅ Sync MongoDB — only after Odoo succeeds
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
     const finalPriceXCD =
@@ -820,7 +856,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           name,
           reference: reference || "",
           itemNumber: itemNumber || "",
-          supplierInvoiceNumber: supplierId || "", // ← synced field
+          supplierInvoiceNumber: supplierId || "",
           barcode: barcode || false,
           price: Number(price) || 0,
           stock: Number(stock) || 0,
@@ -851,6 +887,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       product: updated,
     });
   } catch (err: any) {
+    console.error("❌ updateProduct error:", err.message);
     res.status(500).json({ message: err.message });
   }
 };
