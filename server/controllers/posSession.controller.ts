@@ -1004,7 +1004,7 @@ export const createOrder = CatchAsyncError(
       orderId,
     });
   },
- 
+)
 
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
