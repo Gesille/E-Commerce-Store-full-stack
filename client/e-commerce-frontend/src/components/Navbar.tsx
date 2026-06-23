@@ -50,7 +50,7 @@ const { setLoginOpen } = useAuth();
   const firstLetter = user?.name?.charAt(0)?.toUpperCase() || "U";
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b">
+    <nav className="relative z-50 bg-white border-b">
       <div className="max-w-7xl mx-auto flex items-center justify-between px-4 md:px-6 py-3">
 
         {/* LOGO */}
