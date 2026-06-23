@@ -9,92 +9,225 @@
     body { font-family: Arial, Helvetica, sans-serif; background: #f4f4f4; padding: 24px; }
 
     .receipt-wrap {
-      max-width: 480px;
+      max-width: 520px;
       margin: 0 auto;
       background: #ffffff;
-      border: 1px solid #222222;
+      border: 1px solid #d0d0d0;
       color: #111111;
       font-size: 13px;
     }
 
+    /* ── HEADER ── */
     .receipt-header {
       border-bottom: 2px solid #111111;
-      padding: 16px 20px 14px;
+      padding: 20px 24px 16px;
     }
-    .shop-name { font-size: 20px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-    .shop-tagline { font-size: 10px; color: #555; margin-top: 3px; letter-spacing: 0.05em; text-transform: uppercase; }
-    .shop-contact { font-size: 11px; color: #444; margin-top: 8px; line-height: 1.7; }
+    .shop-logo {
+      max-height: 52px;
+      margin-bottom: 8px;
+      display: block;
+    }
+    .shop-name {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .shop-tagline {
+      font-size: 10px;
+      color: #666;
+      margin-top: 3px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .shop-contact {
+      font-size: 11.5px;
+      color: #444;
+      margin-top: 10px;
+      line-height: 1.75;
+    }
 
- .meta-bar {
-  background: #f7f7f7;
-  border-bottom: 1px solid #bbb;
-  padding: 10px 20px;
-  font-size: 11px;
-  display: flex;
-  gap: 0;                    
-  flex-wrap: wrap;
-}
+    /* ── META BAR ── */
+    .meta-bar {
+      background: #f7f7f7;
+      border-bottom: 1px solid #d0d0d0;
+      padding: 10px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+    }
     .meta-item {
-  display: flex;
-  flex-direction: column;
-  padding-right: 24px;      
-  border-right: 1px solid #ddd;
-  margin-right: 24px;
-  min-width: 90px;          
-}
-.meta-item:last-child {
-  border-right: none;
-  margin-right: 0;
-  padding-right: 0;
-}
-    .meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 1px; }
-    .meta-value { font-weight: 700; color: #111; font-size: 12px; }
+      display: flex;
+      flex-direction: column;
+      min-width: 100px;
+      padding-right: 28px;
+      margin-right: 28px;
+      border-right: 1px solid #ddd;
+      padding-top: 4px;
+      padding-bottom: 4px;
+    }
+    .meta-item:last-child {
+      border-right: none;
+      margin-right: 0;
+      padding-right: 0;
+    }
+    .meta-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #999;
+      margin-bottom: 2px;
+    }
+    .meta-value {
+      font-weight: 700;
+      color: #111;
+      font-size: 12.5px;
+    }
 
-    .bill-row { display: flex; border-bottom: 1px solid #bbb; }
-    .bill-section { flex: 1; padding: 12px 20px; font-size: 12px; line-height: 1.7; border-right: 1px solid #bbb; }
-    .bill-section:last-child { border-right: none; }
-    .section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 5px; }
-    .bill-name { font-weight: 700; font-size: 13px; color: #111; }
+    /* ── BILL TO ── */
+    .bill-section {
+      padding: 14px 24px 16px;
+      border-bottom: 1px solid #d0d0d0;
+    }
+    .section-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: #999;
+      margin-bottom: 5px;
+    }
+    .bill-name {
+      font-weight: 700;
+      font-size: 13.5px;
+      color: #111;
+    }
+    .bill-sub {
+      font-size: 11.5px;
+      color: #555;
+      margin-top: 2px;
+      line-height: 1.65;
+    }
+    .bill-abst {
+      font-size: 11.5px;
+      color: #444;
+      margin-top: 6px;
+    }
+    .bill-abst strong {
+      color: #111;
+    }
 
-    .items-area { border-bottom: 1px solid #bbb; }
-    .items-table { width: 100%; border-collapse: collapse; }
-    .items-table thead tr { background: #e0e0e0; border-bottom: 1px solid #bbb; }
-    .items-table th { padding: 5px 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; text-align: left; }
-    .items-table th.right, .items-table td.right { text-align: right; }
-    .items-table td { padding: 7px 20px; font-size: 12px; border-bottom: 1px solid #eee; color: #111; }
+    /* ── ITEMS TABLE ── */
+    .items-area {
+      border-bottom: 1px solid #d0d0d0;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .items-table thead tr {
+      background: #ebebeb;
+      border-bottom: 1px solid #d0d0d0;
+    }
+    .items-table th {
+      padding: 6px 24px;
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #555;
+      text-align: left;
+    }
+    .items-table th.right,
+    .items-table td.right { text-align: right; }
+    .items-table td {
+      padding: 9px 24px;
+      font-size: 12.5px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #111;
+      vertical-align: top;
+    }
     .items-table tbody tr:last-child td { border-bottom: none; }
-    .discount-line td { color: #555; font-style: italic; }
+    .discount-line td { color: #777; font-size: 11.5px; font-style: italic; }
 
-    .totals-section { border-top: 2px solid #111; }
-    .totals-table { width: 100%; border-collapse: collapse; }
-    .totals-table td { padding: 5px 20px; font-size: 12px; color: #111; }
+    /* ── TOTALS ── */
+    .totals-section {
+      border-top: 2px solid #111;
+    }
+    .totals-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .totals-table td {
+      padding: 6px 24px;
+      font-size: 12.5px;
+      color: #111;
+    }
     .totals-table td:last-child { text-align: right; }
-    .totals-table .row-subtotal td { padding-top: 9px; }
-    .totals-table .row-tax td { color: #444; }
-    .totals-table .row-total { border-top: 2px solid #111; }
-    .totals-table .row-total td { padding: 10px 20px; font-size: 16px; font-weight: 700; }
-    .totals-table .row-paid { background: #f0f0f0; border-top: 1px solid #bbb; }
-    .totals-table .row-paid td { padding: 6px 20px; font-size: 12px; color: #333; }
-    .totals-table .row-change td { padding: 5px 20px 9px; font-size: 12px; color: #059669; background: #f0f0f0; font-weight: 600; }
+
+    .row-subtotal td { padding-top: 10px; }
+    .row-tax td { color: #555; }
+
+    .row-total {
+      border-top: 2px solid #111;
+    }
+    .row-total td {
+      padding: 10px 24px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .row-paid {
+      background: #f5f5f5;
+      border-top: 1px solid #d0d0d0;
+    }
+    .row-paid td { padding: 7px 24px; font-size: 12.5px; color: #333; }
+
+    .row-change {
+      background: #f5f5f5;
+    }
+    .row-change td {
+      padding: 6px 24px 10px;
+      font-size: 12.5px;
+      color: #059669;
+      font-weight: 600;
+    }
 
     .payment-badge {
       display: inline-block;
       background: #111;
       color: #fff;
-      padding: 2px 8px;
-      font-size: 10px;
+      padding: 2px 7px;
+      font-size: 9.5px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-left: 6px;
+      vertical-align: middle;
     }
 
+    /* ── POLICY STRIP ── */
+    .policy-strip {
+      padding: 16px 24px;
+      text-align: center;
+      font-size: 12px;
+      border-top: 1px solid #e5e5e5;
+      color: #555;
+      line-height: 1.7;
+    }
+    .policy-strip a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* ── FOOTER ── */
     .footer-strip {
       background: #111;
       color: #fff;
       text-align: center;
-      padding: 10px 20px;
+      padding: 11px 24px;
       font-size: 10px;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.09em;
       text-transform: uppercase;
     }
   </style>
@@ -105,7 +238,7 @@
     <!-- HEADER -->
     <div class="receipt-header">
       <% if (logoUrl) { %>
-        <img src="<%= logoUrl %>" alt="<%= shopName %>" style="max-height: 48px; margin-bottom: 6px; display: block;" />
+        <img class="shop-logo" src="<%= logoUrl %>" alt="<%= shopName %>" />
       <% } %>
       <div class="shop-name"><%= shopName %></div>
       <% if (shopTagline) { %>
@@ -138,26 +271,28 @@
     </div>
 
     <!-- BILL TO -->
-    <div class="bill-row">
-      <div class="bill-section">
-        <div class="section-label">Bill To</div>
-        <% if (customerName) { %>
-          <div class="bill-name"><%= customerName %></div>
-        <% } else { %>
-          <div style="color: #999; font-size: 12px;">Walk-in Customer</div>
-        <% } %>
-      </div>
+    <% if (customerName) { %>
+    <div class="bill-section">
+      <div class="section-label">Bill To</div>
+      <div class="bill-name"><%= customerName %></div>
+      <% if (customerAddress) { %>
+        <div class="bill-sub"><%= customerAddress %></div>
+      <% } %>
+      <% if (customerAbst) { %>
+        <div class="bill-abst">Cust ABST # &nbsp;<strong><%= customerAbst %></strong></div>
+      <% } %>
     </div>
+    <% } %>
 
     <!-- ITEMS -->
     <div class="items-area">
       <table class="items-table">
         <thead>
           <tr>
-            <th style="width: 44px;">Qty</th>
+            <th style="width:46px;">Qty</th>
             <th>Description</th>
-            <th class="right" style="width: 90px;">Price Each</th>
-            <th class="right" style="width: 100px;">Amount</th>
+            <th class="right" style="width:100px;">Price Each</th>
+            <th class="right" style="width:108px;">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -173,7 +308,7 @@
               <td></td>
               <td>Discount (<%= line.discount %>%)</td>
               <td class="right"></td>
-              <td class="right" style="color: #dc2626;">-$<%= (line.priceUnit * line.qty * line.discount / 100).toFixed(2) %></td>
+              <td class="right" style="color:#dc2626;">-$<%= (line.priceUnit * line.qty * line.discount / 100).toFixed(2) %></td>
             </tr>
             <% } %>
           <% }); %>
@@ -199,7 +334,7 @@
         <% paymentLines.forEach(function(p) { %>
         <tr class="row-paid">
           <td>
-            <span style="text-transform: capitalize;"><%= p.method %></span>
+            <span style="text-transform:capitalize;"><%= p.method %></span>
             <span class="payment-badge"><%= p.method %></span>
           </td>
           <td>$<%= p.amount.toFixed(2) %></td>
@@ -213,30 +348,15 @@
         <% } %>
       </table>
     </div>
-<div style="
-  padding:18px 20px;
-  text-align:center;
-  font-size:12px;
-  border-top:1px solid #ddd;
-">
 
-  <p style="margin-bottom:8px;">
-    View our store policies:
-  </p>
+    <!-- POLICY -->
+    <% if (policyUrl) { %>
+    <div class="policy-strip">
+      View our store policies:<br>
+      <a href="<%= policyUrl %>" target="_blank">Return Policy &amp; Terms</a>
+    </div>
+    <% } %>
 
-  <a 
-    href="<%= policyUrl %>"
-    target="_blank"
-    style="
-      color:#2563eb;
-      text-decoration:none;
-      font-weight:600;
-    "
-  >
-    Return Policy & Terms
-  </a>
-
-</div>
     <!-- FOOTER -->
     <div class="footer-strip">
       Thank you for your purchase &nbsp;&middot;&nbsp; <%= shopName %>
