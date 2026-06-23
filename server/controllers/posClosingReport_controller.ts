@@ -5,9 +5,6 @@ import { odooRequest } from "../odoo/odoo.client.js";
 import CashierShiftLog from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 function toOdooDateTime(date: string, endOfDay = false) {
   return endOfDay ? `${date} 23:59:59` : `${date} 00:00:00`;
@@ -17,17 +14,6 @@ function isoDate(d: Date) {
   return d.toISOString().split("T")[0];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/pos/reports/daily?date=YYYY-MM-DD&configId=1
-//
-// Returns the full Z-Report for a single day:
-//   - sales summary (gross, discounts, refunds, net, tax)
-//   - payment breakdown by method (cash / card / bank / check)
-//   - opening & expected closing balance
-//   - session / cashier info
-//   - per-product top sellers
-//   - hourly sales curve (for the chart)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const getDailyClosingReport = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -272,12 +258,6 @@ export const getDailyClosingReport = CatchAsyncError(
   }
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/pos/reports/daily/cash-count
-//
-// Cashier submits the physical denomination count at end of shift.
-// Stores it against the shift log in MongoDB.
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface DenominationEntry {
   value: number;
@@ -348,12 +328,6 @@ export const submitCashCount = CatchAsyncError(
   }
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/pos/reports/monthly?year=YYYY&month=MM&configId=1
-//
-// Returns per-day summary for the calendar view:
-//   - ordersCount, netSales, cashSales, cardSales per day
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const getMonthlyCalendarReport = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {

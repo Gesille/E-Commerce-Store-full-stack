@@ -1,16 +1,17 @@
 "use client";
 
 import {
-  BarChart2,
+ 
   ClipboardList,
   LayoutDashboard,
   RotateCcw,
-  Package,
+  
   ArrowLeftFromLine,
   User2,
   Receipt,
-  Wallet,
+
   ScanBarcode,
+  BookDashed,
 } from "lucide-react";
 import {
   Sidebar,
@@ -96,7 +97,7 @@ const POSSidebar = () => {
               {navItem("/pos/orders", <ClipboardList size={16} />, "POS Orders")}
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
               {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
-              {navItem("/pos/POSReport", <RotateCcw size={16} />, "POSReport")}
+              {navItem("/pos/POSReport", <BookDashed size={16} />, "POSReport")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
