@@ -258,7 +258,6 @@ export const createProduct = async (req: Request, res: Response) => {
 
   try {
     const {
-      // Identity
       name,
       stock,
       categoryId,
@@ -267,22 +266,14 @@ export const createProduct = async (req: Request, res: Response) => {
       reference,
       barcode,
       itemNumber,
-
-      // Location
       locationId,
       warehouseName,
       shelfName,
-
-      // Supplier
       supplierId,
       supplierName,
-
-      // Pricing inputs
       supplierPrice,
       currency,
       markup,
-
-      // International Costs (XCD) — note: NO separate shippingCost; use freightInternational
       freightInternational,
       transportationStorageInternational,
       portFeesInternational,
@@ -294,8 +285,6 @@ export const createProduct = async (req: Request, res: Response) => {
       currencyConversion,
       paymentProcessing,
       bankCharges,
-
-      // Local Costs (XCD)
       transportationStorageLocal,
       portFeesLocal,
       brokerageHandlingLocal,
@@ -307,22 +296,17 @@ export const createProduct = async (req: Request, res: Response) => {
       internalFees,
     } = req.body;
 
-    // ── Landed cost calculation (matches Excel exactly) ───────────────────
     const { buyPriceXCD, totalCostsXCD, landedCostXCD, finalPriceXCD, exchangeRate } =
       calcLandedCost(req.body);
 
-    // ── Image ─────────────────────────────────────────────────────────────
     let base64Image: string | null = null;
     if (image) base64Image = await toBase64(image);
 
-    // ── Create product template in Odoo ───────────────────────────────────
-    // list_price  → finalPriceXCD  (calculated selling price, not a manual input)
-    // standard_price → buyPriceXCD (cost in XCD for Odoo's margin reports)
     createdProductTemplateId = await odooRequest("product.template", "create", [
       {
         name,
-        list_price: parseFloat(finalPriceXCD.toFixed(2)),       // ← selling price from calc
-        standard_price: parseFloat(buyPriceXCD.toFixed(2)),     // ← cost in XCD
+        list_price: parseFloat(finalPriceXCD.toFixed(2)),
+        standard_price: parseFloat(buyPriceXCD.toFixed(2)),
         default_code: itemNumber || reference || false,
         barcode: barcode || false,
         type: "consu",
@@ -372,19 +356,13 @@ export const createProduct = async (req: Request, res: Response) => {
         {
           product_tmpl_id: createdProductTemplateId,
           partner_id: resolvedSupplierId,
-          price: Number(supplierPrice) || 0,         // supplier's price in original currency
+          price: Number(supplierPrice) || 0,
           product_code: supplierId || false,
         },
       ]);
     }
 
     // ── Attributes ────────────────────────────────────────────────────────
-    const ATTRIBUTE_NAME_MAP: Record<string, string> = {
-      colors: "Color",
-      sizes: "Size",
-      materials: "Material",
-    };
-
     if (attributes) {
       for (const key in attributes) {
         const values = Array.isArray(attributes[key])
@@ -498,73 +476,6 @@ export const createProduct = async (req: Request, res: Response) => {
 
     await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
-    // ── Save to MongoDB ───────────────────────────────────────────────────
-    await Product.create({
-      // Identity
-      name,
-      reference: reference || "",
-      itemNumber: itemNumber || "",
-      barcode: barcode || "",
-      price: parseFloat(finalPriceXCD.toFixed(2)),  // stored as the final calculated price
-      stock: Number(stock),
-      image: image || "",
-      attributes: {
-        colors: attributes?.colors ?? [],
-        sizes: attributes?.sizes ?? [],
-        materials: attributes?.materials ?? [],
-      },
-
-      // Location
-      location: {
-        shelfName: resolvedShelfName,
-        warehouseName: resolvedWarehouseName,
-        odooLocationId: resolvedLocationId,
-      },
-
-      // Pricing inputs
-      currency: currency || "USD",
-      supplierPrice: Number(supplierPrice) || 0,
-      markup: Number(markup) || 1,
-
-      // International Costs
-      freightInternational: Number(freightInternational) || 0,
-      transportationStorageInternational: Number(transportationStorageInternational) || 0,
-      portFeesInternational: Number(portFeesInternational) || 0,
-      brokerageHandlingInternational: Number(brokerageHandlingInternational) || 0,
-      customsDutiesInternational: Number(customsDutiesInternational) || 0,
-      tariffsInternational: Number(tariffsInternational) || 0,
-      insurancesInternational: Number(insurancesInternational) || 0,
-      vatTaxesInternational: Number(vatTaxesInternational) || 0,
-      currencyConversion: Number(currencyConversion) || 0,
-      paymentProcessing: Number(paymentProcessing) || 0,
-      bankCharges: Number(bankCharges) || 0,
-
-      // Local Costs
-      transportationStorageLocal: Number(transportationStorageLocal) || 0,
-      portFeesLocal: Number(portFeesLocal) || 0,
-      brokerageHandlingLocal: Number(brokerageHandlingLocal) || 0,
-      customsDutiesLocal: Number(customsDutiesLocal) || 0,
-      tariffsLocal: Number(tariffsLocal) || 0,
-      insurancesLocal: Number(insurancesLocal) || 0,
-      vatTaxesLocal: Number(vatTaxesLocal) || 0,
-      documentationCosts: Number(documentationCosts) || 0,
-      internalFees: Number(internalFees) || 0,
-
-      // Calculated (never from client)
-      buyPriceXCD: parseFloat(buyPriceXCD.toFixed(2)),
-      totalCostsXCD: parseFloat(totalCostsXCD.toFixed(2)),
-      landedCostXCD: parseFloat(landedCostXCD.toFixed(2)),
-      finalPriceXCD: parseFloat(finalPriceXCD.toFixed(2)),
-
-      // Supplier
-      supplierId: supplierId || "",
-      supplierName: supplierName || "",
-
-      // Odoo refs
-      odooProductId: createdProductTemplateId,
-      odooCategoryId: categoryId,
-    });
-
     res.json({
       success: true,
       productTemplateId: createdProductTemplateId,
@@ -657,7 +568,6 @@ export const updateProduct = async (req: Request, res: Response) => {
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
 
-    // ✅ Update Odoo — all fields including custom ones
     await odooRequest("product.template", "write", [
       [Number(id)],
       {
@@ -772,7 +682,7 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         if (!verifiedQuant.length) {
           throw new Error(
-            `Could not find stock quant ID ${quantId} after apply — MongoDB will NOT be updated`
+            `Could not find stock quant ID ${quantId} after apply`
           );
         }
 
@@ -785,13 +695,11 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         if (Math.abs(actualQty - expectedQty) > 0.01) {
           throw new Error(
-            `Odoo stock mismatch after apply: expected ${expectedQty}, got ${actualQty}. MongoDB will NOT be updated.`
+            `Odoo stock mismatch after apply: expected ${expectedQty}, got ${actualQty}.`
           );
         }
 
-        // ✅ Use the ACTUAL verified quantity from Odoo (not what was sent in)
         verifiedStock = actualQty;
-
       } catch (stockErr: any) {
         console.error("❌ Odoo stock apply/verify failed:", stockErr.message);
         throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
@@ -858,60 +766,40 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ Only reaches here if ALL Odoo operations succeeded
+    // ✅ Build response straight from what we just verified in Odoo
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
     const finalPriceXCD =
       ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
-    const updatePayload: Record<string, any> = {
-      name,
-      reference: reference || "",
-      itemNumber: itemNumber || "",
-      supplierInvoiceNumber: supplierId || "",
-      barcode: barcode || false,
-      price: Number(price) || 0,
-      stock: verifiedStock, // ✅ use Odoo-verified quantity
-      supplierPrice: Number(supplierPrice) || 0,
-      shippingCost: Number(shippingCost) || 0,
-      currency: currency || "USD",
-      finalPriceXCD,
-      supplierId: supplierId || "",
-      supplierName: supplierName || "",
-      location: {
-        warehouseName: warehouseName || "",
-        shelfName: shelfName || "",
-      },
-      attributes: {
-        colors: finalColors,
-        sizes: finalSizes,
-        materials: finalMaterials,
-      },
-    };
-
-    if (imageUrl) {
-      updatePayload.image = imageUrl;
-    }
-
-    const updated = await Product.findOneAndUpdate(
-      { odooProductId: Number(id) },
-      { $set: updatePayload },
-      { new: true } // ✅ use `new: true` — works in all Mongoose versions
-    );
-
-    if (!updated) {
-      console.error(`❌ MongoDB product not found for odooProductId: ${id}`);
-      return res.status(404).json({
-        message: `Product with odooProductId ${id} not found in MongoDB`,
-      });
-    }
-
-    console.log(`✅ MongoDB updated, stock in DB: ${updated.stock}`);
-
     res.json({
       success: true,
       message: "Product updated successfully",
-      product: updated,
+      product: {
+        odooProductId: Number(id),
+        name,
+        reference: reference || "",
+        itemNumber: itemNumber || "",
+        barcode: barcode || "",
+        price: Number(price) || 0,
+        stock: verifiedStock,
+        supplierId: supplierId || "",
+        supplierName: supplierName || "",
+        supplierPrice: Number(supplierPrice) || 0,
+        shippingCost: Number(shippingCost) || 0,
+        currency: currency || "USD",
+        finalPriceXCD,
+        location: {
+          warehouseName: warehouseName || "",
+          shelfName: shelfName || "",
+        },
+        attributes: {
+          colors: finalColors,
+          sizes: finalSizes,
+          materials: finalMaterials,
+        },
+        image: imageUrl || undefined,
+      },
     });
   } catch (err: any) {
     console.error("❌ updateProduct error:", err.message);
