@@ -21,7 +21,7 @@ type NavLink = {
 };
 
 const Navbar = () => {
-  const token = useSelector((state: RootState) => state.auth.token);
+// 
 const adminUrl = process.env.NEXT_PUBLIC_ADMIN_PANEL_URL!;
 
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,7 +32,7 @@ const user = useSelector(
   (state: RootState) => state.auth.user as any
 );
 const dispatch = useDispatch();
-const { setLoginOpen } = useAuth(); // only modal
+const { setLoginOpen } = useAuth();
   const pathname = usePathname();
 
   const navLinks: NavLink[] = [
