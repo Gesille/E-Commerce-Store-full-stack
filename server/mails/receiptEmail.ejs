@@ -25,18 +25,32 @@
     .shop-tagline { font-size: 10px; color: #555; margin-top: 3px; letter-spacing: 0.05em; text-transform: uppercase; }
     .shop-contact { font-size: 11px; color: #444; margin-top: 8px; line-height: 1.7; }
 
-    .meta-bar {
-      background: #f7f7f7;
-      border-bottom: 1px solid #bbb;
-      padding: 10px 20px;
-      font-size: 11px;
-      display: flex;
-      gap: 24px;
-      flex-wrap: wrap;
-    }
-    .meta-item { display: flex; flex-direction: column; }
-    .meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 1px; }
-    .meta-value { font-weight: 700; color: #111; font-size: 12px; }
+ .meta-bar {
+  background: #f7f7f7;
+  border-bottom: 1px solid #bbb;
+  padding: 12px 20px;
+  font-size: 11px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+   .meta-item {
+  display: flex;
+  flex-direction: column;
+}
+.meta-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.meta-value {
+  font-weight: 700;
+  color: #111;
+  font-size: 12px;
+}
 
     .bill-row { display: flex; border-bottom: 1px solid #bbb; }
     .bill-section { flex: 1; padding: 12px 20px; font-size: 12px; line-height: 1.7; border-right: 1px solid #bbb; }
@@ -107,33 +121,42 @@
       </div>
     </div>
 
-    <!-- META BAR -->
-    <div class="meta-bar">
-      <div class="meta-item">
-        <span class="meta-label">Receipt No</span>
-        <span class="meta-value"><%= receiptNo %></span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Date</span>
-        <span class="meta-value"><%= date %></span>
-      </div>
-      <% if (odooOrderId) { %>
-      <div class="meta-item">
-        <span class="meta-label">Order ID</span>
-        <span class="meta-value">#<%= odooOrderId %></span>
-      </div>
-      <% } %>
-    </div>
+    
+  <!-- META BAR -->
+<div class="meta-bar">
+
+  <div class="meta-item">
+    <span class="meta-label">Receipt No</span>
+    <span class="meta-value">
+      <%= receiptNo %>
+    </span>
+  </div>
+
+  <div class="meta-item">
+    <span class="meta-label">Date</span>
+    <span class="meta-value">
+      <%= date %>
+    </span>
+  </div>
+
+  <% if (odooOrderId) { %>
+  <div class="meta-item">
+    <span class="meta-label">Order ID</span>
+    <span class="meta-value">
+      #<%= odooOrderId %>
+    </span>
+  </div>
+  <% } %>
+
+</div>
 
     <!-- BILL TO -->
     <div class="bill-row">
       <div class="bill-section">
         <div class="section-label">Bill To</div>
-        <% if (customerName) { %>
-          <div class="bill-name"><%= customerName %></div>
-        <% } else { %>
-          <div style="color: #999; font-size: 12px;">Walk-in Customer</div>
-        <% } %>
+        <div class="bill-name">
+  Big Banana Management Company Ltd
+</div>
       </div>
     </div>
 
