@@ -1,4 +1,4 @@
-import { CartItem } from "@/types/pos";
+import { CartItem, TAX_RATE } from "@/types/pos";
 
 export type Discount =
   | { type: "percent"; value: number }
@@ -20,16 +20,28 @@ export function calcTax(amount: number, rate = 0.1) {
 }
 
 export function calcTotal(cart: CartItem[], discount: Discount) {
-  const subtotal = calcSubtotal(cart);
-  const discountAmt = calcDiscountAmount(subtotal, discount);
-  const afterDiscount = Math.max(0, subtotal - discountAmt);
-  const tax = calcTax(afterDiscount);
+  const subtotal = cart.reduce(
+    (s, item) =>
+      s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
+    0
+  );
+
+  const discountAmt =
+    discount.type === "percent"
+      ? subtotal * (discount.value / 100)
+      : discount.value;
+
+  const afterDiscount = subtotal - discountAmt;
+
+  const tax = afterDiscount * TAX_RATE;
+
+  const total = afterDiscount + tax;
 
   return {
     subtotal,
     discountAmt,
     afterDiscount,
     tax,
-    total: afterDiscount + tax,
+    total,
   };
 }

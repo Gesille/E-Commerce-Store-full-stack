@@ -3,7 +3,7 @@ import {
   useCreateOdooInvoiceMutation,
 } from "@/redux/pos/Posapi";
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
-import { CartItem, Customer, fmt, Order, PaymentLine } from "@/types/pos";
+import { calcOrderTotals, CartItem, Customer, fmt, Order, PaymentLine, TAX_RATE } from "@/types/pos";
 import { useState, useMemo } from "react"; // أضفنا useMemo لثبات رقم الإيصال
 import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
 
@@ -11,12 +11,6 @@ function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
 }
 
-function calcOrderTotals(cart: CartItem[]) {
-  const subtotal = cart.reduce((acc, i) => acc + calcLineTotal(i), 0);
-  const tax = subtotal * 0.17;
-  const total = subtotal + tax;
-  return { subtotal, tax, total };
-}
 
 export function ReceiptModal({
   order,
