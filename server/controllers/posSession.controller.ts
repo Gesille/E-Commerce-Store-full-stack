@@ -980,7 +980,7 @@ export const createOrder = CatchAsyncError(
       session_id:    sessionId,
       lines:         orderLines,
       payment_ids:   odooPayments,
-      user_id:       parseInt(cashierId, 10) || false,
+     
       amount_tax:    amountTax,
       amount_total:  amountTotal,
       amount_paid:   amountPaid,
@@ -1004,7 +1004,6 @@ export const createOrder = CatchAsyncError(
       orderId,
     });
   },
-);
  
 
 export const getSessionOrders = CatchAsyncError(
