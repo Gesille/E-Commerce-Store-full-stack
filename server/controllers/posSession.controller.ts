@@ -845,73 +845,65 @@ export const createOrder = CatchAsyncError(
       customerId,
       note,
       paymentLines,
-      discountAmt,
     } = req.body;
- 
-    if (!cart?.length)       return next(new ErrorHandler("Cart is empty", 400));
-    if (!cashierId)          return next(new ErrorHandler("cashierId is required", 400));
-    if (!configId)           return next(new ErrorHandler("configId is required", 400));
+
+    if (!cart?.length)         return next(new ErrorHandler("Cart is empty", 400));
+    if (!cashierId)            return next(new ErrorHandler("cashierId is required", 400));
+    if (!configId)             return next(new ErrorHandler("configId is required", 400));
     if (!paymentLines?.length) return next(new ErrorHandler("Payment lines are required", 400));
- 
-    // ── Validate check lines have a check number ────────────────────────────
+
+    // ── Validate check lines have a check number ──────────────────────────
     for (const pl of paymentLines) {
       if (pl.method === "check" && !pl.checkNumber?.trim()) {
         return next(new ErrorHandler("Check number is required for check payments", 400));
       }
     }
- 
-    // ── Resolve active POS session for this config ──────────────────────────
+
+    // ── Resolve active POS session ────────────────────────────────────────
     const sessions = await odooRequest(
       "pos.session",
       "search_read",
       [[["config_id", "=", configId], ["state", "=", "opened"]]],
-      { fields: ["id", "name"], limit: 1 }
+      { fields: ["id", "name"], limit: 1 },
     );
     if (!sessions.length) {
       return next(new ErrorHandler("No open POS session for this config", 400));
     }
     const sessionId = sessions[0].id;
- 
-    // ── Fetch all payment methods for this session ──────────────────────────
+
+    // ── Fetch all Odoo payment methods ────────────────────────────────────
     const allPMs = await odooRequest(
       "pos.payment.method",
       "search_read",
       [[]],
-      { fields: ["id", "name", "is_cash_count"] }
+      { fields: ["id", "name", "is_cash_count"] },
     );
- 
-    // Build a lookup: normalised name → id
-    // Odoo typically has names like "Cash", "Bank", "Credit Card", etc.
+
     const pmByName: Record<string, number> = {};
     for (const pm of allPMs) {
       pmByName[(pm.name as string).toLowerCase()] = pm.id;
     }
- 
-    // ── Map each frontend method to an Odoo payment method id ──────────────
-    function resolvePaymentMethodId(pl: typeof paymentLines[0]): number {
+
+    // ── Resolve frontend method → Odoo payment method id ─────────────────
+    function resolvePaymentMethodId(pl: any): number {
       switch (pl.method) {
         case "cash":
-          // prefer a method literally named "cash"
           return (
             pmByName["cash"] ??
             allPMs.find((m: any) => m.is_cash_count)?.id ??
             Object.values(pmByName)[0]
           );
- 
+
         case "card": {
-          // Try brand-specific first ("visa", "mastercard", "american express")
-          // then fall back to generic "card" / "credit card" / "bank"
           const brand = (pl.cardBrand ?? "").toLowerCase();
           const brandAlias: Record<string, string[]> = {
             visa:       ["visa"],
             mastercard: ["mastercard", "master card"],
             amex:       ["american express", "amex", "american express card"],
           };
-          const aliases = brandAlias[brand] ?? [];
-          for (const alias of aliases) {
+          for (const alias of brandAlias[brand] ?? []) {
             if (pmByName[alias] != null) return pmByName[alias];
           }
-          // Generic card fallback
           return (
             pmByName["card"] ??
             pmByName["credit card"] ??
@@ -920,7 +912,7 @@ export const createOrder = CatchAsyncError(
             Object.values(pmByName)[0]
           );
         }
- 
+
         case "bank":
           return (
             pmByName["bank"] ??
@@ -928,7 +920,7 @@ export const createOrder = CatchAsyncError(
             pmByName["wire transfer"] ??
             Object.values(pmByName)[0]
           );
- 
+
         case "check":
           return (
             pmByName["check"] ??
@@ -936,87 +928,82 @@ export const createOrder = CatchAsyncError(
             pmByName["bank"] ??
             Object.values(pmByName)[0]
           );
- 
+
         default:
           return Object.values(pmByName)[0];
       }
     }
- 
-    // ── Build Odoo order lines ──────────────────────────────────────────────
-    // Odoo POS order line format: [0, 0, { product_id, qty, price_unit, discount, note }]
+
+    // ── Build order lines ─────────────────────────────────────────────────
     const orderLines: [0, 0, object][] = cart.map((item: any) => [
       0,
       0,
       {
         product_id: item.productId,
-        qty: item.qty,
+        qty:        item.qty,
         price_unit: item.price,
-        discount: item.discount ?? 0,
-        note: item.note ?? "",
+        discount:   item.discount ?? 0,
       },
     ]);
- 
-    // ── Build Odoo payment lines ────────────────────────────────────────────
+
+    // ── Build payment lines ───────────────────────────────────────────────
     const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
       const pmId = resolvePaymentMethodId(pl);
- 
       const extra: Record<string, any> = {};
- 
-      // Store card brand in Odoo note field (no native field without extra module)
-      if (pl.method === "card" && pl.cardBrand) {
-        extra.payment_method_ref = pl.cardBrand.toUpperCase(); // stored in note if you need it
-      }
- 
-      // Store check number — Odoo has no native check field in base POS,
-      // so we put it in the `memo` / `ref` field (falls back to note)
+
       if (pl.method === "check" && pl.checkNumber) {
-        extra.check_number = pl.checkNumber; // only written if your Odoo has this field
-        extra.memo        = `Check #${pl.checkNumber}`;
+        extra.memo = `Check #${pl.checkNumber}`;
       }
- 
-      return [
-        0,
-        0,
-        {
-          payment_method_id: pmId,
-          amount: pl.amount,
-          ...extra,
-        },
-      ];
+
+      return [0, 0, { payment_method_id: pmId, amount: pl.amount, ...extra }];
     });
- 
-    // ── Create the POS order in Odoo ────────────────────────────────────────
+
+    // ── Compute totals (all mandatory on pos.order) ───────────────────────
+    const TAX_RATE = 0.17;
+
+    const amountUntaxed = cart.reduce((sum: number, item: any) => {
+      return sum + item.price * item.qty * (1 - (item.discount ?? 0) / 100);
+    }, 0);
+
+    const amountTax    = Math.round(amountUntaxed * TAX_RATE * 100) / 100;
+    const amountTotal  = Math.round((amountUntaxed + amountTax) * 100) / 100;
+    const amountPaid   = Math.round(
+      paymentLines.reduce((s: number, l: any) => s + l.amount, 0) * 100,
+    ) / 100;
+    const amountReturn = Math.max(
+      0,
+      Math.round((amountPaid - amountTotal) * 100) / 100,
+    );
+
+    // ── Create pos.order in Odoo ──────────────────────────────────────────
     const orderVals: Record<string, any> = {
       session_id:    sessionId,
       lines:         orderLines,
       payment_ids:   odooPayments,
       user_id:       parseInt(cashierId, 10) || false,
-      
+      amount_tax:    amountTax,
+      amount_total:  amountTotal,
+      amount_paid:   amountPaid,
+      amount_return: amountReturn,
     };
- 
-    if (customerId) {
-      orderVals.partner_id = customerId;
-    }
-    if (discountAmt) {
-      orderVals.global_discount_amount = discountAmt; // only if you have a custom field
-    }
- 
+
+    if (customerId) orderVals.partner_id = customerId;
+
     const orderId: number = await odooRequest("pos.order", "create", [orderVals]);
- 
-    // ── Mark order as paid (state: "paid") ──────────────────────────────────
-    // Odoo requires action_pos_order_paid to finalize
+
+    // ── Mark as paid ──────────────────────────────────────────────────────
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
     } catch {
-      // Some Odoo versions auto-transition; ignore if it fails
+      // Some Odoo versions auto-transition on creation — safe to ignore
     }
- 
+
     res.status(201).json({
       success: true,
       message: "Order created successfully",
       orderId,
     });
-  }
+  },
 );
  
 
