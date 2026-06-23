@@ -694,7 +694,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-    // ✅ Update stock via stock.quant (fixed — removed invalid inventory_quantity_auto_apply)
+    // ✅ Update stock via stock.quant with full Odoo verification before MongoDB sync
     if (stock !== undefined && stock !== null) {
       const variant = await odooRequest(
         "product.product",
@@ -735,7 +735,6 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (existingQuants.length) {
         quantId = existingQuants[0].id;
 
-        // ✅ Only set inventory_quantity — no fake fields
         await odooRequest("stock.quant", "write", [
           [quantId],
           { inventory_quantity: Number(stock) },
@@ -743,7 +742,6 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         console.log("✅ Existing quant updated, ID:", quantId);
       } else {
-        // ✅ Create new quant
         quantId = await odooRequest("stock.quant", "create", [
           {
             product_id: variant[0].id,
@@ -755,17 +753,43 @@ export const updateProduct = async (req: Request, res: Response) => {
         console.log("✅ New quant created, ID:", quantId);
       }
 
-      // ✅ Apply inventory adjustment — single call for both paths
+      // ✅ Apply inventory adjustment
       try {
-        const applyResult = await odooRequest(
+        await odooRequest(
           "stock.quant",
           "action_apply_inventory",
           [[quantId]],
           {},
         );
-        console.log("✅ Stock applied in Odoo, result:", JSON.stringify(applyResult));
+
+        // ✅ Verify Odoo actually committed the stock change
+        const verifiedQuant = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [[["id", "=", quantId]]],
+          { fields: ["quantity", "inventory_quantity"], limit: 1 },
+        );
+
+        if (!verifiedQuant.length) {
+          throw new Error(
+            `Could not find stock quant ID ${quantId} after apply — MongoDB will NOT be updated`
+          );
+        }
+
+        const actualQty = verifiedQuant[0].quantity; // confirmed on-hand qty in Odoo
+        const expectedQty = Number(stock);
+
+        console.log(
+          `✅ Odoo stock verified: expected=${expectedQty}, actual=${actualQty}`
+        );
+
+        if (Math.abs(actualQty - expectedQty) > 0.01) {
+          throw new Error(
+            `Odoo stock mismatch after apply: expected ${expectedQty}, got ${actualQty}. MongoDB will NOT be updated.`
+          );
+        }
       } catch (stockErr: any) {
-        console.error("❌ Odoo stock apply failed:", stockErr.message);
+        console.error("❌ Odoo stock apply/verify failed:", stockErr.message);
         throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
       }
     }
@@ -830,7 +854,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ Sync MongoDB — only after Odoo succeeds
+    // ✅ Only reaches here if ALL Odoo operations succeeded
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
     const finalPriceXCD =
@@ -865,7 +889,7 @@ export const updateProduct = async (req: Request, res: Response) => {
           },
         },
       },
-      { new: true },
+      { returnDocument: "after" }, // ✅ fixed deprecated `new: true`
     );
 
     res.json({
