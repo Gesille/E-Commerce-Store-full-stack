@@ -96,6 +96,7 @@ const POSSidebar = () => {
               {navItem("/pos/orders", <ClipboardList size={16} />, "POS Orders")}
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
               {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
+              {navItem("/pos/POSReport", <RotateCcw size={16} />, "POSReport")}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
