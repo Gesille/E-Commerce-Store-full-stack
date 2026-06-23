@@ -935,16 +935,24 @@ export const createOrder = CatchAsyncError(
     }
 
     // ── Build order lines ─────────────────────────────────────────────────
-    const orderLines: [0, 0, object][] = cart.map((item: any) => [
-      0,
-      0,
-      {
-        product_id: item.productId,
-        qty:        item.qty,
-        price_unit: item.price,
-        discount:   item.discount ?? 0,
-      },
-    ]);
+  // ── Build order lines ─────────────────────────────────────────────────
+const orderLines: [0, 0, object][] = cart.map((item: any) => {
+  const lineSubtotal = item.price * item.qty * (1 - (item.discount ?? 0) / 100);
+  const lineSubtotalIncl = Math.round(lineSubtotal * (1 + TAX_RATE) * 100) / 100;
+
+  return [
+    0,
+    0,
+    {
+      product_id:          item.productId,
+      qty:                 item.qty,
+      price_unit:          item.price,
+      discount:            item.discount ?? 0,
+      price_subtotal:      Math.round(lineSubtotal * 100) / 100,
+      price_subtotal_incl: lineSubtotalIncl,
+    },
+  ];
+});
 
     // ── Build payment lines ───────────────────────────────────────────────
     const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
