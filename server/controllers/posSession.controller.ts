@@ -1561,7 +1561,7 @@ export const getPosOrderById = CatchAsyncError(
 // Save held order to Odoo as draft quotation
 export const holdOrderToOdoo = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { cart, customerId, orderName, discount } = req.body;
+    const { cart, customerId, orderName } = req.body;
 
     if (!customerId)
       return next(new ErrorHandler("Customer required to hold order", 400));
@@ -1690,7 +1690,7 @@ export const getHeldOrders = CatchAsyncError(
 
 
 
-// remove hold order
+// remove hold order id
 export const removeHeldOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const id = Number(req.params.id);
