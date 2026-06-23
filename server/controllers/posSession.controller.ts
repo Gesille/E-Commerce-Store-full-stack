@@ -955,16 +955,12 @@ const orderLines: [0, 0, object][] = cart.map((item: any) => {
 });
 
     // ── Build payment lines ───────────────────────────────────────────────
-    const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
-      const pmId = resolvePaymentMethodId(pl);
-      const extra: Record<string, any> = {};
+   // ── Build payment lines ───────────────────────────────────────────────
+const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
+  const pmId = resolvePaymentMethodId(pl);
 
-      if (pl.method === "check" && pl.checkNumber) {
-        extra.memo = `Check #${pl.checkNumber}`;
-      }
-
-      return [0, 0, { payment_method_id: pmId, amount: pl.amount, ...extra }];
-    });
+  return [0, 0, { payment_method_id: pmId, amount: pl.amount }];
+});
 
     // ── Compute totals (all mandatory on pos.order) ───────────────────────
 
