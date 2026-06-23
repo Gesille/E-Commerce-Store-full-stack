@@ -156,8 +156,8 @@ function buildReceiptHTML(
     <div class="shop-name">${shopName}</div>
     <div class="shop-sub font-bold">${shopTagline}</div>
     <div class="shop-sub">${shopAddress}</div>
-    <div class="shop-sub">${shopPhone}</div>
-    <div class=""shop-sub>${shopABST}</div>
+    <div class="shop-sub">Phone: ${shopPhone}</div>
+    <div class=""shop-sub>ABST #${shopABST}</div>
   </div>
 
   <div class="thick-divider"></div>
