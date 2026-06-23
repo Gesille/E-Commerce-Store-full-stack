@@ -285,8 +285,8 @@ export default function PoliciesPage() {
                   textAlign: "left",
                   fontSize: "14px",
                   fontWeight: active === p.id ? 600 : 400,
-                  background: active === p.id ? "#2563eb" : "transparent",
-                  color: active === p.id ? "#fff" : "#2563eb",
+                 background: active === p.id ? "#2563eb" : "transparent",
+color: active === p.id ? "#fff" : "#2563eb",
                   transition: "all 0.15s ease",
                 }}
               >

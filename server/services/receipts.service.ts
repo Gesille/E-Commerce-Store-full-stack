@@ -274,6 +274,7 @@ const templateData = {
   shopABST:    process.env.SHOP_ABST    ?? "0161466",
   shopEmail:   process.env.SHOP_EMAIL   ?? "",
   logoUrl:     process.env.SHOP_LOGO_URL ?? "",
+  policyUrl: `${process.env.CLIENT_URL}/policy`,
 };
 
   
@@ -294,6 +295,6 @@ const templateData = {
     {}
   );
 
-  // 8️⃣ أرسل
+
   await odooRequest("mail.mail", "send", [[mailId]], {});
 }
