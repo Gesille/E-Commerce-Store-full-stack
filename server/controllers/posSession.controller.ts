@@ -991,7 +991,7 @@ export const createOrder = CatchAsyncError(
       lines:         orderLines,
       payment_ids:   odooPayments,
       user_id:       parseInt(cashierId, 10) || false,
-      note:          note ?? "",
+      
     };
  
     if (customerId) {
