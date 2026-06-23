@@ -934,7 +934,7 @@ export const createOrder = CatchAsyncError(
       }
     }
 
-    // ── Build order lines ─────────────────────────────────────────────────
+    const TAX_RATE = 0.17;
   // ── Build order lines ─────────────────────────────────────────────────
 const orderLines: [0, 0, object][] = cart.map((item: any) => {
   const lineSubtotal = item.price * item.qty * (1 - (item.discount ?? 0) / 100);
@@ -967,7 +967,7 @@ const orderLines: [0, 0, object][] = cart.map((item: any) => {
     });
 
     // ── Compute totals (all mandatory on pos.order) ───────────────────────
-    const TAX_RATE = 0.17;
+
 
     const amountUntaxed = cart.reduce((sum: number, item: any) => {
       return sum + item.price * item.qty * (1 - (item.discount ?? 0) / 100);
