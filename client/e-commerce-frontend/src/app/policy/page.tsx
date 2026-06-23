@@ -208,7 +208,7 @@ export default function PoliciesPage() {
             style={{
               width: "36px",
               height: "36px",
-              background: "#4a3728",
+              background: "#2563eb",
               borderRadius: "6px",
               display: "flex",
               alignItems: "center",
@@ -285,8 +285,8 @@ export default function PoliciesPage() {
                   textAlign: "left",
                   fontSize: "14px",
                   fontWeight: active === p.id ? 600 : 400,
-                  background: active === p.id ? "#4a3728" : "transparent",
-                  color: active === p.id ? "#fff" : "#4a3728",
+                  background: active === p.id ? "#2563eb" : "transparent",
+                  color: active === p.id ? "#fff" : "#2563eb",
                   transition: "all 0.15s ease",
                 }}
               >
@@ -359,7 +359,7 @@ export default function PoliciesPage() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#4a3728",
+                  color: "#2563eb",
                 }}
               >
                 {current.icon}
@@ -410,7 +410,7 @@ export default function PoliciesPage() {
                       style={{
                         width: "3px",
                         height: "18px",
-                        background: "#4a3728",
+                        background: "#2563eb",
                         borderRadius: "2px",
                       }}
                     />
