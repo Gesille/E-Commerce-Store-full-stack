@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Bell } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import SearchBar from "./SearchBar";
 import ShoppingCartIcon from "./ShoppingCartIcon";
 import { useSelector, useDispatch } from "react-redux";
@@ -41,7 +41,7 @@ const { setLoginOpen } = useAuth();
     { name: "categories", path: "/categories" },
     { name: "about", path: "/about" },
     { name: "contact", path: "/contact" },
-    { name: "Terms / Policy", path: "/policy" },
+    { name: "Terms/Policy", path: "/policy" },
   ];
   const logout = () => {
   dispatch(userLoggedOut());

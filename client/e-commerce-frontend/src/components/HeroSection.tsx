@@ -14,7 +14,7 @@ interface Product {
   image: string;
   accentColor: string;
   shapeType: 'circle' | 'square' | 'triangle';
-  icon: string; // أيقونة احتياطية في حال فشل الصورة
+  icon: string;
 }
 
 
