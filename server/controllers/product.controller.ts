@@ -623,6 +623,8 @@ export const decreaseStock = async (productId: number, qty: number) => {
   ]);
 };
 
+
+// update product
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -692,7 +694,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-    // ✅ Update stock via stock.quant (Odoo first, then Mongo)
+    // ✅ Update stock via stock.quant (fixed — removed invalid inventory_quantity_auto_apply)
     if (stock !== undefined && stock !== null) {
       const variant = await odooRequest(
         "product.product",
@@ -716,7 +718,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         throw new Error("No internal stock location found in Odoo");
       }
 
-      const existingQuant = await odooRequest(
+      const existingQuants = await odooRequest(
         "stock.quant",
         "search_read",
         [
@@ -725,37 +727,24 @@ export const updateProduct = async (req: Request, res: Response) => {
             ["location_id", "=", locations[0].id],
           ],
         ],
-        { fields: ["id", "quantity", "inventory_quantity"], limit: 1 },
+        { fields: ["id"], limit: 1 },
       );
 
-      if (existingQuant.length) {
-        // Update existing quant
+      let quantId: number;
+
+      if (existingQuants.length) {
+        quantId = existingQuants[0].id;
+
+        // ✅ Only set inventory_quantity — no fake fields
         await odooRequest("stock.quant", "write", [
-          [existingQuant[0].id],
-          {
-            inventory_quantity: Number(stock),
-            inventory_quantity_auto_apply: true,
-          },
+          [quantId],
+          { inventory_quantity: Number(stock) },
         ]);
 
-        try {
-          await odooRequest(
-            "stock.quant",
-            "action_apply_inventory",
-            [[existingQuant[0].id]],
-            {},
-          );
-          console.log(
-            "✅ Stock updated in Odoo for quant:",
-            existingQuant[0].id,
-          );
-        } catch (stockErr: any) {
-          console.error("❌ Odoo stock apply failed:", stockErr.message);
-          throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
-        }
+        console.log("✅ Existing quant updated, ID:", quantId);
       } else {
-        // Create new quant
-        const quantId = await odooRequest("stock.quant", "create", [
+        // ✅ Create new quant
+        quantId = await odooRequest("stock.quant", "create", [
           {
             product_id: variant[0].id,
             location_id: locations[0].id,
@@ -763,23 +752,21 @@ export const updateProduct = async (req: Request, res: Response) => {
           },
         ]);
 
-        try {
-          await odooRequest(
-            "stock.quant",
-            "action_apply_inventory",
-            [[quantId]],
-            {},
-          );
-          console.log("✅ New stock quant created and applied in Odoo:", quantId);
-        } catch (stockErr: any) {
-          console.error(
-            "❌ Odoo new quant apply failed:",
-            stockErr.message,
-          );
-          throw new Error(
-            `Stock sync to Odoo failed: ${stockErr.message}`,
-          );
-        }
+        console.log("✅ New quant created, ID:", quantId);
+      }
+
+      // ✅ Apply inventory adjustment — single call for both paths
+      try {
+        const applyResult = await odooRequest(
+          "stock.quant",
+          "action_apply_inventory",
+          [[quantId]],
+          {},
+        );
+        console.log("✅ Stock applied in Odoo, result:", JSON.stringify(applyResult));
+      } catch (stockErr: any) {
+        console.error("❌ Odoo stock apply failed:", stockErr.message);
+        throw new Error(`Stock sync to Odoo failed: ${stockErr.message}`);
       }
     }
 
@@ -891,7 +878,6 @@ export const updateProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 // delete product
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
