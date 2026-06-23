@@ -3,315 +3,359 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Receipt - <%= receiptNo %></title>
+  <title>Receipt - RCP-263</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, Helvetica, sans-serif; background: #f4f4f4; padding: 24px; }
+
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background: #EDECE8;
+      padding: 32px 16px;
+      min-height: 100vh;
+    }
 
     .receipt-wrap {
-      max-width: 520px;
+      max-width: 480px;
       margin: 0 auto;
       background: #ffffff;
-      border: 1px solid #d0d0d0;
-      color: #111111;
+      color: #1a1a1a;
       font-size: 13px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
     }
 
     /* ── HEADER ── */
     .receipt-header {
-      border-bottom: 2px solid #111111;
-      padding: 20px 24px 16px;
+      padding: 24px 24px 20px;
+      border-bottom: 1px solid #e5e3de;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
     }
-    .shop-logo {
-      max-height: 52px;
-      margin-bottom: 8px;
-      display: block;
-    }
-    .shop-name {
+    .header-logo {
+      flex-shrink: 0;
+      width: 60px;
+      height: 60px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
       font-size: 22px;
       font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-family: 'Playfair Display', serif;
+      letter-spacing: -0.02em;
+    }
+    .header-info { flex: 1; }
+    .shop-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 0.01em;
+      line-height: 1.1;
     }
     .shop-tagline {
-      font-size: 10px;
-      color: #666;
+      font-size: 9.5px;
+      color: #888;
       margin-top: 3px;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.10em;
       text-transform: uppercase;
     }
     .shop-contact {
       font-size: 11.5px;
-      color: #444;
+      color: #555;
       margin-top: 10px;
-      line-height: 1.75;
+      line-height: 1.8;
+    }
+    .shop-contact strong {
+      color: #1a1a1a;
+      font-weight: 600;
     }
 
     /* ── META BAR ── */
     .meta-bar {
-      background: #f7f7f7;
-      border-bottom: 1px solid #d0d0d0;
-      padding: 10px 24px;
+      background: #F7F6F2;
+      border-bottom: 1px solid #e5e3de;
+      padding: 12px 24px;
       display: flex;
-      flex-wrap: wrap;
       gap: 0;
     }
     .meta-item {
+      flex: 1;
       display: flex;
       flex-direction: column;
-      min-width: 100px;
-      padding-right: 28px;
-      margin-right: 28px;
-      border-right: 1px solid #ddd;
-      padding-top: 4px;
-      padding-bottom: 4px;
+      gap: 3px;
     }
-    .meta-item:last-child {
-      border-right: none;
-      margin-right: 0;
-      padding-right: 0;
+    .meta-item + .meta-item {
+      border-left: 1px solid #dddbd6;
+      padding-left: 16px;
+      margin-left: 16px;
     }
     .meta-label {
-      font-size: 9px;
+      font-size: 8.5px;
       text-transform: uppercase;
-      letter-spacing: 0.09em;
-      color: #999;
-      margin-bottom: 2px;
+      letter-spacing: 0.12em;
+      color: #aaa;
+      font-weight: 600;
     }
     .meta-value {
       font-weight: 700;
-      color: #111;
+      color: #1a1a1a;
       font-size: 12.5px;
+      line-height: 1.3;
     }
 
     /* ── BILL TO ── */
     .bill-section {
-      padding: 14px 24px 16px;
-      border-bottom: 1px solid #d0d0d0;
+      padding: 14px 24px;
+      border-bottom: 1px solid #e5e3de;
+      background: #fdfcfb;
     }
     .section-label {
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 700;
-      letter-spacing: 0.09em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #999;
+      color: #aaa;
       margin-bottom: 5px;
     }
     .bill-name {
       font-weight: 700;
       font-size: 13.5px;
-      color: #111;
+      color: #1a1a1a;
     }
     .bill-sub {
       font-size: 11.5px;
-      color: #555;
+      color: #666;
       margin-top: 2px;
       line-height: 1.65;
     }
-    .bill-abst {
-      font-size: 11.5px;
-      color: #444;
-      margin-top: 6px;
-    }
-    .bill-abst strong {
-      color: #111;
-    }
 
     /* ── ITEMS TABLE ── */
-    .items-area {
-      border-bottom: 1px solid #d0d0d0;
-    }
-    .items-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+    .items-area { border-bottom: 1px solid #e5e3de; }
+    .items-table { width: 100%; border-collapse: collapse; }
     .items-table thead tr {
-      background: #ebebeb;
-      border-bottom: 1px solid #d0d0d0;
+      background: #F7F6F2;
+      border-bottom: 1px solid #e5e3de;
     }
     .items-table th {
-      padding: 6px 24px;
-      font-size: 9.5px;
+      padding: 8px 24px;
+      font-size: 9px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: #555;
+      letter-spacing: 0.10em;
+      color: #999;
       text-align: left;
     }
     .items-table th.right,
     .items-table td.right { text-align: right; }
     .items-table td {
-      padding: 9px 24px;
+      padding: 11px 24px;
       font-size: 12.5px;
-      border-bottom: 1px solid #f0f0f0;
-      color: #111;
-      vertical-align: top;
+      border-bottom: 1px solid #f4f3f0;
+      color: #1a1a1a;
+      vertical-align: middle;
     }
     .items-table tbody tr:last-child td { border-bottom: none; }
-    .discount-line td { color: #777; font-size: 11.5px; font-style: italic; }
+    .item-name { font-weight: 500; }
+    .item-sku {
+      font-size: 10.5px;
+      color: #aaa;
+      margin-top: 2px;
+      font-weight: 400;
+    }
+    .discount-row td {
+      padding-top: 2px;
+      padding-bottom: 8px;
+      font-size: 11px;
+      color: #c0392b;
+    }
 
     /* ── TOTALS ── */
-    .totals-section {
-      border-top: 2px solid #111;
-    }
-    .totals-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+    .totals-section { padding: 0; }
+    .totals-table { width: 100%; border-collapse: collapse; }
     .totals-table td {
-      padding: 6px 24px;
+      padding: 7px 24px;
       font-size: 12.5px;
-      color: #111;
+      color: #444;
     }
     .totals-table td:last-child { text-align: right; }
 
-    .row-subtotal td { padding-top: 10px; }
-    .row-tax td { color: #555; }
+    .row-subtotal td { padding-top: 14px; }
+    .row-tax td { color: #888; font-size: 12px; }
 
+    .row-divider td {
+      padding: 0;
+      height: 1px;
+      background: #1a1a1a;
+    }
+
+    /* ── TOTAL ROW ── */
     .row-total {
-      border-top: 2px solid #111;
+      background: #1a1a1a;
     }
     .row-total td {
-      padding: 10px 24px;
-      font-size: 16px;
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    /* ── PAYMENT ROWS ── */
+    .row-paid td {
+      padding: 10px 24px 6px;
+      color: #555;
+      font-size: 12.5px;
+    }
+    .payment-method-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .payment-pill {
+      display: inline-block;
+      background: #F7F6F2;
+      color: #1a1a1a;
+      border: 1px solid #dddbd6;
+      padding: 2px 9px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-weight: 700;
+      border-radius: 20px;
+    }
+
+    /* ── CHANGE ROW ── */
+    .row-change td {
+      padding: 6px 24px 16px;
+      font-size: 13px;
+      color: #1a6b45;
       font-weight: 700;
     }
-
-    .row-paid {
-      background: #f5f5f5;
-      border-top: 1px solid #d0d0d0;
-    }
-    .row-paid td { padding: 7px 24px; font-size: 12.5px; color: #333; }
-
-    .row-change {
-      background: #f5f5f5;
-    }
-    .row-change td {
-      padding: 6px 24px 10px;
-      font-size: 12.5px;
-      color: #059669;
-      font-weight: 600;
-    }
-
-    .payment-badge {
+    .change-badge {
       display: inline-block;
-      background: #111;
-      color: #fff;
-      padding: 2px 7px;
-      font-size: 9.5px;
+      background: #d1fae5;
+      color: #065f46;
+      padding: 1px 8px;
+      font-size: 9px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.09em;
+      font-weight: 700;
+      border-radius: 20px;
       margin-left: 6px;
       vertical-align: middle;
     }
 
-    /* ── POLICY STRIP ── */
+    /* ── POLICY ── */
     .policy-strip {
-      padding: 16px 24px;
+      padding: 14px 24px;
       text-align: center;
-      font-size: 12px;
-      border-top: 1px solid #e5e5e5;
-      color: #555;
+      font-size: 11.5px;
+      border-top: 1px solid #e5e3de;
+      color: #888;
       line-height: 1.7;
     }
     .policy-strip a {
-      color: #2563eb;
-      text-decoration: none;
+      color: #1a1a1a;
+      text-decoration: underline;
+      text-underline-offset: 2px;
       font-weight: 600;
+      font-size: 12px;
     }
 
     /* ── FOOTER ── */
     .footer-strip {
-      background: #111;
-      color: #fff;
+      background: #F7F6F2;
+      border-top: 1px solid #e5e3de;
       text-align: center;
-      padding: 11px 24px;
+      padding: 12px 24px;
       font-size: 10px;
-      letter-spacing: 0.09em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
+      color: #888;
+      font-weight: 600;
+    }
+    .footer-strip span {
+      color: #1a1a1a;
+      font-weight: 700;
     }
   </style>
 </head>
 <body>
   <div class="receipt-wrap">
 
-    <!-- HEADER -->
+    <!-- HEADER: logo + shop info side by side -->
     <div class="receipt-header">
-      <% if (logoUrl) { %>
-        <img class="shop-logo" src="<%= logoUrl %>" alt="<%= shopName %>" />
-      <% } %>
-      <div class="shop-name"><%= shopName %></div>
-      <% if (shopTagline) { %>
-        <div class="shop-tagline"><%= shopTagline %></div>
-      <% } %>
-      <div class="shop-contact">
-        Phone # <%= shopPhone %><br>
-        <% if (shopEmail) { %><%= shopEmail %><br><% } %>
-        ABST # <%= shopABST %><br>
-        <% if (shopAddress) { %><%= shopAddress %><% } %>
+      <div class="header-logo">CW</div>
+      <div class="header-info">
+        <div class="shop-name">Chef's World</div>
+        <div class="shop-tagline">Restaurant, Bar &amp; Kitchen Supplies</div>
+        <div class="shop-contact">
+          <strong>560-2433</strong> &nbsp;·&nbsp; ABST #&nbsp;0161466<br>
+          Epicurean Drive, Saint John
+        </div>
       </div>
     </div>
 
-    <!-- META BAR -->
+    <!-- META BAR: clean horizontal strip -->
     <div class="meta-bar">
       <div class="meta-item">
-        <span class="meta-label">Receipt No</span>
-        <span class="meta-value"><%= receiptNo %></span>
+        <span class="meta-label">Receipt</span>
+        <span class="meta-value">RCP-263</span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Date</span>
-        <span class="meta-value"><%= date %></span>
+        <span class="meta-value">Jun 23, 2026</span>
       </div>
-      <% if (odooOrderId) { %>
       <div class="meta-item">
-        <span class="meta-label">Order ID</span>
-        <span class="meta-value">#<%= odooOrderId %></span>
+        <span class="meta-label">Time</span>
+        <span class="meta-value">4:29 PM</span>
       </div>
-      <% } %>
+      <div class="meta-item">
+        <span class="meta-label">Order</span>
+        <span class="meta-value">#263</span>
+      </div>
     </div>
 
     <!-- BILL TO -->
-    <% if (customerName) { %>
     <div class="bill-section">
       <div class="section-label">Bill To</div>
-      <div class="bill-name"><%= customerName %></div>
-      <% if (customerAddress) { %>
-        <div class="bill-sub"><%= customerAddress %></div>
-      <% } %>
-      <% if (customerAbst) { %>
-        <div class="bill-abst">Cust ABST # &nbsp;<strong><%= customerAbst %></strong></div>
-      <% } %>
+      <div class="bill-name">Big Banana Managment Company Ltd </div>
+      <div class="bill-name">V.C. Bird International Airport </div>
     </div>
-    <% } %>
 
-    <!-- ITEMS -->
+    <!-- ITEMS TABLE -->
     <div class="items-area">
       <table class="items-table">
         <thead>
           <tr>
-            <th style="width:46px;">Qty</th>
+            <th style="width:40px;">Qty</th>
             <th>Description</th>
-            <th class="right" style="width:100px;">Price Each</th>
-            <th class="right" style="width:108px;">Amount</th>
+            <th class="right" style="width:90px;">Unit Price</th>
+            <th class="right" style="width:90px;">Amount</th>
           </tr>
         </thead>
         <tbody>
-          <% lines.forEach(function(line) { %>
-            <tr>
-              <td><%= line.qty %></td>
-              <td><%= line.name %></td>
-              <td class="right">$<%= line.priceUnit.toFixed(2) %></td>
-              <td class="right">$<%= line.priceTotal.toFixed(2) %></td>
-            </tr>
-            <% if (line.discount > 0) { %>
-            <tr class="discount-line">
-              <td></td>
-              <td>Discount (<%= line.discount %>%)</td>
-              <td class="right"></td>
-              <td class="right" style="color:#dc2626;">-$<%= (line.priceUnit * line.qty * line.discount / 100).toFixed(2) %></td>
-            </tr>
-            <% } %>
-          <% }); %>
+          <tr>
+            <td>1</td>
+            <td>
+              <div class="item-name">Airpot 1</div>
+              <div class="item-sku">[1]</div>
+            </td>
+            <td class="right">$222.03</td>
+            <td class="right">$259.78</td>
+          </tr>
+          <tr>
+            <td>1</td>
+            <td>
+              <div class="item-name">Bell Pitcher</div>
+            </td>
+            <td class="right">$1.00</td>
+            <td class="right">$1.17</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -321,45 +365,47 @@
       <table class="totals-table">
         <tr class="row-subtotal">
           <td>Subtotal</td>
-          <td>$<%= subtotal.toFixed(2) %></td>
+          <td>$223.03</td>
         </tr>
         <tr class="row-tax">
           <td>Tax (17%)</td>
-          <td>$<%= tax.toFixed(2) %></td>
+          <td>$37.92</td>
         </tr>
+        <tr class="row-divider"><td colspan="2"></td></tr>
         <tr class="row-total">
           <td>Total</td>
-          <td>$<%= total.toFixed(2) %></td>
+          <td>$260.95</td>
         </tr>
-        <% paymentLines.forEach(function(p) { %>
+        <!-- Payment method — clean pill badge, no redundant label -->
         <tr class="row-paid">
           <td>
-            <span style="text-transform:capitalize;"><%= p.method %></span>
-            <span class="payment-badge"><%= p.method %></span>
+            <span class="payment-method-label">
+              Cash
+              <span class="payment-pill">Cash</span>
+            </span>
           </td>
-          <td>$<%= p.amount.toFixed(2) %></td>
+          <td>$270.00</td>
         </tr>
-        <% }); %>
-        <% if (change > 0.005) { %>
+        <!-- Change — green highlight, clearly visible -->
         <tr class="row-change">
-          <td>Change</td>
-          <td>$<%= change.toFixed(2) %></td>
+          <td>
+            Change
+            <span class="change-badge">Returned</span>
+          </td>
+          <td>$9.05</td>
         </tr>
-        <% } %>
       </table>
     </div>
 
     <!-- POLICY -->
-    <% if (policyUrl) { %>
     <div class="policy-strip">
-      View our store policies:<br>
-      <a href="<%= policyUrl %>" target="_blank">Return Policy &amp; Terms</a>
+      Questions about this purchase?<br>
+      <a href="#">View Return Policy &amp; Terms</a>
     </div>
-    <% } %>
 
-    <!-- FOOTER -->
+    <!-- FOOTER: light, not heavy -->
     <div class="footer-strip">
-      Thank you for your purchase &nbsp;&middot;&nbsp; <%= shopName %>
+      Thank you &nbsp;·&nbsp; <span>Chef's World</span>
     </div>
 
   </div>
