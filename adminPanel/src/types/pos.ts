@@ -40,10 +40,14 @@ export interface Category {
   catTitle: string;
 }
 
-export interface PaymentLine {
-  method: "cash" | "card" | "bank";
-  amount: number;
-}
+export type CardBrand = "visa" | "mastercard" | "amex";
+ 
+export type PaymentLine =
+  | { method: "cash";  amount: number }
+  | { method: "card";  amount: number; cardBrand: CardBrand }
+  | { method: "bank";  amount: number }
+  | { method: "check"; amount: number; checkNumber: string };
+ 
 export interface Customer {
   id: number;
   name: string;

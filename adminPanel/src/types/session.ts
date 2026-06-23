@@ -47,11 +47,15 @@ export interface CartItem {
   discount?: number;
 }
 
-export interface PaymentLine {
-  method: "cash" | "card" | "bank";
-  amount: number;
-}
-
+export type CardBrand = "visa" | "mastercard" | "amex";
+ 
+// Discriminated union — every method carries exactly what it needs
+export type PaymentLineBody =
+  | { method: "cash";  amount: number }
+  | { method: "card";  amount: number; cardBrand: CardBrand }
+  | { method: "bank";  amount: number }
+  | { method: "check"; amount: number; checkNumber: string };
+ 
 export interface Product {
   id: number;
   name: string;
@@ -91,7 +95,7 @@ export interface POSOrder {
 
   cart: CartItem[];
 
-  paymentLines: PaymentLine[];
+  paymentLines: PaymentLineBody[];
 
   subtotal: number;
   total: number;
@@ -126,16 +130,23 @@ export interface CashierShiftBody {
   reason?: string;
 }
 
-export interface CreateOrderBody {
-  cart: CartItem[];
-  paymentLines: PaymentLine[];
 
+export interface CreateOrderBody {
+  cart: {
+    productId: number;
+    qty: number;
+    price: number;
+    discount?: number;
+    note?: string;
+  }[];
+  paymentLines: PaymentLineBody[];
   cashierId: string;
   configId: number;
-
   customerId?: number;
   note?: string;
+  discountAmt?: number;
 }
+
 
 export interface CreateCustomerBody {
   name: string;

@@ -308,61 +308,59 @@ useEffect(() => {
 
   const [createOrder, { isLoading: isSubmitting }] = useCreateOrderMutation();
 
-  const handlePaymentConfirm = async (lines: PaymentLine[]) => {
-    if (!activeOrder || !session) return;
-
-    const rawCashierId = session.activeShift?.cashierId;
-
-    const cashierId: string =
-      rawCashierId == null
-        ? ""
-        : typeof rawCashierId === "object"
-          ? (rawCashierId as any)._id ?? ""
-          : String(rawCashierId);
-
-    if (!cashierId) {
-      alert(
-        "No active cashier shift found. Please switch cashier or reopen the session.",
-      );
-      return;
-    }
-
-    if (!activeConfigId) {
-      alert("No POS config selected. Please reopen the session.");
-      return;
-    }
-
-    try {
-      const result = await createOrder({
-        cart: activeOrder.cart.map((item) => ({
-          productId: item.productId,
-          qty: item.qty,
-          price: item.price,
-          discount: item.discount ?? 0,
-          note: item.note ?? "",
-        })),
-        paymentLines: lines.map((l) => ({
-          method: l.method as "cash" | "card" | "bank",
-          amount: l.amount,
-        })),
-        cashierId,
-        configId: activeConfigId,
-        customerId: activeMeta.customer?.id ?? undefined,
-        note: activeMeta.note ?? "",
-      }).unwrap();
-
-      setReceipt({
-        order: { ...activeOrder },
-        paymentLines: lines,
-        odooOrderId: result.orderId,
-      });
-      updateCart([]);
-      setMeta({ customer: null, note: "" });
-      setShowPayment(false);
-    } catch (err: any) {
-      alert(err?.data?.message ?? "Order failed. Please try again.");
-    }
-  };
+ const handlePaymentConfirm = async (lines: PaymentLine[]) => {
+  if (!activeOrder || !session) return;
+ 
+  const rawCashierId = session.activeShift?.cashierId;
+ 
+  const cashierId: string =
+    rawCashierId == null
+      ? ""
+      : typeof rawCashierId === "object"
+      ? (rawCashierId as any)._id ?? ""
+      : String(rawCashierId);
+ 
+  if (!cashierId) {
+    alert("No active cashier shift found. Please switch cashier or reopen the session.");
+    return;
+  }
+ 
+  if (!activeConfigId) {
+    alert("No POS config selected. Please reopen the session.");
+    return;
+  }
+ 
+  try {
+    const result = await createOrder({
+      cart: activeOrder.cart.map((item) => ({
+        productId: item.productId,
+        qty:       item.qty,
+        price:     item.price,
+        discount:  item.discount ?? 0,
+        note:      item.note ?? "",
+      })),
+ 
+      // ← pass the full discriminated union; cardBrand and checkNumber included
+      paymentLines: lines,
+ 
+      cashierId,
+      configId: activeConfigId,
+      customerId: activeMeta.customer?.id ?? undefined,
+      note: activeMeta.note ?? "",
+    }).unwrap();
+ 
+    setReceipt({
+      order: { ...activeOrder },
+      paymentLines: lines,
+      odooOrderId: result.orderId,
+    });
+    updateCart([]);
+    setMeta({ customer: null, note: "" });
+    setShowPayment(false);
+  } catch (err: any) {
+    alert(err?.data?.message ?? "Order failed. Please try again.");
+  }
+};
 
   const handleNewOrderAfterReceipt = () => {
     removeOrder(activeOrderId);
