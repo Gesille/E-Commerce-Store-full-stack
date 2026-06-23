@@ -228,57 +228,53 @@ export async function sendReceiptByEmailService(
     { fields: ["payment_method_id", "amount"] }
   );
 
+const subtotal = order.amount_total - order.amount_tax;
+const change =
+  order.amount_paid - order.amount_total > 0
+    ? order.amount_paid - order.amount_total
+    : 0;
 
-  const subtotal = order.amount_total - order.amount_tax;
-  const change =
-    order.amount_paid - order.amount_total > 0
-      ? order.amount_paid - order.amount_total
-      : 0;
-  const paymentMethod =
-    payments?.[0]?.payment_method_id?.[1] ?? "Cash";
+const templateData = {
+  // ── Receipt identity ──
+  receiptNo: `RCP-${String(orderId).slice(-6)}`,
+  date: new Date(order.date_order).toLocaleString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+  odooOrderId: orderId,
+  customerName: order.partner_id ? order.partner_id[1] : null,
 
-  const templateData = {
- 
-    orderName: order.name,
-    dateOrder: new Date(order.date_order).toLocaleString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }),
-    servedBy: order.user_id?.[1] ?? "Staff",
-    customerName: order.partner_id ? order.partner_id[1] : null,
-    orderType: "Dine In",
+  // ── Lines ──
+  lines: lines.map((l: any) => ({
+    qty: l.qty,
+    name: l.product_id[1],
+    priceUnit: Number(l.price_unit),
+    priceTotal: Number(l.price_subtotal_incl),
+    discount: Number(l.discount) || 0,
+  })),
 
-   
-    lines: lines.map((l: any) => ({
-      qty: l.qty,
-      name: l.product_id[1],
-      priceUnit: Number(l.price_unit),
-      priceTotal: Number(l.price_subtotal_incl),
-      discount: Number(l.discount) || 0,
-    })),
+  // ── Totals ──
+  subtotal: Number(subtotal),
+  tax: Number(order.amount_tax),
+  total: Number(order.amount_total),
+  paymentLines: payments.map((p: any) => ({
+    method: p.payment_method_id?.[1] ?? "Cash",
+    amount: Number(p.amount),
+  })),
+  change: Number(change),
 
-   
-    subtotal: Number(subtotal),
-    tax: Number(order.amount_tax),
-    total: Number(order.amount_total),
-    amountPaid: Number(order.amount_paid),
-    change: Number(change),
-    paymentMethod,
-
-    shopName: process.env.SHOP_NAME ?? "Chef's World",
-    shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
-    shopAddress: process.env.SHOP_ADDRESS ?? "",
-    shopPhone: process.env.SHOP_PHONE ?? "",
-    shopEmail: process.env.SHOP_EMAIL ?? "",
-    logoUrl: process.env.SHOP_LOGO_URL ?? "",
-    ticketUrl: process.env.ODOO_TICKET_URL
-      ? `${process.env.ODOO_TICKET_URL}`
-      : null,
-  };
+  // ── Shop ──
+  shopName:    process.env.SHOP_NAME    ?? "Chef's World",
+  shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
+  shopAddress: process.env.SHOP_ADDRESS ?? "Epicurean Drive, Saint John",
+  shopPhone:   process.env.SHOP_PHONE   ?? "560-2433",
+  shopABST:    process.env.SHOP_ABST    ?? "0161466",
+  shopEmail:   process.env.SHOP_EMAIL   ?? "",
+  logoUrl:     process.env.SHOP_LOGO_URL ?? "",
+};
 
   
   const templatePath = path.join(__dirname, "../mails/receiptEmail.ejs");
