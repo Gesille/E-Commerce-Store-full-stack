@@ -871,6 +871,15 @@ export const createOrder = CatchAsyncError(
     }
     const sessionId = sessions[0].id;
 
+    // ── Fetch picking_type_id from POS config (needed for stock moves) ────
+    const configs = await odooRequest(
+      "pos.config",
+      "search_read",
+      [[["id", "=", configId]]],
+      { fields: ["id", "picking_type_id"], limit: 1 },
+    );
+    const pickingTypeId: number | null = configs[0]?.picking_type_id?.[0] ?? null;
+
     // ── Fetch all Odoo payment methods ────────────────────────────────────
     const allPMs = await odooRequest(
       "pos.payment.method",
@@ -935,36 +944,33 @@ export const createOrder = CatchAsyncError(
     }
 
     const TAX_RATE = 0.17;
-  // ── Build order lines ─────────────────────────────────────────────────
-const orderLines: [0, 0, object][] = cart.map((item: any) => {
-  const lineSubtotal = item.price * item.qty * (1 - (item.discount ?? 0) / 100);
-  const lineSubtotalIncl = Math.round(lineSubtotal * (1 + TAX_RATE) * 100) / 100;
 
-  return [
-    0,
-    0,
-    {
-      product_id:          item.productId,
-      qty:                 item.qty,
-      price_unit:          item.price,
-      discount:            item.discount ?? 0,
-      price_subtotal:      Math.round(lineSubtotal * 100) / 100,
-      price_subtotal_incl: lineSubtotalIncl,
-    },
-  ];
-});
+    // ── Build order lines ─────────────────────────────────────────────────
+    const orderLines: [0, 0, object][] = cart.map((item: any) => {
+      const lineSubtotal = item.price * item.qty * (1 - (item.discount ?? 0) / 100);
+      const lineSubtotalIncl = Math.round(lineSubtotal * (1 + TAX_RATE) * 100) / 100;
+
+      return [
+        0,
+        0,
+        {
+          product_id:          item.productId,
+          qty:                 item.qty,
+          price_unit:          item.price,
+          discount:            item.discount ?? 0,
+          price_subtotal:      Math.round(lineSubtotal * 100) / 100,
+          price_subtotal_incl: lineSubtotalIncl,
+        },
+      ];
+    });
 
     // ── Build payment lines ───────────────────────────────────────────────
-   // ── Build payment lines ───────────────────────────────────────────────
-const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
-  const pmId = resolvePaymentMethodId(pl);
+    const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
+      const pmId = resolvePaymentMethodId(pl);
+      return [0, 0, { payment_method_id: pmId, amount: pl.amount }];
+    });
 
-  return [0, 0, { payment_method_id: pmId, amount: pl.amount }];
-});
-
-    // ── Compute totals (all mandatory on pos.order) ───────────────────────
-
-
+    // ── Compute totals ────────────────────────────────────────────────────
     const amountUntaxed = cart.reduce((sum: number, item: any) => {
       return sum + item.price * item.qty * (1 - (item.discount ?? 0) / 100);
     }, 0);
@@ -984,16 +990,40 @@ const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
       session_id:    sessionId,
       lines:         orderLines,
       payment_ids:   odooPayments,
-     
       amount_tax:    amountTax,
       amount_total:  amountTotal,
       amount_paid:   amountPaid,
       amount_return: amountReturn,
+      ...(pickingTypeId && { picking_type_id: pickingTypeId }),
     };
 
     if (customerId) orderVals.partner_id = customerId;
 
     const orderId: number = await odooRequest("pos.order", "create", [orderVals]);
+
+    // ── Save to MongoDB POSOrder for shift tracking ───────────────────────
+    try {
+      const shift = await CashierShiftLog.findOne({
+        cashierId,
+        state: { $in: ["active", "paused"] },
+      }).sort({ startTime: -1 });
+
+     await POSOrder.create({
+  odooOrderId:  orderId,
+  shiftId:      shift?._id ?? undefined,
+  cashierId,
+  sessionId,
+  subtotal:     Math.round(amountUntaxed * 100) / 100,
+  total:        amountTotal,
+  status:       "paid",
+  paymentLines: paymentLines.map((pl: any) => ({
+    method: pl.method,
+    amount: pl.amount,
+  })),
+});
+    } catch (e) {
+      console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
+    }
 
     // ── Mark as paid ──────────────────────────────────────────────────────
     try {
@@ -1002,13 +1032,39 @@ const odooPayments: [0, 0, object][] = paymentLines.map((pl: any) => {
       // Some Odoo versions auto-transition on creation — safe to ignore
     }
 
+    // ── Validate stock picking to decrement inventory ─────────────────────
+    try {
+      const [createdOrder] = await odooRequest(
+        "pos.order",
+        "search_read",
+        [[["id", "=", orderId]]],
+        { fields: ["picking_id", "picking_ids"] },
+      );
+
+      const pickingIds: number[] =
+        createdOrder?.picking_ids?.length
+          ? createdOrder.picking_ids
+          : createdOrder?.picking_id
+            ? [createdOrder.picking_id[0]]
+            : [];
+
+      if (pickingIds.length) {
+        await odooRequest("stock.picking", "button_validate", [pickingIds]);
+        console.log(`[POS] Stock picking validated for order ${orderId}:`, pickingIds);
+      } else {
+        console.warn(`[POS] No stock picking found for order ${orderId} — inventory may update at session close`);
+      }
+    } catch (e) {
+      console.warn("[POS] Stock picking validation skipped:", e);
+    }
+
     res.status(201).json({
       success: true,
       message: "Order created successfully",
       orderId,
     });
   },
-)
+);
 
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
