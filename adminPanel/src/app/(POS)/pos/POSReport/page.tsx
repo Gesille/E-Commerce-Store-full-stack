@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   Calendar,
   ChevronLeft,
@@ -9,7 +9,6 @@ import {
   Download,
   RefreshCw,
   TrendingUp,
-  TrendingDown,
   CreditCard,
   Banknote,
   Building2,
@@ -20,8 +19,10 @@ import {
   BarChart3,
   Layers,
 } from "lucide-react";
+import { useGetDailyClosingReportQuery, useGetMonthlyCalendarReportQuery, useSubmitCashCountMutation } from "@/redux/report/posClosingReportApi";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+
+// ─── Types (local only) ───────────────────────────────────────────────────────
 
 interface DenominationEntry {
   value: number;
@@ -29,38 +30,11 @@ interface DenominationEntry {
   count: number;
 }
 
-interface PaymentSummary {
-  cash: number;
-  card: number;
-  bank: number;
-  check: number;
-  total: number;
-}
-
-interface DailyReport {
-  date: string;
-  ordersCount: number;
-  grossSales: number;
-  discounts: number;
-  refunds: number;
-  netSales: number;
-  tax: number;
-  payments: PaymentSummary;
-  denominations: DenominationEntry[];
-  openingBalance: number;
-  closingBalance: number;
-  sessionName: string;
-  cashierName: string;
-  avgOrderValue: number;
-  topProduct: string;
-}
-
 interface MonthDay {
   date: string;
   dayNum: number;
   ordersCount: number;
   netSales: number;
-  isCurrentMonth: boolean;
   isToday: boolean;
   isSelected: boolean;
 }
@@ -88,84 +62,17 @@ const fmt = (n: number) =>
   }).format(n);
 
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-US", {
+  new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-// ─── Mock API (replace with real RTK Query hooks) ─────────────────────────────
-
-async function fetchDailyReport(date: string): Promise<DailyReport> {
-  // Replace this with: await getDailyPOSReport(date).unwrap()
-  // which should call GET /api/pos/reports/daily?date=YYYY-MM-DD
-  await new Promise((r) => setTimeout(r, 600));
-
-  const seed = date.split("-").reduce((a, b) => a + parseInt(b), 0);
-  const rng = (min: number, max: number) =>
-    min + ((seed * 1234567 + min * 9999) % (max - min));
-
-  const orders = rng(12, 80);
-  const gross = rng(800, 6000);
-  const disc = rng(0, gross * 0.1);
-  const refunds = rng(0, gross * 0.05);
-  const net = gross - disc - refunds;
-  const tax = net * 0.17;
-  const cash = net * 0.45;
-  const card = net * 0.35;
-  const bank = net * 0.12;
-  const check = net * 0.08;
-
-  const denominations: DenominationEntry[] = [
-    { value: 100, label: "100", count: Math.floor(rng(0, 20)) },
-    { value: 50, label: "50", count: Math.floor(rng(0, 30)) },
-    { value: 20, label: "20", count: Math.floor(rng(0, 40)) },
-    { value: 10, label: "10", count: Math.floor(rng(0, 50)) },
-    { value: 5, label: "5", count: Math.floor(rng(0, 30)) },
-    { value: 1, label: "1", count: Math.floor(rng(0, 100)) },
-    { value: 0.25, label: "0.25", count: Math.floor(rng(0, 80)) },
-    { value: 0.1, label: "0.10", count: Math.floor(rng(0, 60)) },
-    { value: 0.05, label: "0.05", count: Math.floor(rng(0, 40)) },
-  ];
-
-  return {
-    date,
-    ordersCount: orders,
-    grossSales: gross,
-    discounts: disc,
-    refunds,
-    netSales: net,
-    tax,
-    payments: { cash, card, bank, check, total: net },
-    denominations,
-    openingBalance: rng(200, 500),
-    closingBalance: cash + rng(200, 500),
-    sessionName: `POS/${date.replace(/-/g, "")}`,
-    cashierName: ["Ahmed K.", "Sara M.", "Yusuf A."][seed % 3],
-    avgOrderValue: net / orders,
-    topProduct: ["Grilled Chicken", "Caesar Salad", "Pasta Carbonara", "Beef Burger"][seed % 4],
-  };
-}
-
-async function fetchMonthSummary(
-  year: number,
-  month: number
-): Promise<{ date: string; ordersCount: number; netSales: number }[]> {
-  await new Promise((r) => setTimeout(r, 400));
-  const daysInMonth = new Date(year, month, 0).getDate();
-  return Array.from({ length: daysInMonth }, (_, i) => {
-    const d = i + 1;
-    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const seed = year + month * 31 + d;
-    const has = seed % 7 !== 0; // closed Sundays
-    return {
-      date: dateStr,
-      ordersCount: has ? (seed % 60) + 10 : 0,
-      netSales: has ? ((seed * 17) % 5000) + 500 : 0,
-    };
-  });
-}
+const MONTH_NAMES = [
+  "", "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -175,14 +82,12 @@ function KpiCard({
   sub,
   icon,
   color,
-  isAmount = true,
 }: {
   label: string;
   value: number;
   sub?: string;
   icon: React.ReactNode;
   color: string;
-  isAmount?: boolean;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-2 shadow-sm">
@@ -193,7 +98,7 @@ function KpiCard({
         <span className={`p-1.5 rounded-lg ${color}`}>{icon}</span>
       </div>
       <div className="text-2xl font-bold text-gray-900 tabular-nums">
-        {isAmount ? `$${fmt(value)}` : value.toLocaleString()}
+        ${fmt(value)}
       </div>
       {sub && <div className="text-xs text-gray-400">{sub}</div>}
     </div>
@@ -262,7 +167,9 @@ function DenominationRow({
             type="number"
             min={0}
             value={denom.count}
-            onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+            onChange={(e) =>
+              onChange(Math.max(0, parseInt(e.target.value) || 0))
+            }
             className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         ) : (
@@ -293,7 +200,7 @@ function CalendarGrid({
 }) {
   const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const firstDay = new Date(year, month - 1, 1).getDay();
-  const maxSales = Math.max(...days.map((d) => d.netSales));
+  const maxSales = Math.max(...days.map((d) => d.netSales), 1);
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -315,7 +222,6 @@ function CalendarGrid({
           const intensity =
             day.netSales > 0 ? Math.max(0.08, day.netSales / maxSales) : 0;
           const isSelected = day.date === selectedDate;
-
           return (
             <button
               key={day.date}
@@ -329,7 +235,7 @@ function CalendarGrid({
             >
               {day.netSales > 0 && !isSelected && (
                 <div
-                  className="absolute inset-0 bg-emerald-400 opacity-10"
+                  className="absolute inset-0 bg-emerald-400"
                   style={{ opacity: intensity * 0.18 }}
                 />
               )}
@@ -361,51 +267,75 @@ function CalendarGrid({
 
 export default function POSClosingReport() {
   const today = new Date().toISOString().split("T")[0];
+
   const [selectedDate, setSelectedDate] = useState(today);
-  const [viewMode, setViewMode] = useState<"daily" | "monthly">("daily");
   const [calMonth, setCalMonth] = useState(new Date().getMonth() + 1);
   const [calYear, setCalYear] = useState(new Date().getFullYear());
-  const [report, setReport] = useState<DailyReport | null>(null);
-  const [monthDays, setMonthDays] = useState<MonthDay[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [denominations, setDenominations] = useState<DenominationEntry[]>(
-    DEFAULT_DENOMINATIONS
-  );
+  const [denominations, setDenominations] =
+    useState<DenominationEntry[]>(DEFAULT_DENOMINATIONS);
   const [denomEditable, setDenomEditable] = useState(false);
+  const [cashCountNotes, setCashCountNotes] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const loadReport = useCallback(async (date: string) => {
-    setLoading(true);
+  // ── RTK Query hooks ─────────────────────────────────────────────────────────
+
+  const {
+    data: report,
+    isLoading: reportLoading,
+    isFetching: reportFetching,
+    refetch: refetchReport,
+  } = useGetDailyClosingReportQuery({ date: selectedDate });
+
+  const {
+    data: monthlyData,
+    isLoading: monthLoading,
+    isFetching: monthFetching,
+  } = useGetMonthlyCalendarReportQuery({ year: calYear, month: calMonth });
+
+  const [submitCashCount, { isLoading: submitting }] = useSubmitCashCountMutation();
+
+  // ── Map monthly API days → MonthDay[] ───────────────────────────────────────
+
+  const monthDays = useMemo<MonthDay[]>(() => {
+    if (!monthlyData?.days) return [];
+    return monthlyData.days.map((d:any) => ({
+      date: d.date,
+      dayNum: new Date(d.date + "T00:00:00").getDate(),
+      ordersCount: d.ordersCount,
+      netSales: d.netSales,
+      isToday: d.date === today,
+      isSelected: d.date === selectedDate,
+    }));
+  }, [monthlyData, today, selectedDate]);
+
+  // ── Month totals directly from API ──────────────────────────────────────────
+
+  const monthTotals = monthlyData?.totals ?? {
+    netSales: 0,
+    ordersCount: 0,
+    activeDays: 0,
+    avgPerDay: 0,
+  };
+
+  // ── Cash count submit ────────────────────────────────────────────────────────
+
+  const handleSubmitCashCount = async () => {
     try {
-      const data = await fetchDailyReport(date);
-      setReport(data);
-      // Pre-fill denominations from report
-      setDenominations(data.denominations);
-    } finally {
-      setLoading(false);
+      await submitCashCount({
+        date: selectedDate,
+        cashierId: report?.cashierName ?? "unknown", // replace with real cashier ID from auth
+        denominations,
+        sessionName: report?.sessionName,
+        notes: cashCountNotes,
+      }).unwrap();
+      setSubmitSuccess(true);
+      setTimeout(() => setSubmitSuccess(false), 3000);
+    } catch (err) {
+      console.error("Cash count submit failed", err);
     }
-  }, []);
+  };
 
-  const loadMonth = useCallback(async (y: number, m: number) => {
-    const summary = await fetchMonthSummary(y, m);
-    const todayStr = new Date().toISOString().split("T")[0];
-    setMonthDays(
-      summary.map((s) => ({
-        ...s,
-        dayNum: new Date(s.date + "T00:00:00").getDate(),
-        isCurrentMonth: true,
-        isToday: s.date === todayStr,
-        isSelected: s.date === selectedDate,
-      }))
-    );
-  }, [selectedDate]);
-
-  useEffect(() => {
-    loadReport(selectedDate);
-  }, [selectedDate, loadReport]);
-
-  useEffect(() => {
-    loadMonth(calYear, calMonth);
-  }, [calYear, calMonth, loadMonth, selectedDate]);
+  const denomTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
 
   const handlePrevMonth = () => {
     if (calMonth === 1) { setCalMonth(12); setCalYear((y) => y - 1); }
@@ -416,22 +346,14 @@ export default function POSClosingReport() {
     else setCalMonth((m) => m + 1);
   };
 
-  const denomTotal = denominations.reduce(
-    (sum, d) => sum + d.value * d.count,
-    0
-  );
+  const isLoading = reportLoading || reportFetching;
+  const isMonthLoading = monthLoading || monthFetching;
 
-  const monthTotal = monthDays.reduce((s, d) => s + d.netSales, 0);
-  const monthOrders = monthDays.reduce((s, d) => s + d.ordersCount, 0);
-
-  const MONTH_NAMES = [
-    "", "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-  ];
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#F6F7FA] font-sans">
-      {/* ── Header ───────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -441,43 +363,17 @@ export default function POSClosingReport() {
             <h1 className="text-[15px] font-bold text-gray-900">
               POS Closing Report
             </h1>
-            <p className="text-[11px] text-gray-400">
-              Z-Report · Session Summary
-            </p>
+            <p className="text-[11px] text-gray-400">Z-Report · Session Summary</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="flex items-center bg-gray-100 rounded-lg p-0.5 text-xs font-medium">
-            <button
-              onClick={() => setViewMode("daily")}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                viewMode === "daily"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Daily
-            </button>
-            <button
-              onClick={() => setViewMode("monthly")}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                viewMode === "monthly"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Monthly
-            </button>
-          </div>
-
           <button
-            onClick={() => loadReport(selectedDate)}
+            onClick={() => refetchReport()}
             className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             title="Refresh"
           >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
           </button>
           <button
             onClick={() => window.print()}
@@ -496,7 +392,7 @@ export default function POSClosingReport() {
       <div className="max-w-[1400px] mx-auto px-6 py-6 grid grid-cols-[320px_1fr] gap-6">
         {/* ── LEFT: Calendar ───────────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          {/* Month nav */}
+          {/* Month nav + calendar */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center justify-between mb-4">
               <button
@@ -516,15 +412,20 @@ export default function POSClosingReport() {
               </button>
             </div>
 
-            <CalendarGrid
-              year={calYear}
-              month={calMonth}
-              days={monthDays}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-            />
+            {isMonthLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">
+                <RefreshCw size={18} className="animate-spin" />
+              </div>
+            ) : (
+              <CalendarGrid
+                year={calYear}
+                month={calMonth}
+                days={monthDays}
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+              />
+            )}
 
-            {/* Legend */}
             <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-200 inline-block" />
@@ -541,7 +442,7 @@ export default function POSClosingReport() {
             </div>
           </div>
 
-          {/* Month totals */}
+          {/* Month summary — from API totals */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <BarChart3 size={14} className="text-blue-600" />
@@ -553,32 +454,32 @@ export default function POSClosingReport() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Total Revenue</span>
                 <span className="font-bold text-gray-900 tabular-nums">
-                  ${fmt(monthTotal)}
+                  ${fmt(monthTotals.netSales)}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Total Orders</span>
                 <span className="font-bold text-gray-900 tabular-nums">
-                  {monthOrders.toLocaleString()}
+                  {monthTotals.ordersCount.toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Active Days</span>
                 <span className="font-bold text-gray-900">
-                  {monthDays.filter((d) => d.ordersCount > 0).length}
+                  {monthTotals.activeDays}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Avg / Day</span>
                 <span className="font-bold text-gray-900 tabular-nums">
-                  ${fmt(monthTotal / Math.max(1, monthDays.filter((d) => d.ordersCount > 0).length))}
+                  ${fmt(monthTotals.avgPerDay)}
                 </span>
               </div>
             </div>
           </div>
 
           {/* Selected date quick info */}
-          {report && (
+          {report && !report.empty && (
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-4 text-white shadow-sm">
               <div className="flex items-center gap-2 mb-3">
                 <Calendar size={13} className="opacity-70" />
@@ -611,10 +512,16 @@ export default function POSClosingReport() {
 
         {/* ── RIGHT: Report ─────────────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
-          {loading ? (
+          {isLoading ? (
             <div className="flex flex-col items-center justify-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100">
               <RefreshCw size={24} className="animate-spin mb-3" />
               <span className="text-sm">Loading report…</span>
+            </div>
+          ) : report?.empty ? (
+            <div className="flex flex-col items-center justify-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100">
+              <BarChart3 size={32} className="mb-3 opacity-30" />
+              <p className="text-sm font-medium text-gray-500">No orders found</p>
+              <p className="text-xs text-gray-400 mt-1">{report.message}</p>
             </div>
           ) : report ? (
             <>
@@ -629,12 +536,10 @@ export default function POSClosingReport() {
                       Session: {report.sessionName} · Cashier: {report.cashierName}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
-                      <CheckCircle2 size={11} />
-                      Closed
-                    </span>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
+                    <CheckCircle2 size={11} />
+                    Closed
+                  </span>
                 </div>
               </div>
 
@@ -650,21 +555,21 @@ export default function POSClosingReport() {
                 <KpiCard
                   label="Gross Sales"
                   value={report.grossSales}
-                  sub={`Before discounts`}
+                  sub="Before discounts"
                   icon={<Layers size={14} className="text-blue-600" />}
                   color="bg-blue-50"
                 />
                 <KpiCard
                   label="Avg Order"
                   value={report.avgOrderValue}
-                  sub={`per transaction`}
+                  sub="per transaction"
                   icon={<BarChart3 size={14} className="text-violet-600" />}
                   color="bg-violet-50"
                 />
                 <KpiCard
                   label="Tax Collected"
                   value={report.tax}
-                  sub="17% VAT"
+                  sub="VAT"
                   icon={<ReceiptText size={14} className="text-amber-600" />}
                   color="bg-amber-50"
                 />
@@ -679,21 +584,9 @@ export default function POSClosingReport() {
                   </h3>
                   <div className="flex flex-col gap-0">
                     {[
-                      {
-                        label: "Gross Sales",
-                        value: report.grossSales,
-                        cls: "text-gray-900 font-semibold",
-                      },
-                      {
-                        label: "Discounts",
-                        value: -report.discounts,
-                        cls: "text-red-500 font-medium",
-                      },
-                      {
-                        label: "Refunds / Returns",
-                        value: -report.refunds,
-                        cls: "text-red-500 font-medium",
-                      },
+                      { label: "Gross Sales", value: report.grossSales, cls: "text-gray-900 font-semibold" },
+                      { label: "Discounts", value: -report.discounts, cls: "text-red-500 font-medium" },
+                      { label: "Refunds / Returns", value: -report.refunds, cls: "text-red-500 font-medium" },
                     ].map(({ label, value, cls }) => (
                       <div
                         key={label}
@@ -712,7 +605,7 @@ export default function POSClosingReport() {
                       </span>
                     </div>
                     <div className="flex justify-between py-2 text-xs">
-                      <span className="text-gray-400">VAT (17%)</span>
+                      <span className="text-gray-400">VAT</span>
                       <span className="text-gray-600 tabular-nums">
                         +${fmt(report.tax)}
                       </span>
@@ -760,8 +653,17 @@ export default function POSClosingReport() {
                       color="bg-amber-400"
                       icon={<ReceiptText size={14} className="text-amber-600" />}
                     />
+                    {/* Other methods if any */}
+                    {report.payments.other > 0 && (
+                      <PaymentBar
+                        label="Other"
+                        amount={report.payments.other}
+                        total={report.payments.total}
+                        color="bg-gray-400"
+                        icon={<CreditCard size={14} className="text-gray-600" />}
+                      />
+                    )}
                   </div>
-
                   <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-bold">
                     <span className="text-gray-900">Total Collected</span>
                     <span className="tabular-nums text-gray-900">
@@ -771,22 +673,68 @@ export default function POSClosingReport() {
                 </div>
               </div>
 
-              {/* Cash register: opening / closing + denominations */}
+              {/* Top Products */}
+              {report.topProducts?.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">
+                    Top Products
+                  </h3>
+                  <div className="flex flex-col gap-0">
+                    {report.topProducts.slice(0, 5).map((p:any, i:any) => (
+                      <div
+                        key={p.name}
+                        className="flex items-center justify-between py-2.5 border-b border-gray-50 text-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="w-5 h-5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+                            {i + 1}
+                          </span>
+                          <span className="text-gray-800 font-medium">{p.name}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-right">
+                          <span className="text-gray-400 text-xs">
+                            qty: {p.qty}
+                          </span>
+                          <span className="font-semibold tabular-nums text-gray-900">
+                            ${fmt(p.revenue)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cash Register Count */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
                     Cash Register Count
                   </h3>
-                  <button
-                    onClick={() => setDenomEditable((v) => !v)}
-                    className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${
-                      denomEditable
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    {denomEditable ? "✓ Done" : "Edit Counts"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {submitSuccess && (
+                      <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Submitted
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setDenomEditable((v) => !v)}
+                      className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${
+                        denomEditable
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {denomEditable ? "✓ Done" : "Edit Counts"}
+                    </button>
+                    <button
+                      onClick={handleSubmitCashCount}
+                      disabled={submitting}
+                      className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {submitting ? "Saving..." : "Submit Count"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
@@ -813,7 +761,7 @@ export default function POSClosingReport() {
                     <div className="flex justify-between items-center py-2.5 border-b border-gray-50 text-sm">
                       <div className="flex items-center gap-2 text-gray-600">
                         <XCircle size={13} className="text-red-400" />
-                        Cash Refunds
+                        Cash Refunds (est.)
                       </div>
                       <span className="font-semibold tabular-nums text-red-500">
                         -${fmt(report.refunds * 0.45)}
@@ -822,14 +770,14 @@ export default function POSClosingReport() {
                     <div className="flex justify-between items-center py-3 font-bold text-sm border-t-2 border-gray-200">
                       <span className="text-gray-900">Expected Closing</span>
                       <span className="tabular-nums text-gray-900">
-                        ${fmt(report.closingBalance)}
+                        ${fmt(report.expectedClosingBalance)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-2.5 text-sm">
                       <span className="text-gray-600">Counted (below)</span>
                       <span
                         className={`font-bold tabular-nums ${
-                          Math.abs(denomTotal - report.closingBalance) < 1
+                          Math.abs(denomTotal - report.expectedClosingBalance) < 1
                             ? "text-emerald-700"
                             : "text-red-500"
                         }`}
@@ -839,17 +787,26 @@ export default function POSClosingReport() {
                     </div>
                     <div
                       className={`flex justify-between items-center py-2 rounded-lg px-3 text-sm ${
-                        Math.abs(denomTotal - report.closingBalance) < 1
+                        Math.abs(denomTotal - report.expectedClosingBalance) < 1
                           ? "bg-emerald-50 text-emerald-700"
                           : "bg-red-50 text-red-600"
                       }`}
                     >
                       <span className="font-medium">Difference</span>
                       <span className="font-bold tabular-nums">
-                        {denomTotal - report.closingBalance >= 0 ? "+" : ""}
-                        ${fmt(denomTotal - report.closingBalance)}
+                        {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}
+                        ${fmt(denomTotal - report.expectedClosingBalance)}
                       </span>
                     </div>
+
+                    {/* Notes */}
+                    <textarea
+                      placeholder="Notes (optional)"
+                      value={cashCountNotes}
+                      onChange={(e) => setCashCountNotes(e.target.value)}
+                      className="mt-2 w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      rows={2}
+                    />
                   </div>
 
                   {/* Denomination table */}
@@ -874,20 +831,17 @@ export default function POSClosingReport() {
                             key={d.label}
                             denom={d}
                             editable={denomEditable}
-                            onChange={(count) => {
+                            onChange={(count) =>
                               setDenominations((prev) =>
                                 prev.map((item, idx) =>
                                   idx === i ? { ...item, count } : item
                                 )
-                              );
-                            }}
+                              )
+                            }
                           />
                         ))}
                         <tr className="border-t-2 border-gray-200">
-                          <td
-                            colSpan={2}
-                            className="py-3 pl-4 text-sm font-bold text-gray-900"
-                          >
+                          <td colSpan={2} className="py-3 pl-4 text-sm font-bold text-gray-900">
                             Total Cash
                           </td>
                           <td className="py-3 pr-4 text-right text-sm font-bold text-emerald-700 tabular-nums">
@@ -900,7 +854,7 @@ export default function POSClosingReport() {
                 </div>
               </div>
 
-              {/* Footer signature line */}
+              {/* Cashier Sign-Off */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">
                   Cashier Sign-Off
