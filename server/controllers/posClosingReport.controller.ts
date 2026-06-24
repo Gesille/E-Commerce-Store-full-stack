@@ -93,40 +93,24 @@ export const getDailyClosingReport = CatchAsyncError(
         )
       : [];
 
-    // ── 3. Aggregate payment totals ──────────────────────────────────────────
+    // ── 3. Aggregate payment totals — keyed by raw method name ──────────────
     const paymentTotals: Record<string, number> = {};
     for (const p of payments) {
       const method: string = p.payment_method_id?.[1] ?? "Unknown";
       paymentTotals[method] = (paymentTotals[method] ?? 0) + (p.amount ?? 0);
     }
 
-const normaliseMethod = (name: string): string => {
-  const l = name.toLowerCase();
-
-  if (l.includes("cash")) {
-    return "cash";
-  }
-
-  if (
-    l.includes("card") ||
-    l.includes("credit") ||
-    l.includes("debit") ||
-    l.includes("visa") ||
-    l.includes("master")
-  ) {
-    return "card";
-  }
-
-  if (
-    l.includes("check") ||
-    l.includes("cheque") ||
-    l.includes("customer account")
-  ) {
-    return "check";
-  }
-
-  return name;
-};
+    // Normalise into: cash | visa | mastercard | amex | card (generic) | check | <other>
+    const normaliseMethod = (name: string): string => {
+      const l = name.toLowerCase();
+      if (l.includes("cash"))                             return "cash";
+      if (l.includes("visa"))                             return "visa";
+      if (l.includes("master"))                           return "mastercard";
+      if (l.includes("amex") || l.includes("american"))  return "amex";
+      if (l.includes("credit") || l.includes("debit") || l.includes("card")) return "card";
+      if (l.includes("check") || l.includes("cheque") || l.includes("customer account")) return "check";
+      return name; // keep unknown names as-is
+    };
 
     const normalisedPayments: Record<string, number> = {};
     for (const [method, amount] of Object.entries(paymentTotals)) {
@@ -189,7 +173,6 @@ const normaliseMethod = (name: string): string => {
     }
 
     // ── 6. Session & cashier info ────────────────────────────────────────────
-    // Get from the first order's session_id
     const firstOrder: any = orders[0];
     const sessionName = firstOrder?.session_id?.[1] ?? `POS/${date.replace(/-/g, "")}`;
     const cashierName = firstOrder?.user_id?.[1] ?? "—";
@@ -232,9 +215,12 @@ const normaliseMethod = (name: string): string => {
     );
     const netSales = grossSales - totalDiscountAmount - totalRefunds;
     const cashCollected = normalisedPayments["cash"] ?? 0;
-    const expectedClosingBalance = openingBalance + cashCollected - (totalRefunds * 0.45); // rough cash refund portion
+    const expectedClosingBalance = openingBalance + cashCollected - (totalRefunds * 0.45);
 
     const ordersCount = orders.length;
+
+    // Total payments = sum of all actual payment lines (more accurate than grossSales)
+    const paymentsTotal = Object.values(normalisedPayments).reduce((s, v) => s + v, 0);
 
     // ── 8. Build response ────────────────────────────────────────────────────
     res.status(200).json({
@@ -244,30 +230,31 @@ const normaliseMethod = (name: string): string => {
       sessionName,
       cashierName: (shiftLog as any)?.cashierId?.name ?? cashierName,
       ordersCount,
-      grossSales: Math.round(grossSales * 100) / 100,
-      discounts: Math.round(totalDiscountAmount * 100) / 100,
-      refunds: Math.round(totalRefunds * 100) / 100,
-      netSales: Math.round(netSales * 100) / 100,
-      tax: Math.round(totalTax * 100) / 100,
+      grossSales:   Math.round(grossSales * 100) / 100,
+      discounts:    Math.round(totalDiscountAmount * 100) / 100,
+      refunds:      Math.round(totalRefunds * 100) / 100,
+      netSales:     Math.round(netSales * 100) / 100,
+      tax:          Math.round(totalTax * 100) / 100,
       avgOrderValue: ordersCount > 0 ? Math.round((netSales / ordersCount) * 100) / 100 : 0,
       payments: {
-        cash:  Math.round((normalisedPayments["cash"]  ?? 0) * 100) / 100,
-        card:  Math.round((normalisedPayments["card"]  ?? 0) * 100) / 100,
-      
-        check: Math.round((normalisedPayments["check"] ?? 0) * 100) / 100,
-       
-        // Full detail for unknown/other methods
+        cash:       Math.round((normalisedPayments["cash"]       ?? 0) * 100) / 100,
+        visa:       Math.round((normalisedPayments["visa"]       ?? 0) * 100) / 100,
+        mastercard: Math.round((normalisedPayments["mastercard"] ?? 0) * 100) / 100,
+        amex:       Math.round((normalisedPayments["amex"]       ?? 0) * 100) / 100,
+        card:       Math.round((normalisedPayments["card"]       ?? 0) * 100) / 100, // generic card fallback
+        check:      Math.round((normalisedPayments["check"]      ?? 0) * 100) / 100,
+        // Any payment methods that don't match any known category
         breakdown: Object.entries(normalisedPayments)
-          .filter(([k]) => !["cash","card","check"].includes(k))
+          .filter(([k]) => !["cash", "visa", "mastercard", "amex", "card", "check"].includes(k))
           .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 })),
-        total: Math.round(grossSales * 100) / 100,
+        total: Math.round(paymentsTotal * 100) / 100,
       },
-      openingBalance: Math.round(openingBalance * 100) / 100,
+      openingBalance:         Math.round(openingBalance * 100) / 100,
       expectedClosingBalance: Math.round(expectedClosingBalance * 100) / 100,
       topProducts,
       hourlyChart: Object.entries(hourlyBuckets).map(([hour, amount]) => ({
-        hour: Number(hour),
-        label: `${Number(hour).toString().padStart(2, "0")}:00`,
+        hour:   Number(hour),
+        label:  `${Number(hour).toString().padStart(2, "0")}:00`,
         amount: Math.round(amount * 100) / 100,
       })),
     });
@@ -286,7 +273,7 @@ export const submitCashCount = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { date, odooSessionId, denominations, sessionName, notes, submittedBy, role } = req.body as {
       date: string;
-      odooSessionId: number;       // from report.odooSessionId
+      odooSessionId: number;
       denominations: DenominationEntry[];
       sessionName?: string;
       notes?: string;
@@ -300,7 +287,6 @@ export const submitCashCount = CatchAsyncError(
 
     const countedTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
 
-    // Find shift log by odooSessionId — this field IS on the schema and required
     const shiftLog = await CashierShiftLog.findOneAndUpdate(
       { odooSessionId },
       {
@@ -319,12 +305,10 @@ export const submitCashCount = CatchAsyncError(
     );
 
     if (!shiftLog) {
-      // No local shift log (Odoo-only session) — still accept and return success
-      // Store in a lightweight standalone MongoDB doc
       await CashierShiftLog.create({
         odooSessionId,
-        odooPartnerId: 0,                        
-        cashierId: new mongoose.Types.ObjectId(),  
+        odooPartnerId: 0,
+        cashierId: new mongoose.Types.ObjectId(),
         startTime: new Date(`${date}T00:00:00`),
         state: "closed" as ShiftState,
         cashCount: {
@@ -412,73 +396,41 @@ export const getMonthlyCalendarReport = CatchAsyncError(
         )
       : [];
 
-    // Map payment to order
-  const paymentsByOrder: Record<
-  number,
-  {
-    cash: number;
-    check: number;
-    cards: Record<string, number>;
-  }
-> = {};
-   for (const p of payments) {
-  const oid = p.pos_order_id?.[0];
-  if (!oid) continue;
+    // Map payment to order — broken out by card type
+    const paymentsByOrder: Record<
+      number,
+      { cash: number; check: number; cards: Record<string, number> }
+    > = {};
 
-  if (!paymentsByOrder[oid]) {
-    paymentsByOrder[oid] = {
-      cash: 0,
-      check: 0,
-      cards: {},
-    };
-  }
+    for (const p of payments) {
+      const oid = p.pos_order_id?.[0];
+      if (!oid) continue;
 
-  const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
+      if (!paymentsByOrder[oid]) {
+        paymentsByOrder[oid] = { cash: 0, check: 0, cards: {} };
+      }
 
-  if (method.includes("cash")) {
-    paymentsByOrder[oid].cash += p.amount;
-  }
+      const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
 
-  else if (
-    method.includes("visa") ||
-    method.includes("master") ||
-    method.includes("mastercard") ||
-    method.includes("amex") ||
-    method.includes("american")
-  ) {
-    let cardName = "other";
-
-    if (method.includes("visa")) {
-      cardName = "visa";
-    } 
-    else if (
-      method.includes("master")
-    ) {
-      cardName = "mastercard";
+      if (method.includes("cash")) {
+        paymentsByOrder[oid].cash += p.amount;
+      } else if (method.includes("visa")) {
+        paymentsByOrder[oid].cards["visa"] = (paymentsByOrder[oid].cards["visa"] ?? 0) + p.amount;
+      } else if (method.includes("master")) {
+        paymentsByOrder[oid].cards["mastercard"] = (paymentsByOrder[oid].cards["mastercard"] ?? 0) + p.amount;
+      } else if (method.includes("amex") || method.includes("american")) {
+        paymentsByOrder[oid].cards["amex"] = (paymentsByOrder[oid].cards["amex"] ?? 0) + p.amount;
+      } else if (method.includes("credit") || method.includes("debit") || method.includes("card")) {
+        paymentsByOrder[oid].cards["card"] = (paymentsByOrder[oid].cards["card"] ?? 0) + p.amount;
+      } else if (method.includes("check") || method.includes("cheque")) {
+        paymentsByOrder[oid].check += p.amount;
+      }
     }
-    else if (
-      method.includes("amex") ||
-      method.includes("american")
-    ) {
-      cardName = "amex";
-    }
-
-    paymentsByOrder[oid].cards[cardName] =
-      (paymentsByOrder[oid].cards[cardName] ?? 0) + p.amount;
-  }
-
-  else if (
-    method.includes("check") ||
-    method.includes("cheque")
-  ) {
-    paymentsByOrder[oid].check += p.amount;
-  }
-}
 
     // Aggregate by day
     const dayMap: Record<
       string,
-      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; cards: Record<string, number>;  check: number }
+      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; cards: Record<string, number>; check: number }
     > = {};
 
     for (let d = 1; d <= lastDay; d++) {
@@ -493,16 +445,11 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       dayMap[key].grossSales  += o.amount_total ?? 0;
       dayMap[key].tax         += o.amount_tax ?? 0;
       const pm = paymentsByOrder[o.id] ?? {};
-      dayMap[key].cash  += pm.cash  ?? 0;
-     for (const [card, amount] of Object.entries(pm.cards ?? {})) {
-  if (!dayMap[key].cards[card]) {
-    dayMap[key].cards[card] = 0;
-  }
-
-  dayMap[key].cards[card] += amount as number;
-}
-    
+      dayMap[key].cash  += pm.cash ?? 0;
       dayMap[key].check += pm.check ?? 0;
+      for (const [card, amount] of Object.entries(pm.cards ?? {})) {
+        dayMap[key].cards[card] = (dayMap[key].cards[card] ?? 0) + (amount as number);
+      }
     }
 
     for (const o of refundOrders as any[]) {
@@ -513,48 +460,43 @@ export const getMonthlyCalendarReport = CatchAsyncError(
     // Build result
     const days = Object.entries(dayMap).map(([date, d]) => ({
       date,
-      ordersCount:   d.ordersCount,
-      grossSales:    Math.round(d.grossSales  * 100) / 100,
-      refunds:       Math.round(d.refunds     * 100) / 100,
-      netSales:      Math.round((d.grossSales - d.refunds) * 100) / 100,
-      tax:           Math.round(d.tax         * 100) / 100,
-      cash:          Math.round(d.cash        * 100) / 100,
- cards: Object.fromEntries(
-  Object.entries(d.cards).map(([name, amount]) => [
-    name,
-    Math.round(amount * 100) / 100
-  ])
-), 
-      check:         Math.round(d.check       * 100) / 100,
+      ordersCount: d.ordersCount,
+      grossSales:  Math.round(d.grossSales  * 100) / 100,
+      refunds:     Math.round(d.refunds     * 100) / 100,
+      netSales:    Math.round((d.grossSales - d.refunds) * 100) / 100,
+      tax:         Math.round(d.tax         * 100) / 100,
+      cash:        Math.round(d.cash        * 100) / 100,
+      cards: Object.fromEntries(
+        Object.entries(d.cards).map(([name, amount]) => [name, Math.round(amount * 100) / 100])
+      ),
+      check:       Math.round(d.check       * 100) / 100,
     }));
 
-  const monthTotals = days.reduce(
-  (acc, d) => {
-    acc.ordersCount += d.ordersCount;
-    acc.grossSales += d.grossSales;
-    acc.netSales += d.netSales;
-    acc.refunds += d.refunds;
-    acc.tax += d.tax;
-    acc.cash += d.cash;
-    acc.check += d.check;
-
-    for (const [card, amount] of Object.entries(d.cards)) {
-      acc.cards[card] = (acc.cards[card] ?? 0) + amount;
-    }
-
-    return acc;
-  },
-  {
-    ordersCount: 0,
-    grossSales: 0,
-    netSales: 0,
-    refunds: 0,
-    tax: 0,
-    cash: 0,
-    check: 0,
-    cards: {} as Record<string, number>
-  }
-);
+    const monthTotals = days.reduce(
+      (acc, d) => {
+        acc.ordersCount += d.ordersCount;
+        acc.grossSales  += d.grossSales;
+        acc.netSales    += d.netSales;
+        acc.refunds     += d.refunds;
+        acc.tax         += d.tax;
+        acc.cash        += d.cash;
+        acc.check       += d.check;
+        for (const [card, amount] of Object.entries(d.cards)) {
+          acc.cards[card] = (acc.cards[card] ?? 0) + amount;
+        }
+        return acc;
+      },
+      {
+        ordersCount: 0,
+        grossSales:  0,
+        netSales:    0,
+        refunds:     0,
+        tax:         0,
+        cash:        0,
+        check:       0,
+        cards:       {} as Record<string, number>,
+      }
+    );
 
     res.status(200).json({
       success: true,
@@ -563,27 +505,24 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       dateRange: { from: dateFrom, to: dateTo },
       days,
       totals: {
-        ordersCount:  monthTotals.ordersCount,
-        grossSales:   Math.round(monthTotals.grossSales  * 100) / 100,
-        netSales:     Math.round(monthTotals.netSales    * 100) / 100,
-        refunds:      Math.round(monthTotals.refunds     * 100) / 100,
-        tax:          Math.round(monthTotals.tax         * 100) / 100,
-        cash:         Math.round(monthTotals.cash        * 100) / 100,
-      cards: Object.fromEntries(
-  Object.entries(monthTotals.cards).map(([name, amount]) => [
-    name,
-    Math.round(amount * 100) / 100
-  ])
-),
-        
-        check:        Math.round(monthTotals.check       * 100) / 100,
-        activeDays:   days.filter((d) => d.ordersCount > 0).length,
+        ordersCount: monthTotals.ordersCount,
+        grossSales:  Math.round(monthTotals.grossSales * 100) / 100,
+        netSales:    Math.round(monthTotals.netSales   * 100) / 100,
+        refunds:     Math.round(monthTotals.refunds    * 100) / 100,
+        tax:         Math.round(monthTotals.tax        * 100) / 100,
+        cash:        Math.round(monthTotals.cash       * 100) / 100,
+        check:       Math.round(monthTotals.check      * 100) / 100,
+        cards: Object.fromEntries(
+          Object.entries(monthTotals.cards).map(([name, amount]) => [
+            name,
+            Math.round(amount * 100) / 100,
+          ])
+        ),
+        activeDays: days.filter((d) => d.ordersCount > 0).length,
         avgPerDay:
           days.filter((d) => d.ordersCount > 0).length > 0
             ? Math.round(
-                (monthTotals.netSales /
-                  days.filter((d) => d.ordersCount > 0).length) *
-                  100
+                (monthTotals.netSales / days.filter((d) => d.ordersCount > 0).length) * 100
               ) / 100
             : 0,
       },

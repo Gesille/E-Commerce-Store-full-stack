@@ -19,13 +19,15 @@ export interface PaymentBreakdownEntry {
 }
 
 export interface Payments {
-  cash: number;
-  card: number;
-  bank: number;
-  check: number;
-  other: number;
-  breakdown: PaymentBreakdownEntry[];
-  total: number;
+  cash:       number;
+  visa:       number;
+  mastercard: number;
+  amex:       number;
+  card:       number;
+  check:      number;
+  breakdown:  PaymentBreakdownEntry[];
+  total:      number;
+  [key: string]: number | PaymentBreakdownEntry[]; 
 }
 
 export interface DailyClosingReport {
@@ -83,7 +85,7 @@ export interface DayReport {
   netSales: number;
   tax: number;
   cash: number;
-  card: number;
+  cards: Record<string, number>
   bank: number;
   check: number;
 }
@@ -95,7 +97,7 @@ export interface MonthlyTotals {
   refunds: number;
   tax: number;
   cash: number;
-  card: number;
+  cards: Record<string, number>
   bank: number;
   check: number;
   activeDays: number;
