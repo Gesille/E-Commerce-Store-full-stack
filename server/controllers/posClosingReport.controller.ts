@@ -103,10 +103,10 @@ export const getDailyClosingReport = CatchAsyncError(
     // Normalise into: cash | visa | mastercard | amex | card (generic) | check | <other>
 const normaliseMethod = (name: string): string => {
   const l = name.toLowerCase();
-  if (l.includes("cash"))                                return "cash";
-  if (l.includes("visa"))                               return "visa";
-  if (l.includes("master"))                             return "mastercard";
-  if (l.includes("amex") || l.includes("american"))    return "amex";
+  if (l.includes("cash"))                                         return "cash";
+  if (l.includes("visa"))                                         return "visa";
+  if (l.includes("master"))                                       return "mastercard";
+  if (l.includes("amex") || l.includes("american"))              return "amex";
   if (l.includes("customer account") || l.includes("check") || l.includes("cheque")) return "check";
   if (l.includes("card") || l.includes("credit") || l.includes("debit"))             return "card";
   return name;

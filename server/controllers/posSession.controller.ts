@@ -19,8 +19,7 @@ async function getPaymentMethodId(method: string, configId: number, cardBrand?: 
     { fields: ["id", "name", "is_cash_count"] }
   );
 
-  // LOG THIS SO YOU CAN SEE WHAT ODOO ACTUALLY HAS
-  console.log("[PAYMENT METHODS IN ODOO]:", methods.map((m: any) => `${m.id}: ${m.name}`));
+  console.log("[ODOO PAYMENT METHODS]:", methods.map((m: any) => `${m.id}:${m.name}`));
 
   const l = (s: string) => s.toLowerCase();
 
@@ -38,36 +37,33 @@ async function getPaymentMethodId(method: string, configId: number, cardBrand?: 
     if (found) return found.id;
   }
 
-  if (method === "card" && cardBrand) {
-    const brandMap: Record<string, string[]> = {
-      visa:       ["visa"],
-      mastercard: ["master", "mastercard"],
-      amex:       ["amex", "american express", "american"],
-    };
-    const keywords = brandMap[cardBrand] ?? [cardBrand];
-    const found = methods.find((m: any) =>
-      keywords.some((kw) => l(m.name).includes(kw))
-    );
-    if (found) {
-      console.log(`[PAYMENT] Matched "${cardBrand}" → Odoo method: "${found.name}" (id: ${found.id})`);
-      return found.id;
+  if (method === "card") {
+    if (cardBrand) {
+      const brandKeywords: Record<string, string[]> = {
+        visa:       ["visa"],
+        mastercard: ["master", "mastercard"],
+        amex:       ["amex", "american"],
+      };
+      const keywords = brandKeywords[cardBrand] ?? [cardBrand];
+      const found = methods.find((m: any) =>
+        keywords.some((kw) => l(m.name).includes(kw))
+      );
+      if (found) {
+        console.log(`[PAYMENT] "${cardBrand}" → "${found.name}" (id:${found.id})`);
+        return found.id;
+      }
     }
 
-    // Fallback: any non-cash card method
+    // fallback to generic Card
     const fallback = methods.find((m: any) =>
-      !m.is_cash_count &&
-      !l(m.name).includes("check") &&
-      !l(m.name).includes("cheque") &&
-      !l(m.name).includes("customer account")
+      l(m.name) === "card" ||
+      (l(m.name).includes("card") && !m.is_cash_count)
     );
-    if (fallback) {
-      console.warn(`[PAYMENT] No Odoo method found for brand "${cardBrand}", falling back to: "${fallback.name}"`);
-      return fallback.id;
-    }
+    if (fallback) return fallback.id;
   }
 
   throw new Error(
-    `Payment method not found for method="${method}" brand="${cardBrand}". ` +
+    `Payment method not found: method="${method}" brand="${cardBrand}". ` +
     `Available: ${methods.map((m: any) => m.name).join(", ")}`
   );
 }
