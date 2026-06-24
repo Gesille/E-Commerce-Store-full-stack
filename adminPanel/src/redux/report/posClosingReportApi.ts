@@ -33,6 +33,7 @@ export interface DailyClosingReport {
   date: string;
   empty?: boolean;
   message?: string;
+  odooSessionId: number | null;
   sessionName: string;
   cashierName: string;
   ordersCount: number;
@@ -54,13 +55,14 @@ export interface DenominationEntry {
   label: string;
   count: number;
 }
-
 export interface SubmitCashCountPayload {
   date: string;
-  cashierId: string;
+  odooSessionId: number;         
   denominations: DenominationEntry[];
   sessionName?: string;
   notes?: string;
+  submittedBy?: string;
+  role?: "cashier" | "manager";
 }
 
 export interface SubmitCashCountResponse {
@@ -69,7 +71,8 @@ export interface SubmitCashCountResponse {
   warning?: string;
   countedTotal: number;
   shiftId?: string;
-  denominations?: DenominationEntry[];
+   odooSessionId?: number;
+
 }
 
 export interface DayReport {

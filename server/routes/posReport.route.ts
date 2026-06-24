@@ -1,5 +1,5 @@
 import express from "express";
-import { getDailyClosingReport, getMonthlyCalendarReport, submitCashCount } from "../controllers/posClosingReport_controller.js";
+import { getDailyClosingReport, getMonthlyCalendarReport, submitCashCount } from "../controllers/posClosingReport.controller.js";
 
 
 const POSReportRouter = express.Router();

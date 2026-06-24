@@ -29,6 +29,14 @@ export interface ICashierShiftLog extends Document {
 
   createdAt: Date;
   updatedAt: Date;
+   cashCount?: {
+    denominations: { value: number; label: string; count: number }[];
+    countedTotal: number;
+    submittedAt: Date;
+    submittedBy: string;
+    role: "cashier" | "manager";
+    notes: string;
+  };
 }
 
 const shiftStateTransitionSchema = new Schema<IShiftStateTransition>(
@@ -71,6 +79,20 @@ const cashierShiftLogSchema = new Schema<ICashierShiftLog>(
 
     totalOrders: { type: Number, default: 0 },
     totalSales: { type: Number, default: 0 },
+    cashCount: {
+  denominations: [
+    {
+      value: { type: Number },
+      label: { type: String },
+      count: { type: Number },
+    },
+  ],
+  countedTotal: { type: Number },
+  submittedAt: { type: Date },
+  submittedBy: { type: String },
+  role: { type: String, enum: ["cashier", "manager"] },
+  notes: { type: String },
+},
   },
   { timestamps: true },
 );

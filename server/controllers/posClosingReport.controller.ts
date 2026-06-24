@@ -2,8 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
-import CashierShiftLog from "../models/Cashiershiftlog.js";
+import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
+import mongoose from "mongoose";
 
 
 function toOdooDateTime(date: string, endOfDay = false) {
@@ -221,6 +222,7 @@ export const getDailyClosingReport = CatchAsyncError(
     res.status(200).json({
       success: true,
       date,
+      odooSessionId: firstOrder?.session_id?.[0] ?? null,
       sessionName,
       cashierName: (shiftLog as any)?.cashierId?.name ?? cashierName,
       ordersCount,
@@ -265,42 +267,36 @@ interface DenominationEntry {
   count: number;
 }
 
+// submitCashCount controller
 export const submitCashCount = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { date, cashierId, denominations, sessionName, notes } = req.body as {
+    const { date, odooSessionId, denominations, sessionName, notes, submittedBy, role } = req.body as {
       date: string;
-      cashierId: string;
+      odooSessionId: number;       // from report.odooSessionId
       denominations: DenominationEntry[];
       sessionName?: string;
       notes?: string;
+      submittedBy?: string;
+      role?: "cashier" | "manager";
     };
 
-    if (!date || !cashierId || !denominations?.length) {
-      return next(
-        new ErrorHandler("date, cashierId and denominations are required", 400)
-      );
+    if (!date || !odooSessionId || !denominations?.length) {
+      return next(new ErrorHandler("date, odooSessionId and denominations are required", 400));
     }
 
-    const countedTotal = denominations.reduce(
-      (s, d) => s + d.value * d.count,
-      0
-    );
+    const countedTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
 
-    // Find the shift log for this cashier on this date
+    // Find shift log by odooSessionId — this field IS on the schema and required
     const shiftLog = await CashierShiftLog.findOneAndUpdate(
-      {
-        cashierId,
-        createdAt: {
-          $gte: new Date(`${date}T00:00:00`),
-          $lte: new Date(`${date}T23:59:59`),
-        },
-      },
+      { odooSessionId },
       {
         $set: {
           cashCount: {
             denominations,
             countedTotal: Math.round(countedTotal * 100) / 100,
             submittedAt: new Date(),
+            submittedBy: submittedBy ?? "unknown",
+            role: role ?? "cashier",
             notes: notes ?? "",
           },
         },
@@ -309,13 +305,29 @@ export const submitCashCount = CatchAsyncError(
     );
 
     if (!shiftLog) {
-      // No shift log found — store as a standalone record anyway
-      // (useful if shift was opened differently)
+      // No local shift log (Odoo-only session) — still accept and return success
+      // Store in a lightweight standalone MongoDB doc
+      await CashierShiftLog.create({
+        odooSessionId,
+        odooPartnerId: 0,                        
+        cashierId: new mongoose.Types.ObjectId(),  
+        startTime: new Date(`${date}T00:00:00`),
+        state: "closed" as ShiftState,
+        cashCount: {
+          denominations,
+          countedTotal: Math.round(countedTotal * 100) / 100,
+          submittedAt: new Date(),
+          submittedBy: submittedBy ?? "unknown",
+          role: role ?? "cashier",
+          notes: notes ?? "",
+        },
+      });
+
       return res.status(200).json({
         success: true,
-        warning: "No shift log found for this date — count saved without linking",
+        warning: "No existing shift log — new record created from Odoo session",
         countedTotal: Math.round(countedTotal * 100) / 100,
-        denominations,
+        odooSessionId,
       });
     }
 
@@ -323,7 +335,8 @@ export const submitCashCount = CatchAsyncError(
       success: true,
       message: "Cash count submitted successfully",
       countedTotal: Math.round(countedTotal * 100) / 100,
-      shiftId: shiftLog._id,
+      shiftId: (shiftLog as any)._id.toString(),
+      role: role ?? "cashier",
     });
   }
 );
