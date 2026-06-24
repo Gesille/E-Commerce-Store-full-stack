@@ -572,10 +572,34 @@ useEffect(() => setMounted(true), []);
 
   try {
     const canvas = await html2canvas(portal, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-    });
+  scale: 2,
+  useCORS: true,
+  backgroundColor: "#ffffff",
+  logging: false,
+  onclone: (clonedDoc) => {
+    // Strip any stylesheets that contain lab/oklch/color() functions
+    // which html2canvas can't parse
+    const sheets = clonedDoc.styleSheets;
+    for (let i = sheets.length - 1; i >= 0; i--) {
+      try {
+        const rules = sheets[i].cssRules;
+        for (let j = rules.length - 1; j >= 0; j--) {
+          const text = rules[j].cssText;
+          if (
+            text.includes("lab(") ||
+            text.includes("oklch(") ||
+            text.includes("oklab(") ||
+            text.includes("color(")
+          ) {
+            sheets[i].deleteRule(j);
+          }
+        }
+      } catch {
+        // Cross-origin stylesheets can't be read — skip them
+      }
+    }
+  },
+});
 
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
