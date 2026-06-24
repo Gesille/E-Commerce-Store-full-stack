@@ -38,7 +38,6 @@ interface DenominationEntry {
   value: number;
   label: string;
   count: number;
-  currency?: "USD" | "XCD";
 }
 
 interface MonthDay {
@@ -61,7 +60,7 @@ type QuickRange =
 
 // ─── Default denominations ────────────────────────────────────────────────────
 
-const DEFAULT_DENOMINATIONS_USD: DenominationEntry[] = [
+const DEFAULT_DENOMINATIONS: DenominationEntry[] = [
   { value: 100, label: "100", count: 0 },
   { value: 50, label: "50", count: 0 },
   { value: 20, label: "20", count: 0 },
@@ -69,24 +68,9 @@ const DEFAULT_DENOMINATIONS_USD: DenominationEntry[] = [
   { value: 5, label: "5", count: 0 },
   { value: 1, label: "1", count: 0 },
   { value: 0.25, label: "0.25", count: 0 },
-  { value: 0.10, label: "0.10", count: 0 },
+  { value: 0.1, label: "0.10", count: 0 },
   { value: 0.05, label: "0.05", count: 0 },
 ];
-
-const DEFAULT_DENOMINATIONS_XCD: DenominationEntry[] = [
-  { value: 100, label: "100", count: 0 },
-  { value: 50, label: "50", count: 0 },
-  { value: 20, label: "20", count: 0 },
-  { value: 10, label: "10", count: 0 },
-  { value: 5, label: "5", count: 0 },
-  { value: 2, label: "2", count: 0 },
-  { value: 1, label: "1", count: 0 },
-  { value: 0.25, label: "0.25", count: 0 },
-  { value: 0.10, label: "0.10", count: 0 },
-  { value: 0.05, label: "0.05", count: 0 },
-];
-
-const XCD_TO_USD = 0.37; // 1 XCD = 0.37 USD (fixed rate)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,32 +120,46 @@ const addDays = (iso: string, days: number) => {
 const todayISO = () => new Date().toISOString().split("T")[0];
 
 // ─── KpiCard ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, icon, color, trend }: {
-  label: string; value: number; sub?: string;
-  icon: React.ReactNode; color: string; trend?: number;
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  icon,
+  color,
+  trend,
+}: {
+  label: string;
+  value: number;
+  sub?: string;
+  icon: React.ReactNode;
+  color: string;
+  trend?: number;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-all duration-200 min-w-0 group">
-      <div className="flex items-start justify-between gap-2">
-        <span className={`p-2 rounded-xl shrink-0 ${color} group-hover:scale-105 transition-transform`}>
-          {icon}
+    <div className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow min-w-0">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-widest truncate">
+          {label}
         </span>
+        <span className={`p-1.5 rounded-lg shrink-0 ${color}`}>{icon}</span>
+      </div>
+      <div className="text-xl sm:text-2xl font-extrabold text-gray-900 tabular-nums tracking-tight truncate">
+        ${fmt(value)}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        {sub && <div className="text-xs text-gray-400 truncate">{sub}</div>}
         {trend !== undefined && (
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-            trend >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
-          }`}>
+          <span
+            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+              trend >= 0
+                ? "bg-emerald-50 text-emerald-600"
+                : "bg-red-50 text-red-500"
+            }`}
+          >
             {trend >= 0 ? "▲" : "▼"} {Math.abs(trend).toFixed(1)}%
           </span>
         )}
-      </div>
-      <div>
-        <div className="text-2xl font-black text-gray-900 tabular-nums tracking-tight">
-          ${fmt(value)}
-        </div>
-        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1 leading-tight">
-          {label}
-        </div>
-        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -186,11 +184,14 @@ function PaymentBar({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-sm gap-2">
-        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-0">          {icon}
+        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-0 truncate">
+          {icon}
           <span className="truncate">{label}</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <span className="text-gray-400 text-xs w-9 sm:w-10 text-right">{pct.toFixed(1)}%</span>
+          <span className="text-gray-400 text-xs w-9 sm:w-10 text-right">
+            {pct.toFixed(1)}%
+          </span>
           <span className="font-bold tabular-nums text-gray-900 w-16 sm:w-20 text-right">
             ${fmt(amount)}
           </span>
@@ -234,11 +235,15 @@ function DenominationRow({
             value={denom.count}
             aria-label={`Count for $${denom.label} denomination`}
             title={`Count for $${denom.label} denomination`}
-            onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+            onChange={(e) =>
+              onChange(Math.max(0, parseInt(e.target.value) || 0))
+            }
             className="w-14 sm:w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
           />
         ) : (
-          <span className="text-sm font-semibold text-gray-900 tabular-nums">{denom.count}</span>
+          <span className="text-sm font-semibold text-gray-900 tabular-nums">
+            {denom.count}
+          </span>
         )}
       </td>
       <td className="py-2.5 pl-2 pr-3 sm:pr-4 text-right text-sm font-bold tabular-nums text-gray-900">
@@ -268,7 +273,7 @@ function CalendarGrid({
   const maxSales = Math.max(...days.map((d) => d.netSales), 1);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
         {WEEKDAYS.map((d) => (
           <div
@@ -281,10 +286,14 @@ function CalendarGrid({
       </div>
       <div className="grid grid-cols-7">
         {Array.from({ length: firstDay }).map((_, i) => (
-          <div key={`e-${i}`} className="h-12 sm:h-14 border-b border-r border-gray-50" />
+          <div
+            key={`e-${i}`}
+            className="h-12 sm:h-14 border-b border-r border-gray-50"
+          />
         ))}
         {days.map((day) => {
-          const intensity = day.netSales > 0 ? Math.max(0.1, day.netSales / maxSales) : 0;
+          const intensity =
+            day.netSales > 0 ? Math.max(0.1, day.netSales / maxSales) : 0;
           const isSelected = day.date === selectedDate;
           return (
             <button
@@ -307,7 +316,11 @@ function CalendarGrid({
               )}
               <span
                 className={`text-[11px] font-bold z-10 ${
-                  isSelected ? "text-blue-700" : day.isToday ? "text-amber-700" : "text-gray-600"
+                  isSelected
+                    ? "text-blue-700"
+                    : day.isToday
+                      ? "text-amber-700"
+                      : "text-gray-600"
                 }`}
               >
                 {day.dayNum}
@@ -350,11 +363,11 @@ function QuickRangePicker({
           key={r.key}
           onClick={() => onSelect(r.key)}
           aria-pressed={activeRange === r.key}
-        className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-150 ${
-  activeRange === r.key
-    ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
-    : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200"
-}`}
+          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors ${
+            activeRange === r.key
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
         >
           {r.label}
         </button>
@@ -370,21 +383,22 @@ function PrintableReport({
   selectedDate,
   denominations,
   denomTotal,
-   cashCountNotes,
 }: {
   report: any;
   selectedDate: string;
-denominations: DenominationEntry[]; 
+  denominations: DenominationEntry[];
   denomTotal: number;
-  
-  cashCountNotes: string;
 }) {
   return (
     <div id="printable-report" className="font-sans text-gray-900 text-sm">
       {/* Header */}
       <div className="text-center border-b-2 border-gray-800 pb-4 mb-4">
-        <h1 className="text-2xl font-black tracking-tight uppercase">Chef's World</h1>
-        <p className="text-sm text-gray-600 mt-0.5">Point of Sale — Daily Closing Report (Z-Report)</p>
+        <h1 className="text-2xl font-black tracking-tight uppercase">
+          Chef's World
+        </h1>
+        <p className="text-sm text-gray-600 mt-0.5">
+          Point of Sale — Daily Closing Report (Z-Report)
+        </p>
         <p className="text-xs text-gray-500 mt-1">{fmtDate(selectedDate)}</p>
       </div>
 
@@ -411,7 +425,9 @@ denominations: DenominationEntry[];
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Printed</span>
-            <span className="font-semibold">{new Date().toLocaleTimeString()}</span>
+            <span className="font-semibold">
+              {new Date().toLocaleTimeString()}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Avg Order</span>
@@ -428,7 +444,9 @@ denominations: DenominationEntry[];
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
             <span>Gross Sales</span>
-            <span className="font-semibold tabular-nums">${fmt(report.grossSales)}</span>
+            <span className="font-semibold tabular-nums">
+              ${fmt(report.grossSales)}
+            </span>
           </div>
           <div className="flex justify-between text-red-600">
             <span>Discounts</span>
@@ -448,7 +466,9 @@ denominations: DenominationEntry[];
           </div>
           <div className="flex justify-between font-black text-base border-t-2 border-gray-800 pt-1 mt-1">
             <span>TOTAL INCL. TAX</span>
-            <span className="tabular-nums">${fmt(report.netSales + report.tax)}</span>
+            <span className="tabular-nums">
+              ${fmt(report.netSales + report.tax)}
+            </span>
           </div>
         </div>
       </div>
@@ -464,7 +484,9 @@ denominations: DenominationEntry[];
             { label: "Credit/Debit Card", value: report.payments.card },
             { label: "Bank Transfer", value: report.payments.bank },
             { label: "Check", value: report.payments.check },
-            ...(report.payments.other > 0 ? [{ label: "Other", value: report.payments.other }] : []),
+            ...(report.payments.other > 0
+              ? [{ label: "Other", value: report.payments.other }]
+              : []),
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between">
               <span className="text-gray-700">{label}</span>
@@ -478,89 +500,124 @@ denominations: DenominationEntry[];
         </div>
       </div>
 
-      
-{/* Cash register count */}
-<div className="mb-4 border-b border-dashed border-gray-300 pb-4">
-  <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
-    Cash Register Count
-  </p>
-  <div className="grid grid-cols-2 gap-x-8 mb-3 text-sm">
-    <div className="space-y-1">
-      <div className="flex justify-between">
-        <span className="text-gray-500">Opening Balance</span>
-        <span className="font-semibold tabular-nums">${fmt(report.openingBalance)}</span>
+      {/* Cash count */}
+      <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
+        <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
+          Cash Register Count
+        </p>
+        <div className="space-y-1 text-sm mb-3">
+          <div className="flex justify-between">
+            <span>Opening Balance</span>
+            <span className="tabular-nums">${fmt(report.openingBalance)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Expected Closing</span>
+            <span className="tabular-nums font-semibold">
+              ${fmt(report.expectedClosingBalance)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Counted Cash</span>
+            <span className="tabular-nums font-semibold">
+              ${fmt(denomTotal)}
+            </span>
+          </div>
+          <div
+            className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${
+              Math.abs(denomTotal - report.expectedClosingBalance) < 1
+                ? "text-emerald-700"
+                : "text-red-600"
+            }`}
+          >
+            <span>Difference</span>
+            <span className="tabular-nums">
+              {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}$
+              {fmt(denomTotal - report.expectedClosingBalance)}
+            </span>
+          </div>
+        </div>
+        <table className="w-full text-xs border border-gray-200">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="text-left py-1 px-2 font-semibold">
+                Denomination
+              </th>
+              <th className="text-center py-1 px-2 font-semibold">Count</th>
+              <th className="text-right py-1 px-2 font-semibold">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {denominations
+              .filter((d) => d.count > 0)
+              .map((d) => (
+                <tr key={d.label} className="border-t border-gray-100">
+                  <td className="py-1 px-2">${d.label}</td>
+                  <td className="py-1 px-2 text-center">{d.count}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">
+                    ${fmt(d.value * d.count)}
+                  </td>
+                </tr>
+              ))}
+            <tr className="border-t-2 border-gray-800 font-bold">
+              <td colSpan={2} className="py-1 px-2">
+                TOTAL CASH
+              </td>
+              <td className="py-1 px-2 text-right tabular-nums">
+                ${fmt(denomTotal)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div className="flex justify-between">
-        <span className="text-gray-500">Cash Sales</span>
-        <span className="font-semibold tabular-nums text-emerald-700">+${fmt(report.payments.cash)}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-gray-500">Cash Refunds (est.)</span>
-        <span className="font-semibold tabular-nums text-red-600">-${fmt(report.refunds * 0.45)}</span>
-      </div>
-    </div>
-    <div className="space-y-1">
-      <div className="flex justify-between">
-        <span className="text-gray-500">Expected Closing</span>
-        <span className="font-semibold tabular-nums">${fmt(report.expectedClosingBalance)}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-gray-500">Counted Cash</span>
-        <span className="font-semibold tabular-nums">${fmt(denomTotal)}</span>
-      </div>
-      <div className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${
-        Math.abs(denomTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-600"
-      }`}>
-        <span>Difference</span>
-        <span className="tabular-nums">
-          {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}${fmt(denomTotal - report.expectedClosingBalance)}
-        </span>
-      </div>
-    </div>
-  </div>
-  <table className="w-full text-xs border border-gray-200">
-    <thead>
-      <tr className="bg-gray-100">
-        <th className="text-left py-1 px-2 font-semibold">Denomination</th>
-        <th className="text-center py-1 px-2 font-semibold">Count</th>
-        <th className="text-right py-1 px-2 font-semibold">Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      {denominations
-        .filter((d) => d.count > 0)
-        .map((d) => (
-          <tr key={d.label} className="border-t border-gray-100">
-            <td className="py-1 px-2">${d.label}</td>
-            <td className="py-1 px-2 text-center">{d.count}</td>
-            <td className="py-1 px-2 text-right tabular-nums">${fmt(d.value * d.count)}</td>
-          </tr>
-        ))}
-      <tr className="border-t-2 border-gray-800 font-bold">
-        <td colSpan={2} className="py-1 px-2">TOTAL CASH</td>
-        <td className="py-1 px-2 text-right tabular-nums">${fmt(denomTotal)}</td>
-      </tr>
-    </tbody>
-  </table>
-  {cashCountNotes && (
-    <p className="mt-2 text-xs text-gray-500 italic">Notes: {cashCountNotes}</p>
-  )}
-</div>
-    
+
+      {/* Top products */}
+      {report.topProducts?.length > 0 && (
+        <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
+          <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
+            Top Products
+          </p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-300">
+                <th className="text-left py-1 font-semibold">#</th>
+                <th className="text-left py-1 font-semibold">Product</th>
+                <th className="text-center py-1 font-semibold">Qty</th>
+                <th className="text-right py-1 font-semibold">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.topProducts.slice(0, 5).map((p: any, i: number) => (
+                <tr key={p.name} className="border-b border-gray-100">
+                  <td className="py-1 text-gray-400">{i + 1}</td>
+                  <td className="py-1">{p.name}</td>
+                  <td className="py-1 text-center">{p.qty}</td>
+                  <td className="py-1 text-right tabular-nums">
+                    ${fmt(p.revenue)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Sign-off */}
       <div className="mt-6">
         <div className="grid grid-cols-3 gap-8">
-          {["Cashier Signature", "Supervisor Signature", "Date & Stamp"].map((label) => (
-            <div key={label} className="flex flex-col gap-2">
-              <div className="h-10 border-b-2 border-dashed border-gray-400" />
-              <span className="text-[10px] text-gray-500 text-center">{label}</span>
-            </div>
-          ))}
+          {["Cashier Signature", "Supervisor Signature", "Date & Stamp"].map(
+            (label) => (
+              <div key={label} className="flex flex-col gap-2">
+                <div className="h-10 border-b-2 border-dashed border-gray-400" />
+                <span className="text-[10px] text-gray-500 text-center">
+                  {label}
+                </span>
+              </div>
+            ),
+          )}
         </div>
         <p className="text-[9px] text-gray-400 text-center mt-6">
-          Chef's World POS · Generated {new Date().toLocaleString()} · This is an official closing
-          document.
+          Chef's World POS · Generated {new Date().toLocaleString()} · This is
+          an official closing document.
         </p>
       </div>
     </div>
@@ -593,49 +650,34 @@ export default function POSClosingReport() {
   const { user } = useSelector((state: any) => state.auth);
 
   // ── Denominations persisted per date ──────────────────────────────────────
-const [denominationsUSD, setDenominationsUSD] = useState<DenominationEntry[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS_USD;
-    try {
-      const saved = localStorage.getItem(`cash_count_usd_${today}`);
-      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS_USD;
-    } catch {
-      return DEFAULT_DENOMINATIONS_USD;
-    }
-  });
-
-  const [denominationsXCD, setDenominationsXCD] = useState<DenominationEntry[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS_XCD;
-    try {
-      const saved = localStorage.getItem(`cash_count_xcd_${today}`);
-      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS_XCD;
-    } catch {
-      return DEFAULT_DENOMINATIONS_XCD;
-    }
-  });
+  const [denominations, setDenominations] = useState<DenominationEntry[]>(
+    () => {
+      if (typeof window === "undefined") return DEFAULT_DENOMINATIONS;
+      try {
+        const saved = localStorage.getItem(`cash_count_${today}`);
+        return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS;
+      } catch {
+        return DEFAULT_DENOMINATIONS;
+      }
+    },
+  );
 
   useEffect(() => {
     try {
-      const savedUSD = localStorage.getItem(`cash_count_usd_${selectedDate}`);
-      setDenominationsUSD(savedUSD ? JSON.parse(savedUSD) : DEFAULT_DENOMINATIONS_USD);
-      const savedXCD = localStorage.getItem(`cash_count_xcd_${selectedDate}`);
-      setDenominationsXCD(savedXCD ? JSON.parse(savedXCD) : DEFAULT_DENOMINATIONS_XCD);
+      const saved = localStorage.getItem(`cash_count_${selectedDate}`);
+      setDenominations(saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS);
     } catch {
-      setDenominationsUSD(DEFAULT_DENOMINATIONS_USD);
-      setDenominationsXCD(DEFAULT_DENOMINATIONS_XCD);
+      setDenominations(DEFAULT_DENOMINATIONS);
     }
   }, [selectedDate]);
 
-  const updateDenominationsUSD = (updated: DenominationEntry[]) => {
-    setDenominationsUSD(updated);
+  const updateDenominations = (updated: DenominationEntry[]) => {
+    setDenominations(updated);
     try {
-      localStorage.setItem(`cash_count_usd_${selectedDate}`, JSON.stringify(updated));
-    } catch {}
-  };
-
-  const updateDenominationsXCD = (updated: DenominationEntry[]) => {
-    setDenominationsXCD(updated);
-    try {
-      localStorage.setItem(`cash_count_xcd_${selectedDate}`, JSON.stringify(updated));
+      localStorage.setItem(
+        `cash_count_${selectedDate}`,
+        JSON.stringify(updated),
+      );
     } catch {}
   };
 
@@ -658,13 +700,17 @@ const [denominationsUSD, setDenominationsUSD] = useState<DenominationEntry[]>(()
         break;
       case "thisMonth": {
         const d = new Date();
-        setSelectedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+        setSelectedDate(
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+        );
         break;
       }
       case "lastMonth": {
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
-        setSelectedDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+        setSelectedDate(
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
+        );
         break;
       }
     }
@@ -685,7 +731,8 @@ const [denominationsUSD, setDenominationsUSD] = useState<DenominationEntry[]>(()
     isFetching: monthFetching,
   } = useGetMonthlyCalendarReportQuery({ year: calYear, month: calMonth });
 
-  const [submitCashCount, { isLoading: submitting }] = useSubmitCashCountMutation();
+  const [submitCashCount, { isLoading: submitting }] =
+    useSubmitCashCountMutation();
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const monthDays = useMemo<MonthDay[]>(() => {
@@ -707,10 +754,7 @@ const [denominationsUSD, setDenominationsUSD] = useState<DenominationEntry[]>(()
     avgPerDay: 0,
   };
 
-const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0);
-  const denomTotalXCD = denominationsXCD.reduce((s, d) => s + d.value * d.count, 0);
-  const denomTotalXCDinUSD = denomTotalXCD * XCD_TO_USD;
-  const denomTotal = denomTotalUSD + denomTotalXCDinUSD;
+  const denomTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
   const isLoading = reportLoading || reportFetching;
   const isMonthLoading = monthLoading || monthFetching;
 
@@ -738,10 +782,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       await submitCashCount({
         date: selectedDate,
         odooSessionId: report.odooSessionId,
-   denominations: [
-    ...denominationsUSD.map(d => ({ ...d, currency: "USD" })),
-    ...denominationsXCD.map(d => ({ ...d, currency: "XCD" })),
-  ],
+        denominations,
         sessionName: report.sessionName,
         notes: cashCountNotes,
         submittedBy: user?.name ?? "unknown",
@@ -750,7 +791,11 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
     } catch (err: any) {
-      setSubmitError(err?.data?.message ?? err?.message ?? "Submit failed. Please try again.");
+      setSubmitError(
+        err?.data?.message ??
+          err?.message ??
+          "Submit failed. Please try again.",
+      );
     }
   };
 
@@ -773,7 +818,11 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
     setExportError(null);
 
     try {
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
       const W = 210; // A4 width
       const margin = 15;
       const lineH = 6;
@@ -798,7 +847,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       y += 7;
       pdf.setFontSize(9);
       pdf.setFont("helvetica", "normal");
-      pdf.text("Point of Sale — Daily Closing Report (Z-Report)", W / 2, y, { align: "center" });
+      pdf.text("Point of Sale — Daily Closing Report (Z-Report)", W / 2, y, {
+        align: "center",
+      });
       y += 5;
       pdf.text(fmtDate(selectedDate), W / 2, y, { align: "center" });
       y += 3;
@@ -815,8 +866,18 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
 
       const sessionRows: [string, string, string, string][] = [
         ["Session", report.sessionName, "Date", selectedDate],
-        ["Cashier", report.cashierName, "Printed", new Date().toLocaleTimeString()],
-        ["Orders", String(report.ordersCount), "Avg Order", `$${fmt(report.avgOrderValue)}`],
+        [
+          "Cashier",
+          report.cashierName,
+          "Printed",
+          new Date().toLocaleTimeString(),
+        ],
+        [
+          "Orders",
+          String(report.ordersCount),
+          "Avg Order",
+          `$${fmt(report.avgOrderValue)}`,
+        ],
       ];
       pdf.setFontSize(9);
       sessionRows.forEach(([l1, v1, l2, v2]) => {
@@ -872,7 +933,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
         ["Credit/Debit Card", report.payments.card],
         ["Bank Transfer", report.payments.bank],
         ["Check", report.payments.check],
-        ...(report.payments.other > 0 ? ([["Other", report.payments.other]] as [string, number][]) : []),
+        ...(report.payments.other > 0
+          ? ([["Other", report.payments.other]] as [string, number][])
+          : []),
         ["Total Collected", report.payments.total],
       ];
       payRows.forEach(([label, value], i) => {
@@ -920,18 +983,17 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       pdf.text("Amount", W - margin - 2, y, { align: "right" });
       y += 5;
 
-   [
-  ...denominationsUSD.map(d => ({ ...d, currency: "USD" as const })),
-  ...denominationsXCD.map(d => ({ ...d, currency: "XCD" as const })),
-]
-  .filter((d) => d.count > 0)
+      denominations
+        .filter((d) => d.count > 0)
         .forEach((d) => {
           checkPage();
           pdf.setFontSize(9);
           pdf.setFont("helvetica", "normal");
-          pdf.text(`$${d.label} ${d.currency ?? ""}`, margin + 2, y);
+          pdf.text(`$${d.label}`, margin + 2, y);
           pdf.text(String(d.count), W / 2, y, { align: "center" });
-          pdf.text(`$${fmt(d.value * d.count)}`, W - margin - 2, y, { align: "right" });
+          pdf.text(`$${fmt(d.value * d.count)}`, W - margin - 2, y, {
+            align: "right",
+          });
           y += lineH;
         });
       pdf.setFont("helvetica", "bold");
@@ -976,7 +1038,11 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       checkPage();
       y += 4;
       const sigCols = [margin, W / 2 - 20, W - margin - 40];
-      const sigLabels = ["Cashier Signature", "Supervisor Signature", "Date & Stamp"];
+      const sigLabels = [
+        "Cashier Signature",
+        "Supervisor Signature",
+        "Date & Stamp",
+      ];
       sigCols.forEach((x, i) => {
         pdf.setLineDashPattern([1, 1], 0);
         pdf.line(x, y, x + 50, y);
@@ -986,9 +1052,14 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       });
       y += 12;
       pdf.setFontSize(7);
-      pdf.text(`Chef's World POS · Generated ${new Date().toLocaleString()} · Confidential`, W / 2, y, {
-        align: "center",
-      });
+      pdf.text(
+        `Chef's World POS · Generated ${new Date().toLocaleString()} · Confidential`,
+        W / 2,
+        y,
+        {
+          align: "center",
+        },
+      );
 
       pdf.save(`ZReport_${selectedDate}.pdf`);
     } catch (err) {
@@ -1009,12 +1080,11 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             <PrintableReport
               report={report}
               selectedDate={selectedDate}
-              denominations={[...denominationsUSD, ...denominationsXCD]}
+              denominations={denominations}
               denomTotal={denomTotal}
-              cashCountNotes={cashCountNotes}
             />
           </div>,
-          document.body
+          document.body,
         )}
 
       {/* ── Print stylesheet ── */}
@@ -1029,14 +1099,16 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       `}</style>
 
       {/* ── Main UI ── */}
-      <div className="min-h-screen bg-[#EEF0F6] font-sans print:hidden">
+      <div className="min-h-screen bg-[#F0F2F7] font-sans print:hidden">
         {/* ── Header ── */}
-        <div className="bg-white/95 backdrop-blur border-b border-gray-100 px-3 sm:px-6 py-3.5 flex items-center justify-between sticky top-0 z-20 shadow-sm gap-2">
+        <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen((v) => !v)}
               className="lg:hidden p-2 -ml-1 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
-              aria-label={sidebarOpen ? "Close filters panel" : "Open filters panel"}
+              aria-label={
+                sidebarOpen ? "Close filters panel" : "Open filters panel"
+              }
               title={sidebarOpen ? "Close filters panel" : "Open filters panel"}
             >
               <CalendarRange size={18} />
@@ -1060,7 +1132,10 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
               title="Refresh data"
               aria-label="Refresh data"
             >
-              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={14}
+                className={isLoading ? "animate-spin" : ""}
+              />
             </button>
             {report && !report.empty && (
               <button
@@ -1087,7 +1162,8 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
               aria-label="Print report"
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              <Printer size={13} /> <span className="hidden sm:inline">Print</span>
+              <Printer size={13} />{" "}
+              <span className="hidden sm:inline">Print</span>
             </button>
             <button
               onClick={handleExportPDF}
@@ -1095,7 +1171,8 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
               aria-label="Export report as PDF"
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
-              <Download size={13} /> <span className="hidden sm:inline">Export PDF</span>
+              <Download size={13} />{" "}
+              <span className="hidden sm:inline">Export PDF</span>
             </button>
           </div>
         </div>
@@ -1110,18 +1187,21 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
 
         <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-4 sm:py-5 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 sm:gap-5">
           {/* ── LEFT SIDEBAR ── */}
-          <div className={`flex flex-col gap-4 ${sidebarOpen ? "block" : "hidden"} lg:block`}>
+          <div
+            className={`flex flex-col gap-4 ${sidebarOpen ? "block" : "hidden"} lg:block`}
+          >
             {/* Quick ranges */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-             <div className="flex items-center gap-2 mb-3">
-    <div className="p-1.5 bg-blue-50 rounded-lg">
-      <CalendarRange size={12} className="text-blue-600" />
-    </div>
-    <span className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
-      Quick Range
-    </span>
-  </div>
-              <QuickRangePicker activeRange={activeRange} onSelect={handleRangeSelect} />
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CalendarRange size={13} className="text-blue-600" />
+                <span className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                  Quick Range
+                </span>
+              </div>
+              <QuickRangePicker
+                activeRange={activeRange}
+                onSelect={handleRangeSelect}
+              />
 
               {/* Custom date picker */}
               <div className="mt-3 pt-3 border-t border-gray-100">
@@ -1147,7 +1227,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             </div>
 
             {/* Month calendar */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={handlePrevMonth}
@@ -1205,7 +1285,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             </div>
 
             {/* Month summary */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <BarChart3 size={13} className="text-blue-600" />
                 <span className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">
@@ -1214,10 +1294,23 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
               </div>
               <div className="flex flex-col gap-2">
                 {[
-                  { label: "Total Revenue", value: `$${fmt(monthTotals.netSales)}`, bold: true },
-                  { label: "Total Orders", value: monthTotals.ordersCount.toLocaleString() },
-                  { label: "Active Days", value: String(monthTotals.activeDays) },
-                  { label: "Avg / Day", value: `$${fmt(monthTotals.avgPerDay)}` },
+                  {
+                    label: "Total Revenue",
+                    value: `$${fmt(monthTotals.netSales)}`,
+                    bold: true,
+                  },
+                  {
+                    label: "Total Orders",
+                    value: monthTotals.ordersCount.toLocaleString(),
+                  },
+                  {
+                    label: "Active Days",
+                    value: String(monthTotals.activeDays),
+                  },
+                  {
+                    label: "Avg / Day",
+                    value: `$${fmt(monthTotals.avgPerDay)}`,
+                  },
                 ].map(({ label, value, bold }) => (
                   <div
                     key={label}
@@ -1226,7 +1319,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                     <span className="text-xs text-gray-500">{label}</span>
                     <span
                       className={`text-xs tabular-nums ${
-                        bold ? "font-extrabold text-gray-900" : "font-semibold text-gray-800"
+                        bold
+                          ? "font-extrabold text-gray-900"
+                          : "font-semibold text-gray-800"
                       }`}
                     >
                       {value}
@@ -1246,11 +1341,14 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                   </span>
                 </div>
                 <p className="text-sm font-extrabold mb-3 leading-snug">
-                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                  })}
+                  {new Date(selectedDate + "T00:00:00").toLocaleDateString(
+                    "en-US",
+                    {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    },
+                  )}
                 </p>
                 <div className="flex flex-col gap-1.5 text-[11px]">
                   <div className="flex justify-between">
@@ -1267,7 +1365,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                   </div>
                   <div className="flex justify-between mt-1 pt-1 border-t border-white/20">
                     <span className="opacity-60">Net Sales</span>
-                    <span className="font-extrabold text-sm">${fmt(report.netSales)}</span>
+                    <span className="font-extrabold text-sm">
+                      ${fmt(report.netSales)}
+                    </span>
                   </div>
                 </div>
                 {/* Mobile-only save-to-Odoo action */}
@@ -1282,7 +1382,8 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                     </>
                   ) : (
                     <>
-                      <Save size={13} /> {savingOdoo ? "Saving…" : "Save to Odoo"}
+                      <Save size={13} />{" "}
+                      {savingOdoo ? "Saving…" : "Save to Odoo"}
                     </>
                   )}
                 </button>
@@ -1294,28 +1395,40 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
           <div className="flex flex-col gap-4 min-w-0">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-24 sm:py-32 text-gray-400 bg-white rounded-xl border border-gray-100">
-                <RefreshCw size={28} className="animate-spin mb-3 text-blue-600" />
-                <span className="text-sm font-medium text-gray-500">Loading report…</span>
+                <RefreshCw
+                  size={28}
+                  className="animate-spin mb-3 text-blue-600"
+                />
+                <span className="text-sm font-medium text-gray-500">
+                  Loading report…
+                </span>
               </div>
             ) : report?.empty ? (
               <div className="flex flex-col items-center justify-center py-24 sm:py-32 text-gray-400 bg-white rounded-xl border border-gray-100 gap-2 text-center px-4">
                 <FileText size={36} className="opacity-20" />
-                <p className="text-sm font-semibold text-gray-500">No orders found for this date</p>
+                <p className="text-sm font-semibold text-gray-500">
+                  No orders found for this date
+                </p>
                 <p className="text-xs text-gray-400">{report.message}</p>
               </div>
             ) : report ? (
               <>
                 {/* Report header */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 sm:px-6 py-4">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 sm:px-6 py-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-base sm:text-lg font-extrabold text-gray-900 tracking-tight truncate">
                         {fmtDate(selectedDate)}
                       </h2>
                       <p className="text-[11px] text-gray-400 mt-0.5 font-medium">
-                        Session: <span className="text-gray-600 font-semibold">{report.sessionName}</span>
+                        Session:{" "}
+                        <span className="text-gray-600 font-semibold">
+                          {report.sessionName}
+                        </span>
                         &nbsp;·&nbsp;Cashier:{" "}
-                        <span className="text-gray-600 font-semibold">{report.cashierName}</span>
+                        <span className="text-gray-600 font-semibold">
+                          {report.cashierName}
+                        </span>
                         &nbsp;·&nbsp;{report.ordersCount} orders
                       </p>
                     </div>
@@ -1362,15 +1475,27 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                 {/* Sales + Payments */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Sales breakdown */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Sales Breakdown
                     </h3>
                     <div className="flex flex-col gap-0">
                       {[
-                        { label: "Gross Sales", value: report.grossSales, cls: "text-gray-900 font-semibold" },
-                        { label: "Discounts", value: -report.discounts, cls: "text-red-500 font-medium" },
-                        { label: "Refunds / Returns", value: -report.refunds, cls: "text-red-500 font-medium" },
+                        {
+                          label: "Gross Sales",
+                          value: report.grossSales,
+                          cls: "text-gray-900 font-semibold",
+                        },
+                        {
+                          label: "Discounts",
+                          value: -report.discounts,
+                          cls: "text-red-500 font-medium",
+                        },
+                        {
+                          label: "Refunds / Returns",
+                          value: -report.refunds,
+                          cls: "text-red-500 font-medium",
+                        },
                       ].map(({ label, value, cls }) => (
                         <div
                           key={label}
@@ -1384,11 +1509,15 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                       ))}
                       <div className="flex justify-between py-3 text-sm font-extrabold border-t-2 border-gray-200 mt-1">
                         <span>Net Sales</span>
-                        <span className="text-emerald-700 tabular-nums">${fmt(report.netSales)}</span>
+                        <span className="text-emerald-700 tabular-nums">
+                          ${fmt(report.netSales)}
+                        </span>
                       </div>
                       <div className="flex justify-between py-2 text-xs">
                         <span className="text-gray-400">VAT / Tax</span>
-                        <span className="text-gray-600 tabular-nums">+${fmt(report.tax)}</span>
+                        <span className="text-gray-600 tabular-nums">
+                          +${fmt(report.tax)}
+                        </span>
                       </div>
                       <div className="flex justify-between py-2.5 text-sm font-extrabold bg-gray-50 rounded-lg px-3 -mx-1 mt-1">
                         <span className="text-gray-900">Total incl. Tax</span>
@@ -1400,7 +1529,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                   </div>
 
                   {/* Payment methods */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Payment Methods
                     </h3>
@@ -1410,28 +1539,36 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                         amount={report.payments.cash}
                         total={report.payments.total}
                         color="bg-emerald-400"
-                        icon={<Banknote size={13} className="text-emerald-600" />}
+                        icon={
+                          <Banknote size={13} className="text-emerald-600" />
+                        }
                       />
                       <PaymentBar
                         label="Credit / Debit Card"
                         amount={report.payments.card}
                         total={report.payments.total}
                         color="bg-blue-400"
-                        icon={<CreditCard size={13} className="text-blue-600" />}
+                        icon={
+                          <CreditCard size={13} className="text-blue-600" />
+                        }
                       />
                       <PaymentBar
                         label="Bank Transfer"
                         amount={report.payments.bank}
                         total={report.payments.total}
                         color="bg-violet-400"
-                        icon={<Building2 size={13} className="text-violet-600" />}
+                        icon={
+                          <Building2 size={13} className="text-violet-600" />
+                        }
                       />
                       <PaymentBar
                         label="Check"
                         amount={report.payments.check}
                         total={report.payments.total}
                         color="bg-amber-400"
-                        icon={<ReceiptText size={13} className="text-amber-600" />}
+                        icon={
+                          <ReceiptText size={13} className="text-amber-600" />
+                        }
                       />
                       {report.payments.other > 0 && (
                         <PaymentBar
@@ -1439,51 +1576,59 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                           amount={report.payments.other}
                           total={report.payments.total}
                           color="bg-gray-400"
-                          icon={<CreditCard size={13} className="text-gray-500" />}
+                          icon={
+                            <CreditCard size={13} className="text-gray-500" />
+                          }
                         />
                       )}
                     </div>
                     <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold">
                       <span>Total Collected</span>
-                      <span className="tabular-nums">${fmt(report.payments.total)}</span>
+                      <span className="tabular-nums">
+                        ${fmt(report.payments.total)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Top Products */}
                 {report.topProducts?.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Top Products
                     </h3>
                     <div className="grid grid-cols-1 gap-0">
-                      {report.topProducts.slice(0, 5).map((p: any, i: number) => (
-                        <div
-                          key={p.name}
-                          className="flex items-center justify-between gap-3 py-2.5 border-b border-gray-50 text-sm"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="w-6 h-6 rounded-full bg-gray-100 text-[11px] font-extrabold text-gray-500 flex items-center justify-center flex-shrink-0">
-                              {i + 1}
-                            </span>
-                            <span className="text-gray-800 font-medium truncate">{p.name}</span>
+                      {report.topProducts
+                        .slice(0, 5)
+                        .map((p: any, i: number) => (
+                          <div
+                            key={p.name}
+                            className="flex items-center justify-between gap-3 py-2.5 border-b border-gray-50 text-sm"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="w-6 h-6 rounded-full bg-gray-100 text-[11px] font-extrabold text-gray-500 flex items-center justify-center flex-shrink-0">
+                                {i + 1}
+                              </span>
+                              <span className="text-gray-800 font-medium truncate">
+                                {p.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+                              <span className="text-gray-400 text-xs tabular-nums hidden sm:inline">
+                                {p.qty} units
+                              </span>
+                              <span className="font-bold tabular-nums text-gray-900 w-16 sm:w-20 text-right">
+                                ${fmt(p.revenue)}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
-                            <span className="text-gray-400 text-xs tabular-nums hidden sm:inline">
-                              {p.qty} units
-                            </span>
-                            <span className="font-bold tabular-nums text-gray-900 w-16 sm:w-20 text-right">
-                              ${fmt(p.revenue)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </div>
                 )}
 
                 {/* Cash Register Count */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                       Cash Register Count
@@ -1532,7 +1677,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                           cls: "text-gray-900",
                         },
                         {
-                          icon: <Banknote size={13} className="text-emerald-500" />,
+                          icon: (
+                            <Banknote size={13} className="text-emerald-500" />
+                          ),
                           label: "Cash Sales",
                           value: `+$${fmt(report.payments.cash)}`,
                           cls: "text-emerald-700 font-semibold",
@@ -1552,18 +1699,24 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                             {icon}
                             {label}
                           </div>
-                          <span className={`font-semibold tabular-nums ${cls}`}>{value}</span>
+                          <span className={`font-semibold tabular-nums ${cls}`}>
+                            {value}
+                          </span>
                         </div>
                       ))}
                       <div className="flex justify-between items-center py-3 font-extrabold text-sm border-t-2 border-gray-200 mt-1">
                         <span>Expected Closing</span>
-                        <span className="tabular-nums">${fmt(report.expectedClosingBalance)}</span>
+                        <span className="tabular-nums">
+                          ${fmt(report.expectedClosingBalance)}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center py-2 text-sm">
                         <span className="text-gray-600">Counted (below)</span>
                         <span
                           className={`font-extrabold tabular-nums ${
-                            Math.abs(denomTotal - report.expectedClosingBalance) < 1
+                            Math.abs(
+                              denomTotal - report.expectedClosingBalance,
+                            ) < 1
                               ? "text-emerald-700"
                               : "text-red-500"
                           }`}
@@ -1573,15 +1726,18 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                       </div>
                       <div
                         className={`flex justify-between items-center py-2.5 rounded-xl px-3 text-sm mt-1 ${
-                          Math.abs(denomTotal - report.expectedClosingBalance) < 1
+                          Math.abs(denomTotal - report.expectedClosingBalance) <
+                          1
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-red-50 text-red-600"
                         }`}
                       >
                         <span className="font-semibold">Difference</span>
                         <span className="font-extrabold tabular-nums">
-                          {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}$
-                          {fmt(denomTotal - report.expectedClosingBalance)}
+                          {denomTotal - report.expectedClosingBalance >= 0
+                            ? "+"
+                            : ""}
+                          ${fmt(denomTotal - report.expectedClosingBalance)}
                         </span>
                       </div>
                       <label htmlFor="cash-count-notes" className="sr-only">
@@ -1598,101 +1754,65 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                       />
                     </div>
 
-                   {/* Denomination tables */}
-                    <div className="flex flex-col gap-4">
-                      {/* USD */}
-                      <div className="border border-gray-100 rounded-xl overflow-x-auto">
-                        <div className="bg-blue-50 px-3 py-1.5 flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">🇺🇸 USD — US Dollar</span>
-                          <span className="text-[11px] font-extrabold text-blue-800 tabular-nums">${fmt(denomTotalUSD)}</span>
-                        </div>
-                        <table className="w-full min-w-[280px]">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">Bill / Coin</th>
-                              <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
-                              <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {denominationsUSD.map((d, i) => (
-                              <DenominationRow
-                                key={d.label}
-                                denom={d}
-                                editable={denomEditable}
-                                onChange={(count) =>
-                                  updateDenominationsUSD(
-                                    denominationsUSD.map((item, idx) =>
-                                      idx === i ? { ...item, count } : item
-                                    )
-                                  )
-                                }
-                              />
-                            ))}
-                            <tr className="border-t-2 border-gray-200 bg-gray-50">
-                              <td colSpan={2} className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900">Total USD</td>
-                              <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-blue-700 tabular-nums">${fmt(denomTotalUSD)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* XCD */}
-                      <div className="border border-gray-100 rounded-xl overflow-x-auto">
-                        <div className="bg-emerald-50 px-3 py-1.5 flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">🇦🇬 XCD — EC Dollar</span>
-                          <span className="text-[11px] font-extrabold text-emerald-800 tabular-nums">
-                            EC${fmt(denomTotalXCD)}
-                            <span className="text-[10px] font-medium text-emerald-600 ml-1">(≈ ${fmt(denomTotalXCDinUSD)} USD)</span>
-                          </span>
-                        </div>
-                        <table className="w-full min-w-[280px]">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">Bill / Coin</th>
-                              <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
-                              <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {denominationsXCD.map((d, i) => (
-                              <DenominationRow
-                                key={d.label}
-                                denom={d}
-                                editable={denomEditable}
-                                onChange={(count) =>
-                                  updateDenominationsXCD(
-                                    denominationsXCD.map((item, idx) =>
-                                      idx === i ? { ...item, count } : item
-                                    )
-                                  )
-                                }
-                              />
-                            ))}
-                            <tr className="border-t-2 border-gray-200 bg-gray-50">
-                              <td colSpan={2} className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900">Total XCD</td>
-                              <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">EC${fmt(denomTotalXCD)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Combined total */}
-                      <div className="bg-gray-900 rounded-xl px-4 py-3 flex justify-between items-center">
-                        <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Combined Total (USD)</span>
-                        <span className="text-base font-extrabold text-white tabular-nums">${fmt(denomTotal)}</span>
-                      </div>
+                    {/* Denomination table */}
+                    <div className="border border-gray-100 rounded-xl overflow-x-auto">
+                      <table className="w-full min-w-[280px]">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">
+                              Bill / Coin
+                            </th>
+                            <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">
+                              Count
+                            </th>
+                            <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {denominations.map((d, i) => (
+                            <DenominationRow
+                              key={d.label}
+                              denom={d}
+                              editable={denomEditable}
+                              onChange={(count) =>
+                                updateDenominations(
+                                  denominations.map((item, idx) =>
+                                    idx === i ? { ...item, count } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          ))}
+                          <tr className="border-t-2 border-gray-200 bg-gray-50">
+                            <td
+                              colSpan={2}
+                              className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900"
+                            >
+                              Total Cash
+                            </td>
+                            <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">
+                              ${fmt(denomTotal)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
 
                 {/* Cashier Sign-Off */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
                   <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5">
                     Cashier Sign-Off
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
-                    {["Cashier Signature", "Supervisor Signature", "Date & Stamp"].map((label) => (
+                    {[
+                      "Cashier Signature",
+                      "Supervisor Signature",
+                      "Date & Stamp",
+                    ].map((label) => (
                       <div key={label} className="flex flex-col gap-2">
                         <div className="h-12 border-b-2 border-dashed border-gray-200" />
                         <span className="text-[10px] text-gray-400 text-center font-medium uppercase tracking-wide">
@@ -1702,7 +1822,8 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                     ))}
                   </div>
                   <p className="text-[10px] text-gray-300 text-center mt-5">
-                    Chef's World POS · Report generated {new Date().toLocaleString()} · Confidential
+                    Chef's World POS · Report generated{" "}
+                    {new Date().toLocaleString()} · Confidential
                   </p>
                 </div>
               </>
