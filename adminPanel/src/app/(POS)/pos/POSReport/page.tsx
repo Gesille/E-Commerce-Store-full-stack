@@ -1363,51 +1363,49 @@ row("Refunds",   `-EC$${fmt(report.refunds)}`);
                     </div>
                   </div>
 
-                  {/* ── Closing summary + notes ── */}
+                
                  
-                  <div className="grid grid-cols-1 gap-6">
-  <div className="flex flex-col gap-0">
-    <div className="grid grid-cols-2 gap-6">
-                    <div className="flex flex-col gap-0">
-                      {[
-                        { icon: <Clock size={13} className="text-gray-400" />,       label: "Opening Balance",    value: `EC$${fmt(report.openingBalance)}`,          cls: "text-gray-900" },
-                        { icon: <Banknote size={13} className="text-emerald-500" />, label: "Cash Sales",          value: `+EC$${fmt(report.payments.cash)}`,           cls: "text-emerald-700 font-semibold" },
-                        { icon: <XCircle size={13} className="text-red-400" />,      label: "Cash Refunds (est.)", value: `−EC$${fmt(report.refunds * 0.45)}`,          cls: "text-red-500" },
-                      ].map(({ icon, label, value, cls }) => (
-                        <div key={label} className="flex justify-between items-center py-2.5 border-b border-gray-50 text-sm">
-                          <div className="flex items-center gap-2 text-gray-600">{icon}{label}</div>
-                          <span className={`font-semibold tabular-nums ${cls}`}>{value}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between items-center py-3 font-extrabold text-sm border-t-2 border-gray-200 mt-1">
-                        <span>Expected Closing</span>
-                        <span className="tabular-nums">EC${fmt(report.expectedClosingBalance)}</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2 text-sm">
-                        <span className="text-gray-600">Combined Counted</span>
-                        <span className={`font-extrabold tabular-nums ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-500"}`}>
-                          EC${fmt(combinedXCDTotal)}
-                        </span>
-                      </div>
-                      <div className={`flex justify-between items-center py-2.5 rounded-xl px-3 text-sm mt-1 ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
-                        <span className="font-semibold">Difference (EC$)</span>
-                        <span className="font-extrabold tabular-nums">
-                          {combinedXCDTotal - report.expectedClosingBalance >= 0 ? "+" : ""}
-                          EC${fmt(combinedXCDTotal - report.expectedClosingBalance)}
-                        </span>
-                      </div>
-                    <textarea
-  placeholder="Notes (optional)"
-  value={cashCountNotes}
-  onChange={(e) => setCashCountNotes(e.target.value)}
-  className="mt-3 w-full max-w-lg text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-  rows={2}
-/>
-                    </div>
-
-               
-                  </div>
+  {/* ── Closing summary + notes ── */}
+<div className="flex flex-col gap-0">
+  <div className="grid grid-cols-3 gap-4 mb-3">
+    {[
+      { icon: <Clock size={13} className="text-gray-400" />,       label: "Opening Balance",    value: `EC$${fmt(report.openingBalance)}`,        cls: "text-gray-900" },
+      { icon: <Banknote size={13} className="text-emerald-500" />, label: "Cash Sales",          value: `+EC$${fmt(report.payments.cash)}`,         cls: "text-emerald-700 font-semibold" },
+      { icon: <XCircle size={13} className="text-red-400" />,      label: "Cash Refunds (est.)", value: `-EC$${fmt(report.refunds * 0.45)}`,        cls: "text-red-500" },
+    ].map(({ icon, label, value, cls }) => (
+      <div key={label} className="bg-gray-50 rounded-xl px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-gray-600 text-sm">{icon}{label}</div>
+        <span className={`font-semibold tabular-nums text-sm ${cls}`}>{value}</span>
+      </div>
+    ))}
   </div>
+
+  <div className="grid grid-cols-3 gap-4">
+    <div className="bg-gray-50 rounded-xl px-4 py-3 flex items-center justify-between">
+      <span className="text-sm font-extrabold text-gray-900">Expected Closing</span>
+      <span className="tabular-nums font-extrabold text-sm">EC${fmt(report.expectedClosingBalance)}</span>
+    </div>
+    <div className="bg-gray-50 rounded-xl px-4 py-3 flex items-center justify-between">
+      <span className="text-sm text-gray-600">Combined Counted</span>
+      <span className={`font-extrabold tabular-nums text-sm ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-500"}`}>
+        EC${fmt(combinedXCDTotal)}
+      </span>
+    </div>
+    <div className={`rounded-xl px-4 py-3 flex items-center justify-between ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "bg-emerald-50" : "bg-red-50"}`}>
+      <span className={`font-semibold text-sm ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-600"}`}>Difference (EC$)</span>
+      <span className={`font-extrabold tabular-nums text-sm ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-600"}`}>
+        {combinedXCDTotal - report.expectedClosingBalance >= 0 ? "+" : ""}EC${fmt(combinedXCDTotal - report.expectedClosingBalance)}
+      </span>
+    </div>
+  </div>
+
+  <textarea
+    placeholder="Notes (optional)"
+    value={cashCountNotes}
+    onChange={(e) => setCashCountNotes(e.target.value)}
+    className="mt-3 w-full text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+    rows={2}
+  />
 </div>
                 </div>
 
