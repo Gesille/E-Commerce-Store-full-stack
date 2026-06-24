@@ -1,8 +1,6 @@
-// store/api/posClosingReportApi.ts
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { apiSlice } from "../api/apiSlice";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
+// ── Types ───────────────────────────────────────────────────────────────
 export interface HourlyChartEntry {
   hour: number;
   label: string;
@@ -123,37 +121,26 @@ export interface MonthlyReportParams {
   configId?: number;
 }
 
-// ─── API Slice ────────────────────────────────────────────────────────────────
 
-export const posClosingReportApi = createApi({
-  reducerPath: "posClosingReportApi",
-  baseQuery: fetchBaseQuery({
-    baseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api",
-    prepareHeaders: (headers) => {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      return headers;
-    },
-  }),
-  tagTypes: ["DailyReport", "MonthlyReport", "CashCount"],
+export const receiptsApi = apiSlice.injectEndpoints({
+  overrideExisting: true,
   endpoints: (builder) => ({
-
     // GET /reports-daily?date=YYYY-MM-DD&configId=1
-    getDailyClosingReport: builder.query<DailyClosingReport, DailyReportParams>({
-      query: ({ date, configId } = {}) => ({
-        url: "/reports-daily",
-        params: {
-          ...(date && { date }),
-          ...(configId && { configId }),
-        },
-      }),
-      providesTags: (_result, _err, { date }) => [
-        { type: "DailyReport", id: date ?? "today" },
-      ],
-    }),
-
-    // POST /daily-cash-count
+    getDailyClosingReport: builder.query<DailyClosingReport, DailyReportParams>(
+      {
+        query: ({ date, configId } = {}) => ({
+          url: "/reports-daily",
+          params: {
+            ...(date && { date }),
+            ...(configId && { configId }),
+          },
+        }),
+        providesTags: (_result, _err, { date }) => [
+          { type: "DailyReport", id: date ?? "today" },
+        ],
+      },
+    ),
+      // POST /daily-cash-count
     submitCashCount: builder.mutation<
       SubmitCashCountResponse,
       SubmitCashCountPayload
@@ -168,8 +155,7 @@ export const posClosingReportApi = createApi({
         { type: "CashCount", id: date },
       ],
     }),
-
-    // GET /reports-monthly?year=2025&month=6&configId=1
+      // GET /reports-monthly?year=2025&month=6&configId=1
     getMonthlyCalendarReport: builder.query<
       MonthlyCalendarReport,
       MonthlyReportParams
@@ -189,8 +175,4 @@ export const posClosingReportApi = createApi({
   }),
 });
 
-export const {
-  useGetDailyClosingReportQuery,
-  useSubmitCashCountMutation,
-  useGetMonthlyCalendarReportQuery,
-} = posClosingReportApi;
+export const {useGetDailyClosingReportQuery,useGetMonthlyCalendarReportQuery,useSubmitCashCountMutation} = receiptsApi;
