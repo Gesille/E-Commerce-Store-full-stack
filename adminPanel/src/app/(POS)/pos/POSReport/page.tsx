@@ -374,30 +374,7 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
         </table>
       </div>
 
-      {/* Top products */}
-      {report.topProducts?.length > 0 && (
-        <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
-          <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Top Products</p>
-          <table className="w-full text-xs">
-            <thead><tr className="border-b border-gray-300">
-              <th className="text-left py-1 font-semibold">#</th>
-              <th className="text-left py-1 font-semibold">Product</th>
-              <th className="text-center py-1 font-semibold">Qty</th>
-              <th className="text-right py-1 font-semibold">Revenue</th>
-            </tr></thead>
-            <tbody>
-              {report.topProducts.slice(0, 5).map((p: any, i: number) => (
-                <tr key={p.name} className="border-b border-gray-100">
-                  <td className="py-1 text-gray-400">{i + 1}</td>
-                  <td className="py-1">{p.name}</td>
-                  <td className="py-1 text-center">{p.qty}</td>
-                  <td className="py-1 text-right tabular-nums">${fmt(p.revenue)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    
 
       {/* Sign-off */}
       <div className="mt-6">
