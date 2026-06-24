@@ -1018,7 +1018,6 @@ const handleExportPDF = () => {
                     </div>
                   </div>
                 </div>
-
                 {/* Top Products */}
                 {report.topProducts?.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
