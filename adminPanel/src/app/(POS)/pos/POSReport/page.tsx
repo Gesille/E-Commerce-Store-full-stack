@@ -1007,7 +1007,7 @@ const handleExportPDF = () => {
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Payment Methods</h3>
                     <div className="flex flex-col gap-4">
                       <PaymentBar label="Cash"               amount={report.payments.cash}  total={report.payments.total} color="bg-emerald-400" icon={<Banknote    size={13} className="text-emerald-600" />} />
-                      <PaymentBar label="Credit / Debit Card" amount={report.payments.card}  total={report.payments.total} color="bg-blue-400"    icon={<CreditCard  size={13} className="text-blue-600"    />} />
+                      <PaymentBar label="Visa / Master Card/ Amex Card" amount={report.payments.card}  total={report.payments.total} color="bg-blue-400"    icon={<CreditCard  size={13} className="text-blue-600"    />} />
                       <PaymentBar label="Bank Transfer"       amount={report.payments.bank}  total={report.payments.total} color="bg-violet-400"  icon={<Building2   size={13} className="text-violet-600"  />} />
                       <PaymentBar label="Check"               amount={report.payments.check} total={report.payments.total} color="bg-amber-400"   icon={<ReceiptText size={13} className="text-amber-600"   />} />
                       {report.payments.other > 0 && (

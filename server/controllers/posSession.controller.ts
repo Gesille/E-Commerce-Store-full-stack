@@ -13,11 +13,43 @@ import POSOrder from "../models/POSOrder.js";
 
 const TAX_RATE = 0.17;
 
-const PAYMENT_METHOD_IDS: Record<string, number> = {
-  cash: 1,
-  card: 2,
-  bank: 3,
-};
+async function getPaymentMethodId(method: string, configId: number) {
+  const methods = await odooRequest(
+    "pos.payment.method",
+    "search_read",
+    [
+      [
+        ["config_ids", "in", [configId]],
+      ],
+    ],
+    {
+      fields: ["id", "name", "is_cash_count"],
+    }
+  );
+
+  const normalized = method.toLowerCase();
+
+  const found = methods.find((m: any) => {
+    const name = m.name.toLowerCase();
+
+    if (normalized === "cash")
+      return m.is_cash_count || name.includes("cash");
+
+    if (normalized === "card")
+      return name.includes("card") || name.includes("bank");
+
+    if (normalized === "bank")
+      return name.includes("bank");
+
+    return false;
+  });
+
+  if (!found) {
+    throw new Error(`Payment method not found: ${method}`);
+  }
+
+  return found.id;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -933,10 +965,23 @@ export const createOrder = CatchAsyncError(
     }
 
     // ─── PAYMENTS ─────────────────────────────────────────────────
-    const payment_ids = paymentLines.map((p) => {
-      const methodId = PAYMENT_METHOD_IDS[p.method];
-      return [0, 0, { amount: p.amount, payment_method_id: methodId }];
-    });
+    const payment_ids = [];
+
+for (const p of paymentLines) {
+  const methodId = await getPaymentMethodId(
+    p.method,
+    configId
+  );
+
+  payment_ids.push([
+    0,
+    0,
+    {
+      amount: p.amount,
+      payment_method_id: methodId,
+    },
+  ]);
+}
 
     // ─── CREATE ORDER ─────────────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;
