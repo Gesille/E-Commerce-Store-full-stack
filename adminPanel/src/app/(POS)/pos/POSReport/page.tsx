@@ -31,7 +31,8 @@ import {
 } from "@/redux/report/posClosingReportApi";
 import { useSelector } from "react-redux";
 import { createPortal } from "react-dom";
-
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DenominationEntry {
@@ -281,7 +282,7 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
   report: any; selectedDate: string; denominations: DenominationEntry[]; denomTotal: number;
 }) {
   return (
-    <div id="printable-report" className="hidden print:block font-sans text-gray-900 text-sm">
+    <div id="printable-report" className="font-sans text-gray-900 text-sm">
       {/* Header */}
       <div className="text-center border-b-2 border-gray-800 pb-4 mb-4">
         <h1 className="text-2xl font-black tracking-tight uppercase">Chef's World</h1>
@@ -481,6 +482,7 @@ useEffect(() => setMounted(true), []);
       }
     }
   };
+  
 
   // ── RTK Query ──────────────────────────────────────────────────────────────
   const { data: report, isLoading: reportLoading, isFetching: reportFetching, refetch: refetchReport } =
@@ -556,9 +558,55 @@ useEffect(() => setMounted(true), []);
   };
 
   // Professional PDF export using browser print with a dedicated print layout
-  const handleExportPDF = () => {
-    window.print();
-  };
+ const handleExportPDF = async () => {
+  const portal = document.getElementById("printable-report-portal");
+  if (!portal) return;
+
+  portal.style.display = "block";
+  portal.style.position = "absolute";
+  portal.style.left = "-9999px";
+  portal.style.top = "0";
+  portal.style.width = "794px";
+  portal.style.background = "white";
+  portal.style.padding = "40px";
+
+  try {
+    const canvas = await html2canvas(portal, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    let heightLeft = pdfHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position -= pageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(`ZReport_${selectedDate}.pdf`);
+  } finally {
+    portal.style.display = "";
+    portal.style.position = "";
+    portal.style.left = "";
+    portal.style.top = "";
+    portal.style.width = "";
+    portal.style.background = "";
+    portal.style.padding = "";
+  }
+};
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -624,18 +672,19 @@ useEffect(() => setMounted(true), []);
                 }
               </button>
             )}
-            <button
-              onClick={handleExportPDF}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <Printer size={13} /> Print / PDF
-            </button>
-            <button
-              onClick={handleExportPDF}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              <Download size={13} /> Export
-            </button>
+        
+<button
+  onClick={() => window.print()}
+  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+>
+  <Printer size={13} /> Print
+</button>
+<button
+  onClick={handleExportPDF}
+  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+>
+  <Download size={13} /> Export PDF
+</button>
           </div>
         </div>
 
