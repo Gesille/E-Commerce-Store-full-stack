@@ -331,20 +331,19 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
       <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
         <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Payments Collected</p>
         <div className="space-y-1 text-sm">
-        
-{[
-  { label: "Cash", value: report.payments.cash },
-  ...report.payments.breakdown.map((e: { method: string; amount: number }) => ({
-    label: e.method,
-    value: e.amount,
-  })),
-  { label: "Check / Cheque", value: report.payments.check },
-].map(({ label, value }) => (
-  <div key={label} className="flex justify-between">
-    <span className="text-gray-700">{label}</span>
-    <span className="font-semibold tabular-nums">${fmt(value)}</span>
-  </div>
-))}
+          {[
+            { label: "Cash",         value: report.payments.cash       },
+            { label: "Visa",         value: report.payments.visa       },
+            { label: "Mastercard",   value: report.payments.mastercard },
+            { label: "Amex",         value: report.payments.amex       },
+            ...(report.payments.card > 0 ? [{ label: "Card (other)", value: report.payments.card }] : []),
+            { label: "Check",        value: report.payments.check      },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between">
+              <span className="text-gray-700">{label}</span>
+              <span className="font-semibold tabular-nums">${fmt(value)}</span>
+            </div>
+          ))}
           <div className="flex justify-between font-bold border-t border-gray-300 pt-1">
             <span>Total Collected</span>
             <span className="tabular-nums">${fmt(report.payments.total)}</span>
@@ -639,13 +638,16 @@ export default function POSClosingReport() {
     pdf.text("PAYMENTS COLLECTED", margin, y); y += 5;
 
     const payRows: [string, number, boolean][] = [
-  ["Cash", report.payments.cash, false],
-  ...report.payments.breakdown.map((e: { method: string; amount: number }) =>
-    [e.method, e.amount, false] as [string, number, boolean]
-  ),
-  ["Check / Cheque", report.payments.check, false],
-  ["Total Collected", report.payments.total, true],
-];
+      ["Cash",           report.payments.cash,       false],
+      ["Visa",           report.payments.visa,        false],
+      ["Mastercard",     report.payments.mastercard,  false],
+      ["Amex",           report.payments.amex,        false],
+      ...(report.payments.card > 0
+        ? [["Card (other)", report.payments.card, false] as [string, number, boolean]]
+        : []),
+      ["Check",          report.payments.check,       false],
+      ["Total Collected",report.payments.total,       true ],
+    ];
     payRows.forEach(([label, value, bold]) => {
       pdf.setFontSize(9);
       pdf.setFont("helvetica", bold ? "bold" : "normal");
@@ -1003,41 +1005,48 @@ export default function POSClosingReport() {
                   </div>
 
                   {/* Payment methods — individual card types */}
-                {/* Payment methods — driven by actual Odoo data */}
-<div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Payment Methods</h3>
-  <div className="flex flex-col gap-4">
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Payment Methods</h3>
+                    <div className="flex flex-col gap-4">
+
+                      {/* Cash */}
+                      <PaymentBar
+                        label="Cash"
+                        amount={report.payments.cash}
+                        total={report.payments.total}
+                        color="bg-emerald-400"
+                        icon={<Banknote size={13} className="text-emerald-600" />}
+                      />
+
+                      {/* Card types — only render rows that have a non-zero amount */}
+                      {CARD_TYPES.map(({ key, label, color, iconColor }) => {
+  const amount = report.payments[key] as number;
+  return amount > 0 ? (
     <PaymentBar
-      label="Cash"
-      amount={report.payments.cash}
+      key={key}
+      label={label}
+      amount={amount}
       total={report.payments.total}
-      color="bg-emerald-400"
-      icon={<Banknote size={13} className="text-emerald-600" />}
+      color={color}
+      icon={<CreditCard size={13} className={iconColor} />}
     />
-    {/* Render every non-cash, non-check method from the breakdown array */}
-    {report.payments.breakdown.map((entry: { method: string; amount: number }) => (
-      <PaymentBar
-        key={entry.method}
-        label={entry.method}
-        amount={entry.amount}
-        total={report.payments.total}
-        color="bg-blue-400"
-        icon={<CreditCard size={13} className="text-blue-600" />}
-      />
-    ))}
-    <PaymentBar
-      label="Check / Cheque"
-      amount={report.payments.check}
-      total={report.payments.total}
-      color="bg-amber-400"
-      icon={<ReceiptText size={13} className="text-amber-600" />}
-    />
-  </div>
-  <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold">
-    <span>Total Collected</span>
-    <span className="tabular-nums">${fmt(report.payments.total)}</span>
-  </div>
-</div>
+  ) : null;
+})}
+
+                      {/* Check */}
+                      <PaymentBar
+                        label="Check"
+                        amount={report.payments.check}
+                        total={report.payments.total}
+                        color="bg-amber-400"
+                        icon={<ReceiptText size={13} className="text-amber-600" />}
+                      />
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold">
+                      <span>Total Collected</span>
+                      <span className="tabular-nums">${fmt(report.payments.total)}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Top Products */}
