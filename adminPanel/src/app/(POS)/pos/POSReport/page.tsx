@@ -326,7 +326,7 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
             { label: "Visa / Master / Amex Card",value: report.payments.card  },
             
             { label: "Check",            value: report.payments.check },
-            ...(report.payments.other > 0 ? [{ label: "Other", value: report.payments.other }] : []),
+           
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between">
               <span className="text-gray-700">{label}</span>
@@ -635,7 +635,7 @@ const handleExportPDF = () => {
     ["Visa / Master / Amex Card", report.payments.card ],
 
     ["Check",             report.payments.check],
-    ...(report.payments.other > 0 ? [["Other", report.payments.other]] : []),
+
     ["Total Collected",   report.payments.total],
   ];
   payRows.forEach(([label, value], i) => {
@@ -1010,9 +1010,7 @@ const handleExportPDF = () => {
                       <PaymentBar label="Visa / Master Card/ Amex Card" amount={report.payments.card}  total={report.payments.total} color="bg-blue-400"    icon={<CreditCard  size={13} className="text-blue-600"    />} />
                      
                       <PaymentBar label="Check"               amount={report.payments.check} total={report.payments.total} color="bg-amber-400"   icon={<ReceiptText size={13} className="text-amber-600"   />} />
-                      {report.payments.other > 0 && (
-                        <PaymentBar label="Other" amount={report.payments.other} total={report.payments.total} color="bg-gray-400" icon={<CreditCard size={13} className="text-gray-500" />} />
-                      )}
+                      
                     </div>
                     <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold">
                       <span>Total Collected</span>
