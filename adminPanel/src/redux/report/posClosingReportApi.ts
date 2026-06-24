@@ -129,7 +129,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
     getDailyClosingReport: builder.query<DailyClosingReport, DailyReportParams>(
       {
         query: ({ date, configId } = {}) => ({
-          url: "/reports-daily",
+          url: "reports-daily",
           params: {
             ...(date && { date }),
             ...(configId && { configId }),
@@ -146,7 +146,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
       SubmitCashCountPayload
     >({
       query: (body) => ({
-        url: "/daily-cash-count",
+        url: "daily-cash-count",
         method: "POST",
         body,
       }),
@@ -161,7 +161,7 @@ export const receiptsApi = apiSlice.injectEndpoints({
       MonthlyReportParams
     >({
       query: ({ year, month, configId } = {}) => ({
-        url: "/reports-monthly",
+        url: "reports-monthly",
         params: {
           ...(year && { year }),
           ...(month && { month }),
