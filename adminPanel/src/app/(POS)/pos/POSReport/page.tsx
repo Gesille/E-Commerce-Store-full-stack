@@ -1411,21 +1411,7 @@ row("Refunds",   `-EC$${fmt(report.refunds)}`);
 </div>
                 </div>
 
-                {/* Cashier Sign-Off */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                  <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5">Cashier Sign-Off</h3>
-                  <div className="grid grid-cols-3 gap-8">
-                    {["Cashier Signature", "Supervisor Signature", "Date & Stamp"].map((label) => (
-                      <div key={label} className="flex flex-col gap-2">
-                        <div className="h-12 border-b-2 border-dashed border-gray-200" />
-                        <span className="text-[10px] text-gray-400 text-center font-medium uppercase tracking-wide">{label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-gray-300 text-center mt-5">
-                    Chef's World POS · Report generated {new Date().toLocaleString()} · Confidential
-                  </p>
-                </div>
+               
               </>
             ) : null}
           </div>
