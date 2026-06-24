@@ -136,6 +136,7 @@ function KpiCard({
 }
 
 // ─── PaymentBar ───────────────────────────────────────────────────────────────
+
 function PaymentBar({ label, amount, total, color, icon }: {
   label: string; amount: number; total: number; color: string; icon: React.ReactNode;
 }) {
@@ -373,7 +374,31 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
         </table>
       </div>
 
-    
+      {/* Top products */}
+      {report.topProducts?.length > 0 && (
+        <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
+          <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Top Products</p>
+          <table className="w-full text-xs">
+            <thead><tr className="border-b border-gray-300">
+              <th className="text-left py-1 font-semibold">#</th>
+              <th className="text-left py-1 font-semibold">Product</th>
+              <th className="text-center py-1 font-semibold">Qty</th>
+              <th className="text-right py-1 font-semibold">Revenue</th>
+            </tr></thead>
+            <tbody>
+              {report.topProducts.slice(0, 5).map((p: any, i: number) => (
+                <tr key={p.name} className="border-b border-gray-100">
+                  <td className="py-1 text-gray-400">{i + 1}</td>
+                  <td className="py-1">{p.name}</td>
+                  <td className="py-1 text-center">{p.qty}</td>
+                  <td className="py-1 text-right tabular-nums">${fmt(p.revenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Sign-off */}
       <div className="mt-6">
         <div className="grid grid-cols-3 gap-8">
@@ -691,7 +716,32 @@ const handleExportPDF = () => {
   pdf.setLineDashPattern([1, 1], 0);
   pdf.line(margin, y + 2, W - margin, y + 2); y += 8;
 
+  // ── Top Products ──
+  if (report.topProducts?.length > 0) {
+    checkPage();
+    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+    pdf.text("TOP PRODUCTS", margin, y); y += 5;
 
+    pdf.setFillColor(240, 240, 240);
+    pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
+    pdf.text("#", margin + 2, y);
+    pdf.text("Product", margin + 10, y);
+    pdf.text("Qty", W - margin - 30, y, { align: "right" });
+    pdf.text("Revenue", W - margin - 2, y, { align: "right" });
+    y += 5;
+
+    report.topProducts.slice(0, 5).forEach((p: any, i: number) => {
+      checkPage();
+      pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+      pdf.text(String(i + 1), margin + 2, y);
+      pdf.text(p.name, margin + 10, y);
+      pdf.text(String(p.qty), W - margin - 30, y, { align: "right" });
+      pdf.text(`$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
+      y += lineH;
+    });
+    pdf.setLineDashPattern([1, 1], 0);
+    pdf.line(margin, y, W - margin, y); y += 6;
+  }
 
   // ── Sign-off ──
   checkPage();
@@ -994,7 +1044,28 @@ const handleExportPDF = () => {
                   </div>
                 </div>
 
-            
+                {/* Top Products */}
+                {report.topProducts?.length > 0 && (
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Top Products</h3>
+                    <div className="grid grid-cols-5 gap-0">
+                      {report.topProducts.slice(0, 5).map((p: any, i: number) => (
+                        <div key={p.name} className="flex items-center justify-between py-2.5 border-b border-gray-50 text-sm col-span-5">
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-gray-100 text-[11px] font-extrabold text-gray-500 flex items-center justify-center flex-shrink-0">
+                              {i + 1}
+                            </span>
+                            <span className="text-gray-800 font-medium">{p.name}</span>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <span className="text-gray-400 text-xs tabular-nums">{p.qty} units</span>
+                            <span className="font-bold tabular-nums text-gray-900 w-20 text-right">${fmt(p.revenue)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Cash Register Count */}
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
