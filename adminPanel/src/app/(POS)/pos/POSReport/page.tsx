@@ -136,7 +136,6 @@ function KpiCard({
 }
 
 // ─── PaymentBar ───────────────────────────────────────────────────────────────
-
 function PaymentBar({ label, amount, total, color, icon }: {
   label: string; amount: number; total: number; color: string; icon: React.ReactNode;
 }) {
