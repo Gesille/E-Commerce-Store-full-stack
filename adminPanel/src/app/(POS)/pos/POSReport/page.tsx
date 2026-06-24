@@ -832,6 +832,7 @@ row("Refunds",   `-EC$${fmt(report.refunds)}`);
     setFont(9, "bold");
     pdf.text("TOTAL EC$", margin + 2, y);
     pdf.text(`EC$${fmt(xcdTotal)}`, W - margin - 2, y, { align: "right" });
+    y += lineH; 
     dashes(true); y += 2;
 
     // ── USD Cash Count Table ──
@@ -1363,7 +1364,10 @@ row("Refunds",   `-EC$${fmt(report.refunds)}`);
                   </div>
 
                   {/* ── Closing summary + notes ── */}
-                  <div className="grid grid-cols-2 gap-6">
+                 
+                  <div className="grid grid-cols-1 gap-6">
+  <div className="flex flex-col gap-0">
+    <div className="grid grid-cols-2 gap-6">
                     <div className="flex flex-col gap-0">
                       {[
                         { icon: <Clock size={13} className="text-gray-400" />,       label: "Opening Balance",    value: `EC$${fmt(report.openingBalance)}`,          cls: "text-gray-900" },
@@ -1392,17 +1396,19 @@ row("Refunds",   `-EC$${fmt(report.refunds)}`);
                           EC${fmt(combinedXCDTotal - report.expectedClosingBalance)}
                         </span>
                       </div>
-                      <textarea
-                        placeholder="Notes (optional)"
-                        value={cashCountNotes}
-                        onChange={(e) => setCashCountNotes(e.target.value)}
-                        className="mt-3 w-full text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                        rows={2}
-                      />
+                    <textarea
+  placeholder="Notes (optional)"
+  value={cashCountNotes}
+  onChange={(e) => setCashCountNotes(e.target.value)}
+  className="mt-3 w-full max-w-lg text-xs border border-gray-200 rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+  rows={2}
+/>
                     </div>
 
                
                   </div>
+  </div>
+</div>
                 </div>
 
                 {/* Cashier Sign-Off */}
