@@ -716,32 +716,7 @@ const handleExportPDF = () => {
   pdf.setLineDashPattern([1, 1], 0);
   pdf.line(margin, y + 2, W - margin, y + 2); y += 8;
 
-  // ── Top Products ──
-  if (report.topProducts?.length > 0) {
-    checkPage();
-    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
-    pdf.text("TOP PRODUCTS", margin, y); y += 5;
 
-    pdf.setFillColor(240, 240, 240);
-    pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
-    pdf.text("#", margin + 2, y);
-    pdf.text("Product", margin + 10, y);
-    pdf.text("Qty", W - margin - 30, y, { align: "right" });
-    pdf.text("Revenue", W - margin - 2, y, { align: "right" });
-    y += 5;
-
-    report.topProducts.slice(0, 5).forEach((p: any, i: number) => {
-      checkPage();
-      pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
-      pdf.text(String(i + 1), margin + 2, y);
-      pdf.text(p.name, margin + 10, y);
-      pdf.text(String(p.qty), W - margin - 30, y, { align: "right" });
-      pdf.text(`$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
-      y += lineH;
-    });
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, y, W - margin, y); y += 6;
-  }
 
   // ── Sign-off ──
   checkPage();
