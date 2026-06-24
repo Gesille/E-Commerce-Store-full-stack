@@ -100,7 +100,7 @@ export const getDailyClosingReport = CatchAsyncError(
       paymentTotals[method] = (paymentTotals[method] ?? 0) + (p.amount ?? 0);
     }
 
-    // Normalise known method names to standard keys
+
     const normaliseMethod = (name: string): string => {
       const l = name.toLowerCase();
       if (l.includes("cash")) return "cash";
