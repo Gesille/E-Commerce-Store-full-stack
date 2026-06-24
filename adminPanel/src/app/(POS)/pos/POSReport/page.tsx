@@ -38,6 +38,7 @@ interface DenominationEntry {
   value: number;
   label: string;
   count: number;
+  currency?: "USD" | "XCD";
 }
 
 interface MonthDay {
@@ -60,7 +61,7 @@ type QuickRange =
 
 // ─── Default denominations ────────────────────────────────────────────────────
 
-const DEFAULT_DENOMINATIONS: DenominationEntry[] = [
+const DEFAULT_DENOMINATIONS_USD: DenominationEntry[] = [
   { value: 100, label: "100", count: 0 },
   { value: 50, label: "50", count: 0 },
   { value: 20, label: "20", count: 0 },
@@ -68,9 +69,24 @@ const DEFAULT_DENOMINATIONS: DenominationEntry[] = [
   { value: 5, label: "5", count: 0 },
   { value: 1, label: "1", count: 0 },
   { value: 0.25, label: "0.25", count: 0 },
-  { value: 0.1, label: "0.10", count: 0 },
+  { value: 0.10, label: "0.10", count: 0 },
   { value: 0.05, label: "0.05", count: 0 },
 ];
+
+const DEFAULT_DENOMINATIONS_XCD: DenominationEntry[] = [
+  { value: 100, label: "100", count: 0 },
+  { value: 50, label: "50", count: 0 },
+  { value: 20, label: "20", count: 0 },
+  { value: 10, label: "10", count: 0 },
+  { value: 5, label: "5", count: 0 },
+  { value: 2, label: "2", count: 0 },
+  { value: 1, label: "1", count: 0 },
+  { value: 0.25, label: "0.25", count: 0 },
+  { value: 0.10, label: "0.10", count: 0 },
+  { value: 0.05, label: "0.05", count: 0 },
+];
+
+const XCD_TO_USD = 0.37; // 1 XCD = 0.37 USD (fixed rate)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -367,11 +383,14 @@ function PrintableReport({
   selectedDate,
   denominations,
   denomTotal,
+   cashCountNotes,
 }: {
   report: any;
   selectedDate: string;
-  denominations: DenominationEntry[];
+denominations: DenominationEntry[]; 
   denomTotal: number;
+  
+  cashCountNotes: string;
 }) {
   return (
     <div id="printable-report" className="font-sans text-gray-900 text-sm">
@@ -472,94 +491,75 @@ function PrintableReport({
         </div>
       </div>
 
-      {/* Cash count */}
-      <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
-        <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
-          Cash Register Count
-        </p>
-        <div className="space-y-1 text-sm mb-3">
-          <div className="flex justify-between">
-            <span>Opening Balance</span>
-            <span className="tabular-nums">${fmt(report.openingBalance)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Expected Closing</span>
-            <span className="tabular-nums font-semibold">${fmt(report.expectedClosingBalance)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Counted Cash</span>
-            <span className="tabular-nums font-semibold">${fmt(denomTotal)}</span>
-          </div>
-          <div
-            className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${
-              Math.abs(denomTotal - report.expectedClosingBalance) < 1
-                ? "text-emerald-700"
-                : "text-red-600"
-            }`}
-          >
-            <span>Difference</span>
-            <span className="tabular-nums">
-              {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}$
-              {fmt(denomTotal - report.expectedClosingBalance)}
-            </span>
-          </div>
-        </div>
-        <table className="w-full text-xs border border-gray-200">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="text-left py-1 px-2 font-semibold">Denomination</th>
-              <th className="text-center py-1 px-2 font-semibold">Count</th>
-              <th className="text-right py-1 px-2 font-semibold">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {denominations
-              .filter((d) => d.count > 0)
-              .map((d) => (
-                <tr key={d.label} className="border-t border-gray-100">
-                  <td className="py-1 px-2">${d.label}</td>
-                  <td className="py-1 px-2 text-center">{d.count}</td>
-                  <td className="py-1 px-2 text-right tabular-nums">${fmt(d.value * d.count)}</td>
-                </tr>
-              ))}
-            <tr className="border-t-2 border-gray-800 font-bold">
-              <td colSpan={2} className="py-1 px-2">
-                TOTAL CASH
-              </td>
-              <td className="py-1 px-2 text-right tabular-nums">${fmt(denomTotal)}</td>
-            </tr>
-          </tbody>
-        </table>
+      
+{/* Cash register count */}
+<div className="mb-4 border-b border-dashed border-gray-300 pb-4">
+  <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
+    Cash Register Count
+  </p>
+  <div className="grid grid-cols-2 gap-x-8 mb-3 text-sm">
+    <div className="space-y-1">
+      <div className="flex justify-between">
+        <span className="text-gray-500">Opening Balance</span>
+        <span className="font-semibold tabular-nums">${fmt(report.openingBalance)}</span>
       </div>
-
-      {/* Top products */}
-      {report.topProducts?.length > 0 && (
-        <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
-          <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
-            Top Products
-          </p>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-gray-300">
-                <th className="text-left py-1 font-semibold">#</th>
-                <th className="text-left py-1 font-semibold">Product</th>
-                <th className="text-center py-1 font-semibold">Qty</th>
-                <th className="text-right py-1 font-semibold">Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.topProducts.slice(0, 5).map((p: any, i: number) => (
-                <tr key={p.name} className="border-b border-gray-100">
-                  <td className="py-1 text-gray-400">{i + 1}</td>
-                  <td className="py-1">{p.name}</td>
-                  <td className="py-1 text-center">{p.qty}</td>
-                  <td className="py-1 text-right tabular-nums">${fmt(p.revenue)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="flex justify-between">
+        <span className="text-gray-500">Cash Sales</span>
+        <span className="font-semibold tabular-nums text-emerald-700">+${fmt(report.payments.cash)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-gray-500">Cash Refunds (est.)</span>
+        <span className="font-semibold tabular-nums text-red-600">-${fmt(report.refunds * 0.45)}</span>
+      </div>
+    </div>
+    <div className="space-y-1">
+      <div className="flex justify-between">
+        <span className="text-gray-500">Expected Closing</span>
+        <span className="font-semibold tabular-nums">${fmt(report.expectedClosingBalance)}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-gray-500">Counted Cash</span>
+        <span className="font-semibold tabular-nums">${fmt(denomTotal)}</span>
+      </div>
+      <div className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${
+        Math.abs(denomTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-600"
+      }`}>
+        <span>Difference</span>
+        <span className="tabular-nums">
+          {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}${fmt(denomTotal - report.expectedClosingBalance)}
+        </span>
+      </div>
+    </div>
+  </div>
+  <table className="w-full text-xs border border-gray-200">
+    <thead>
+      <tr className="bg-gray-100">
+        <th className="text-left py-1 px-2 font-semibold">Denomination</th>
+        <th className="text-center py-1 px-2 font-semibold">Count</th>
+        <th className="text-right py-1 px-2 font-semibold">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {denominations
+        .filter((d) => d.count > 0)
+        .map((d) => (
+          <tr key={d.label} className="border-t border-gray-100">
+            <td className="py-1 px-2">${d.label}</td>
+            <td className="py-1 px-2 text-center">{d.count}</td>
+            <td className="py-1 px-2 text-right tabular-nums">${fmt(d.value * d.count)}</td>
+          </tr>
+        ))}
+      <tr className="border-t-2 border-gray-800 font-bold">
+        <td colSpan={2} className="py-1 px-2">TOTAL CASH</td>
+        <td className="py-1 px-2 text-right tabular-nums">${fmt(denomTotal)}</td>
+      </tr>
+    </tbody>
+  </table>
+  {cashCountNotes && (
+    <p className="mt-2 text-xs text-gray-500 italic">Notes: {cashCountNotes}</p>
+  )}
+</div>
+    
 
       {/* Sign-off */}
       <div className="mt-6">
@@ -606,29 +606,49 @@ export default function POSClosingReport() {
   const { user } = useSelector((state: any) => state.auth);
 
   // ── Denominations persisted per date ──────────────────────────────────────
-  const [denominations, setDenominations] = useState<DenominationEntry[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS;
+const [denominationsUSD, setDenominationsUSD] = useState<DenominationEntry[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS_USD;
     try {
-      const saved = localStorage.getItem(`cash_count_${today}`);
-      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS;
+      const saved = localStorage.getItem(`cash_count_usd_${today}`);
+      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS_USD;
     } catch {
-      return DEFAULT_DENOMINATIONS;
+      return DEFAULT_DENOMINATIONS_USD;
+    }
+  });
+
+  const [denominationsXCD, setDenominationsXCD] = useState<DenominationEntry[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS_XCD;
+    try {
+      const saved = localStorage.getItem(`cash_count_xcd_${today}`);
+      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS_XCD;
+    } catch {
+      return DEFAULT_DENOMINATIONS_XCD;
     }
   });
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`cash_count_${selectedDate}`);
-      setDenominations(saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS);
+      const savedUSD = localStorage.getItem(`cash_count_usd_${selectedDate}`);
+      setDenominationsUSD(savedUSD ? JSON.parse(savedUSD) : DEFAULT_DENOMINATIONS_USD);
+      const savedXCD = localStorage.getItem(`cash_count_xcd_${selectedDate}`);
+      setDenominationsXCD(savedXCD ? JSON.parse(savedXCD) : DEFAULT_DENOMINATIONS_XCD);
     } catch {
-      setDenominations(DEFAULT_DENOMINATIONS);
+      setDenominationsUSD(DEFAULT_DENOMINATIONS_USD);
+      setDenominationsXCD(DEFAULT_DENOMINATIONS_XCD);
     }
   }, [selectedDate]);
 
-  const updateDenominations = (updated: DenominationEntry[]) => {
-    setDenominations(updated);
+  const updateDenominationsUSD = (updated: DenominationEntry[]) => {
+    setDenominationsUSD(updated);
     try {
-      localStorage.setItem(`cash_count_${selectedDate}`, JSON.stringify(updated));
+      localStorage.setItem(`cash_count_usd_${selectedDate}`, JSON.stringify(updated));
+    } catch {}
+  };
+
+  const updateDenominationsXCD = (updated: DenominationEntry[]) => {
+    setDenominationsXCD(updated);
+    try {
+      localStorage.setItem(`cash_count_xcd_${selectedDate}`, JSON.stringify(updated));
     } catch {}
   };
 
@@ -700,7 +720,10 @@ export default function POSClosingReport() {
     avgPerDay: 0,
   };
 
-  const denomTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
+const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0);
+  const denomTotalXCD = denominationsXCD.reduce((s, d) => s + d.value * d.count, 0);
+  const denomTotalXCDinUSD = denomTotalXCD * XCD_TO_USD;
+  const denomTotal = denomTotalUSD + denomTotalXCDinUSD;
   const isLoading = reportLoading || reportFetching;
   const isMonthLoading = monthLoading || monthFetching;
 
@@ -728,7 +751,10 @@ export default function POSClosingReport() {
       await submitCashCount({
         date: selectedDate,
         odooSessionId: report.odooSessionId,
-        denominations,
+   denominations: [
+    ...denominationsUSD.map(d => ({ ...d, currency: "USD" })),
+    ...denominationsXCD.map(d => ({ ...d, currency: "XCD" })),
+  ],
         sessionName: report.sessionName,
         notes: cashCountNotes,
         submittedBy: user?.name ?? "unknown",
@@ -907,13 +933,16 @@ export default function POSClosingReport() {
       pdf.text("Amount", W - margin - 2, y, { align: "right" });
       y += 5;
 
-      denominations
-        .filter((d) => d.count > 0)
+   [
+  ...denominationsUSD.map(d => ({ ...d, currency: "USD" as const })),
+  ...denominationsXCD.map(d => ({ ...d, currency: "XCD" as const })),
+]
+  .filter((d) => d.count > 0)
         .forEach((d) => {
           checkPage();
           pdf.setFontSize(9);
           pdf.setFont("helvetica", "normal");
-          pdf.text(`$${d.label}`, margin + 2, y);
+          pdf.text(`$${d.label} ${d.currency ?? ""}`, margin + 2, y);
           pdf.text(String(d.count), W / 2, y, { align: "center" });
           pdf.text(`$${fmt(d.value * d.count)}`, W - margin - 2, y, { align: "right" });
           y += lineH;
@@ -993,8 +1022,9 @@ export default function POSClosingReport() {
             <PrintableReport
               report={report}
               selectedDate={selectedDate}
-              denominations={denominations}
+              denominations={[...denominationsUSD, ...denominationsXCD]}
               denomTotal={denomTotal}
+              cashCountNotes={cashCountNotes}
             />
           </div>,
           document.body
@@ -1002,16 +1032,13 @@ export default function POSClosingReport() {
 
       {/* ── Print stylesheet ── */}
       <style>{`
-        @media print {
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body > *:not(#printable-report-portal) { display: none !important; }
-          #printable-report-portal { display: block !important; position: static !important; }
-          #printable-report-portal { font-size: 11pt; max-width: 80mm; margin: 0 auto; }
-          @page { size: A4; margin: 15mm; }
-        }
-        @media screen {
-          #printable-report-portal { display: none !important; }
-        }
+      @media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body > *:not(#printable-report-portal) { display: none !important; }
+  #printable-report-portal { display: block !important; position: static !important; }
+  #printable-report-portal { font-size: 10pt; max-width: 100%; margin: 0; }
+  @page { size: A4; margin: 15mm; }
+}
       `}</style>
 
       {/* ── Main UI ── */}
@@ -1582,47 +1609,90 @@ export default function POSClosingReport() {
                       />
                     </div>
 
-                    {/* Denomination table */}
-                    <div className="border border-gray-100 rounded-xl overflow-x-auto">
-                      <table className="w-full min-w-[280px]">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">
-                              Bill / Coin
-                            </th>
-                            <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">
-                              Count
-                            </th>
-                            <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">
-                              Total
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {denominations.map((d, i) => (
-                            <DenominationRow
-                              key={d.label}
-                              denom={d}
-                              editable={denomEditable}
-                              onChange={(count) =>
-                                updateDenominations(
-                                  denominations.map((item, idx) =>
-                                    idx === i ? { ...item, count } : item
+                   {/* Denomination tables */}
+                    <div className="flex flex-col gap-4">
+                      {/* USD */}
+                      <div className="border border-gray-100 rounded-xl overflow-x-auto">
+                        <div className="bg-blue-50 px-3 py-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest">🇺🇸 USD — US Dollar</span>
+                          <span className="text-[11px] font-extrabold text-blue-800 tabular-nums">${fmt(denomTotalUSD)}</span>
+                        </div>
+                        <table className="w-full min-w-[280px]">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">Bill / Coin</th>
+                              <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
+                              <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {denominationsUSD.map((d, i) => (
+                              <DenominationRow
+                                key={d.label}
+                                denom={d}
+                                editable={denomEditable}
+                                onChange={(count) =>
+                                  updateDenominationsUSD(
+                                    denominationsUSD.map((item, idx) =>
+                                      idx === i ? { ...item, count } : item
+                                    )
                                   )
-                                )
-                              }
-                            />
-                          ))}
-                          <tr className="border-t-2 border-gray-200 bg-gray-50">
-                            <td colSpan={2} className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900">
-                              Total Cash
-                            </td>
-                            <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">
-                              ${fmt(denomTotal)}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
+                                }
+                              />
+                            ))}
+                            <tr className="border-t-2 border-gray-200 bg-gray-50">
+                              <td colSpan={2} className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900">Total USD</td>
+                              <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-blue-700 tabular-nums">${fmt(denomTotalUSD)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* XCD */}
+                      <div className="border border-gray-100 rounded-xl overflow-x-auto">
+                        <div className="bg-emerald-50 px-3 py-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">🇦🇬 XCD — EC Dollar</span>
+                          <span className="text-[11px] font-extrabold text-emerald-800 tabular-nums">
+                            EC${fmt(denomTotalXCD)}
+                            <span className="text-[10px] font-medium text-emerald-600 ml-1">(≈ ${fmt(denomTotalXCDinUSD)} USD)</span>
+                          </span>
+                        </div>
+                        <table className="w-full min-w-[280px]">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-3 sm:pl-4">Bill / Coin</th>
+                              <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
+                              <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-3 sm:pr-4">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {denominationsXCD.map((d, i) => (
+                              <DenominationRow
+                                key={d.label}
+                                denom={d}
+                                editable={denomEditable}
+                                onChange={(count) =>
+                                  updateDenominationsXCD(
+                                    denominationsXCD.map((item, idx) =>
+                                      idx === i ? { ...item, count } : item
+                                    )
+                                  )
+                                }
+                              />
+                            ))}
+                            <tr className="border-t-2 border-gray-200 bg-gray-50">
+                              <td colSpan={2} className="py-3 pl-3 sm:pl-4 text-sm font-extrabold text-gray-900">Total XCD</td>
+                              <td className="py-3 pr-3 sm:pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">EC${fmt(denomTotalXCD)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Combined total */}
+                      <div className="bg-gray-900 rounded-xl px-4 py-3 flex justify-between items-center">
+                        <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Combined Total (USD)</span>
+                        <span className="text-base font-extrabold text-white tabular-nums">${fmt(denomTotal)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
