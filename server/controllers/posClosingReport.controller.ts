@@ -413,27 +413,77 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       : [];
 
     // Map payment to order
-    const paymentsByOrder: Record<number, { cash: number; card: number;  check: number }> = {};
-    for (const p of payments) {
-      const oid = p.pos_order_id?.[0];
-      if (!oid) continue;
-      if (!paymentsByOrder[oid]) paymentsByOrder[oid] = { cash: 0, card: 0,  check: 0 };
-      const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
-      if (method.includes("cash")) paymentsByOrder[oid].cash += p.amount;
-      else if (method.includes("card") || method.includes("credit") || method.includes("debit")) paymentsByOrder[oid].card += p.amount;
-     
-      else if (method.includes("check") || method.includes("cheque")) paymentsByOrder[oid].check += p.amount;
+  const paymentsByOrder: Record<
+  number,
+  {
+    cash: number;
+    check: number;
+    cards: Record<string, number>;
+  }
+> = {};
+   for (const p of payments) {
+  const oid = p.pos_order_id?.[0];
+  if (!oid) continue;
+
+  if (!paymentsByOrder[oid]) {
+    paymentsByOrder[oid] = {
+      cash: 0,
+      check: 0,
+      cards: {},
+    };
+  }
+
+  const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
+
+  if (method.includes("cash")) {
+    paymentsByOrder[oid].cash += p.amount;
+  }
+
+  else if (
+    method.includes("visa") ||
+    method.includes("master") ||
+    method.includes("mastercard") ||
+    method.includes("amex") ||
+    method.includes("american")
+  ) {
+    let cardName = "other";
+
+    if (method.includes("visa")) {
+      cardName = "visa";
+    } 
+    else if (
+      method.includes("master")
+    ) {
+      cardName = "mastercard";
     }
+    else if (
+      method.includes("amex") ||
+      method.includes("american")
+    ) {
+      cardName = "amex";
+    }
+
+    paymentsByOrder[oid].cards[cardName] =
+      (paymentsByOrder[oid].cards[cardName] ?? 0) + p.amount;
+  }
+
+  else if (
+    method.includes("check") ||
+    method.includes("cheque")
+  ) {
+    paymentsByOrder[oid].check += p.amount;
+  }
+}
 
     // Aggregate by day
     const dayMap: Record<
       string,
-      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; card: number;  check: number }
+      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; cards: Record<string, number>;  check: number }
     > = {};
 
     for (let d = 1; d <= lastDay; d++) {
       const key = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      dayMap[key] = { ordersCount: 0, grossSales: 0, refunds: 0, tax: 0, cash: 0, card: 0, check: 0 };
+      dayMap[key] = { ordersCount: 0, grossSales: 0, refunds: 0, tax: 0, cash: 0, cards: {}, check: 0 };
     }
 
     for (const o of orders as any[]) {
@@ -444,7 +494,13 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       dayMap[key].tax         += o.amount_tax ?? 0;
       const pm = paymentsByOrder[o.id] ?? {};
       dayMap[key].cash  += pm.cash  ?? 0;
-      dayMap[key].card  += pm.card  ?? 0;
+     for (const [card, amount] of Object.entries(pm.cards ?? {})) {
+  if (!dayMap[key].cards[card]) {
+    dayMap[key].cards[card] = 0;
+  }
+
+  dayMap[key].cards[card] += amount as number;
+}
     
       dayMap[key].check += pm.check ?? 0;
     }
@@ -463,25 +519,42 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       netSales:      Math.round((d.grossSales - d.refunds) * 100) / 100,
       tax:           Math.round(d.tax         * 100) / 100,
       cash:          Math.round(d.cash        * 100) / 100,
-      card:          Math.round(d.card        * 100) / 100,
-      
+ cards: Object.fromEntries(
+  Object.entries(d.cards).map(([name, amount]) => [
+    name,
+    Math.round(amount * 100) / 100
+  ])
+), 
       check:         Math.round(d.check       * 100) / 100,
     }));
 
-    const monthTotals = days.reduce(
-      (acc, d) => ({
-        ordersCount: acc.ordersCount + d.ordersCount,
-        grossSales:  acc.grossSales  + d.grossSales,
-        netSales:    acc.netSales    + d.netSales,
-        refunds:     acc.refunds     + d.refunds,
-        tax:         acc.tax         + d.tax,
-        cash:        acc.cash        + d.cash,
-        card:        acc.card        + d.card,
-        
-        check:       acc.check       + d.check,
-      }),
-      { ordersCount: 0, grossSales: 0, netSales: 0, refunds: 0, tax: 0, cash: 0, card: 0,  check: 0 }
-    );
+  const monthTotals = days.reduce(
+  (acc, d) => {
+    acc.ordersCount += d.ordersCount;
+    acc.grossSales += d.grossSales;
+    acc.netSales += d.netSales;
+    acc.refunds += d.refunds;
+    acc.tax += d.tax;
+    acc.cash += d.cash;
+    acc.check += d.check;
+
+    for (const [card, amount] of Object.entries(d.cards)) {
+      acc.cards[card] = (acc.cards[card] ?? 0) + amount;
+    }
+
+    return acc;
+  },
+  {
+    ordersCount: 0,
+    grossSales: 0,
+    netSales: 0,
+    refunds: 0,
+    tax: 0,
+    cash: 0,
+    check: 0,
+    cards: {} as Record<string, number>
+  }
+);
 
     res.status(200).json({
       success: true,
@@ -496,7 +569,12 @@ export const getMonthlyCalendarReport = CatchAsyncError(
         refunds:      Math.round(monthTotals.refunds     * 100) / 100,
         tax:          Math.round(monthTotals.tax         * 100) / 100,
         cash:         Math.round(monthTotals.cash        * 100) / 100,
-        card:         Math.round(monthTotals.card        * 100) / 100,
+      cards: Object.fromEntries(
+  Object.entries(monthTotals.cards).map(([name, amount]) => [
+    name,
+    Math.round(amount * 100) / 100
+  ])
+),
         
         check:        Math.round(monthTotals.check       * 100) / 100,
         activeDays:   days.filter((d) => d.ordersCount > 0).length,
