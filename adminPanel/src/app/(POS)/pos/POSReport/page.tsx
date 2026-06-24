@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Save,
   AlertCircle,
+  ArrowLeftRight,
 } from "lucide-react";
 import {
   useGetDailyClosingReportQuery,
@@ -34,10 +35,20 @@ import { createPortal } from "react-dom";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const USD_TO_XCD = 2.70;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DenominationEntry {
-  value: number;
+  value: number;   // always in XCD
+  label: string;   // e.g. "100", "50", "0.25"
+  count: number;
+}
+
+interface USDDenominationEntry {
+  value: number;   // USD face value
   label: string;
   count: number;
 }
@@ -62,13 +73,25 @@ type QuickRange =
 
 // ─── Default denominations ────────────────────────────────────────────────────
 
-const DEFAULT_DENOMINATIONS: DenominationEntry[] = [
+const DEFAULT_XCD_DENOMS: DenominationEntry[] = [
   { value: 100,  label: "100",  count: 0 },
   { value: 50,   label: "50",   count: 0 },
   { value: 20,   label: "20",   count: 0 },
   { value: 10,   label: "10",   count: 0 },
   { value: 5,    label: "5",    count: 0 },
   { value: 1,    label: "1",    count: 0 },
+  { value: 0.25, label: "0.25", count: 0 },
+  { value: 0.10, label: "0.10", count: 0 },
+  { value: 0.05, label: "0.05", count: 0 },
+];
+
+const DEFAULT_USD_DENOMS: USDDenominationEntry[] = [
+  { value: 100, label: "100", count: 0 },
+  { value: 50,  label: "50",  count: 0 },
+  { value: 20,  label: "20",  count: 0 },
+  { value: 10,  label: "10",  count: 0 },
+  { value: 5,   label: "5",   count: 0 },
+  { value: 1,   label: "1",   count: 0 },
   { value: 0.25, label: "0.25", count: 0 },
   { value: 0.10, label: "0.10", count: 0 },
   { value: 0.05, label: "0.05", count: 0 },
@@ -110,7 +133,9 @@ const addDays = (iso: string, days: number) => {
 
 const todayISO = () => new Date().toISOString().split("T")[0];
 
-// ─── Card config — defines display order, label, color for each card type ────
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// ─── Card config ──────────────────────────────────────────────────────────────
 
 const CARD_TYPES = [
   { key: "visa",       label: "Visa",         color: "bg-blue-400",   iconColor: "text-blue-600"   },
@@ -132,7 +157,7 @@ function KpiCard({
         <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">{label}</span>
         <span className={`p-1.5 rounded-lg ${color}`}>{icon}</span>
       </div>
-      <div className="text-2xl font-extrabold text-gray-900 tabular-nums tracking-tight">${fmt(value)}</div>
+      <div className="text-2xl font-extrabold text-gray-900 tabular-nums tracking-tight">EC${fmt(value)}</div>
       <div className="flex items-center justify-between">
         {sub && <div className="text-xs text-gray-400">{sub}</div>}
         {trend !== undefined && (
@@ -157,7 +182,7 @@ function PaymentBar({ label, amount, total, color, icon }: {
         <div className="flex items-center gap-2 text-gray-700 font-medium">{icon}{label}</div>
         <div className="flex items-center gap-3">
           <span className="text-gray-400 text-xs w-10 text-right">{pct.toFixed(1)}%</span>
-          <span className="font-bold tabular-nums text-gray-900 w-20 text-right">${fmt(amount)}</span>
+          <span className="font-bold tabular-nums text-gray-900 w-20 text-right">EC${fmt(amount)}</span>
         </div>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -167,17 +192,18 @@ function PaymentBar({ label, amount, total, color, icon }: {
   );
 }
 
-// ─── DenominationRow ──────────────────────────────────────────────────────────
+// ─── XCD DenominationRow ──────────────────────────────────────────────────────
 
-function DenominationRow({ denom, onChange, editable }: {
+function XCDDenomRow({ denom, onChange, editable }: {
   denom: DenominationEntry; onChange: (count: number) => void; editable: boolean;
 }) {
-  const total = denom.value * denom.count;
+  const total = round2(denom.value * denom.count);
   return (
-    <tr className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+    <tr className="border-b border-gray-50 hover:bg-emerald-50/40 transition-colors">
       <td className="py-2.5 pl-4 pr-2 text-sm font-medium text-gray-700">
         <span className="inline-flex items-center gap-1 font-mono">
-          <span className="text-gray-400 text-xs">$</span>{denom.label}
+          <span className="text-emerald-500 text-[11px] font-bold">EC$</span>
+          {denom.label}
         </span>
       </td>
       <td className="py-2.5 px-2 text-center">
@@ -187,14 +213,52 @@ function DenominationRow({ denom, onChange, editable }: {
             min={0}
             value={denom.count}
             onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
-            className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tabular-nums"
+            className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent tabular-nums"
           />
         ) : (
           <span className="text-sm font-semibold text-gray-900 tabular-nums">{denom.count}</span>
         )}
       </td>
-      <td className="py-2.5 pl-2 pr-4 text-right text-sm font-bold tabular-nums text-gray-900">
-        ${fmt(total)}
+      <td className="py-2.5 pl-2 pr-4 text-right text-sm font-bold tabular-nums text-emerald-700">
+        EC${fmt(total)}
+      </td>
+    </tr>
+  );
+}
+
+// ─── USD DenominationRow ──────────────────────────────────────────────────────
+
+function USDDenomRow({ denom, onChange, editable }: {
+  denom: USDDenominationEntry; onChange: (count: number) => void; editable: boolean;
+}) {
+  const totalUSD = round2(denom.value * denom.count);
+  const totalXCD = round2(totalUSD * USD_TO_XCD);
+  return (
+    <tr className="border-b border-gray-50 hover:bg-indigo-50/40 transition-colors">
+      <td className="py-2.5 pl-4 pr-2 text-sm font-medium text-gray-700">
+        <span className="inline-flex items-center gap-1 font-mono">
+          <span className="text-indigo-500 text-[11px] font-bold">US$</span>
+          {denom.label}
+        </span>
+      </td>
+      <td className="py-2.5 px-2 text-center">
+        {editable ? (
+          <input
+            type="number"
+            min={0}
+            value={denom.count}
+            onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+            className="w-16 text-center border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent tabular-nums"
+          />
+        ) : (
+          <span className="text-sm font-semibold text-gray-900 tabular-nums">{denom.count}</span>
+        )}
+      </td>
+      <td className="py-2.5 pl-2 pr-2 text-right text-sm font-bold tabular-nums text-indigo-700">
+        US${fmt(totalUSD)}
+      </td>
+      <td className="py-2.5 pl-1 pr-4 text-right text-xs tabular-nums text-gray-400 font-medium">
+        EC${fmt(totalXCD)}
       </td>
     </tr>
   );
@@ -256,7 +320,7 @@ function CalendarGrid({ year, month, days, selectedDate, onSelectDate }: {
 // ─── QuickRangePicker ─────────────────────────────────────────────────────────
 
 function QuickRangePicker({ activeRange, onSelect }: {
-  activeRange: QuickRange; onSelect: (r: QuickRange, date?: string) => void;
+  activeRange: QuickRange; onSelect: (r: QuickRange) => void;
 }) {
   const ranges: { key: QuickRange; label: string }[] = [
     { key: "today",     label: "Today"        },
@@ -286,11 +350,29 @@ function QuickRangePicker({ activeRange, onSelect }: {
   );
 }
 
-// ─── PrintableReport component ────────────────────────────────────────────────
+// ─── PrintableReport ──────────────────────────────────────────────────────────
 
-function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
-  report: any; selectedDate: string; denominations: DenominationEntry[]; denomTotal: number;
+function PrintableReport({
+  report,
+  selectedDate,
+  xcdDenominations,
+  usdDenominations,
+  xcdTotal,
+  usdTotal,
+  usdInXCD,
+  combinedXCDTotal,
+}: {
+  report: any;
+  selectedDate: string;
+  xcdDenominations: DenominationEntry[];
+  usdDenominations: USDDenominationEntry[];
+  xcdTotal: number;
+  usdTotal: number;
+  usdInXCD: number;
+  combinedXCDTotal: number;
 }) {
+  const diff = combinedXCDTotal - report.expectedClosingBalance;
+
   return (
     <div id="printable-report" className="font-sans text-gray-900 text-sm">
       {/* Header */}
@@ -310,7 +392,7 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
         <div className="space-y-1">
           <div className="flex justify-between"><span className="text-gray-500">Date</span><span className="font-semibold">{selectedDate}</span></div>
           <div className="flex justify-between"><span className="text-gray-500">Printed</span><span className="font-semibold">{new Date().toLocaleTimeString()}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Avg Order</span><span className="font-semibold">${fmt(report.avgOrderValue)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Avg Order</span><span className="font-semibold">EC${fmt(report.avgOrderValue)}</span></div>
         </div>
       </div>
 
@@ -318,12 +400,12 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
       <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
         <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Sales Summary</p>
         <div className="space-y-1 text-sm">
-          <div className="flex justify-between"><span>Gross Sales</span><span className="font-semibold tabular-nums">${fmt(report.grossSales)}</span></div>
-          <div className="flex justify-between text-red-600"><span>Discounts</span><span className="tabular-nums">-${fmt(report.discounts)}</span></div>
-          <div className="flex justify-between text-red-600"><span>Refunds</span><span className="tabular-nums">-${fmt(report.refunds)}</span></div>
-          <div className="flex justify-between font-bold border-t border-gray-300 pt-1 mt-1"><span>Net Sales</span><span className="tabular-nums">${fmt(report.netSales)}</span></div>
-          <div className="flex justify-between text-gray-600"><span>VAT / Tax</span><span className="tabular-nums">+${fmt(report.tax)}</span></div>
-          <div className="flex justify-between font-black text-base border-t-2 border-gray-800 pt-1 mt-1"><span>TOTAL INCL. TAX</span><span className="tabular-nums">${fmt(report.netSales + report.tax)}</span></div>
+          <div className="flex justify-between"><span>Gross Sales</span><span className="font-semibold tabular-nums">EC${fmt(report.grossSales)}</span></div>
+          <div className="flex justify-between text-red-600"><span>Discounts</span><span className="tabular-nums">−EC${fmt(report.discounts)}</span></div>
+          <div className="flex justify-between text-red-600"><span>Refunds</span><span className="tabular-nums">−EC${fmt(report.refunds)}</span></div>
+          <div className="flex justify-between font-bold border-t border-gray-300 pt-1 mt-1"><span>Net Sales</span><span className="tabular-nums">EC${fmt(report.netSales)}</span></div>
+          <div className="flex justify-between text-gray-600"><span>VAT / Tax</span><span className="tabular-nums">+EC${fmt(report.tax)}</span></div>
+          <div className="flex justify-between font-black text-base border-t-2 border-gray-800 pt-1 mt-1"><span>TOTAL INCL. TAX</span><span className="tabular-nums">EC${fmt(report.netSales + report.tax)}</span></div>
         </div>
       </div>
 
@@ -332,7 +414,7 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
         <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Payments Collected</p>
         <div className="space-y-1 text-sm">
           {[
-            { label: "Cash",         value: report.payments.cash       },
+            { label: "Cash (EC$)",   value: report.payments.cash       },
             { label: "Visa",         value: report.payments.visa       },
             { label: "Mastercard",   value: report.payments.mastercard },
             { label: "Amex",         value: report.payments.amex       },
@@ -341,48 +423,102 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between">
               <span className="text-gray-700">{label}</span>
-              <span className="font-semibold tabular-nums">${fmt(value)}</span>
+              <span className="font-semibold tabular-nums">EC${fmt(value)}</span>
             </div>
           ))}
           <div className="flex justify-between font-bold border-t border-gray-300 pt-1">
             <span>Total Collected</span>
-            <span className="tabular-nums">${fmt(report.payments.total)}</span>
+            <span className="tabular-nums">EC${fmt(report.payments.total)}</span>
           </div>
         </div>
       </div>
 
-      {/* Cash count */}
+      {/* Cash Register Count — XCD */}
       <div className="mb-4 border-b border-dashed border-gray-300 pb-4">
-        <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">Cash Register Count</p>
-        <div className="space-y-1 text-sm mb-3">
-          <div className="flex justify-between"><span>Opening Balance</span><span className="tabular-nums">${fmt(report.openingBalance)}</span></div>
-          <div className="flex justify-between"><span>Expected Closing</span><span className="tabular-nums font-semibold">${fmt(report.expectedClosingBalance)}</span></div>
-          <div className="flex justify-between"><span>Counted Cash</span><span className="tabular-nums font-semibold">${fmt(denomTotal)}</span></div>
-          <div className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${Math.abs(denomTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-600"}`}>
-            <span>Difference</span>
-            <span className="tabular-nums">{denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}${fmt(denomTotal - report.expectedClosingBalance)}</span>
-          </div>
-        </div>
-        <table className="w-full text-xs border border-gray-200">
-          <thead><tr className="bg-gray-100">
-            <th className="text-left py-1 px-2 font-semibold">Denomination</th>
-            <th className="text-center py-1 px-2 font-semibold">Count</th>
-            <th className="text-right py-1 px-2 font-semibold">Amount</th>
-          </tr></thead>
+        <p className="font-bold uppercase text-[11px] tracking-widest text-gray-500 mb-2">
+          Cash Count — Eastern Caribbean Dollar (EC$)
+        </p>
+        <table className="w-full text-xs border border-gray-200 mb-3">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="text-left py-1 px-2 font-semibold">Denomination</th>
+              <th className="text-center py-1 px-2 font-semibold">Count</th>
+              <th className="text-right py-1 px-2 font-semibold">Amount (EC$)</th>
+            </tr>
+          </thead>
           <tbody>
-            {denominations.filter(d => d.count > 0).map(d => (
+            {xcdDenominations.filter(d => d.count > 0).map(d => (
               <tr key={d.label} className="border-t border-gray-100">
-                <td className="py-1 px-2">${d.label}</td>
+                <td className="py-1 px-2">EC${d.label}</td>
                 <td className="py-1 px-2 text-center">{d.count}</td>
-                <td className="py-1 px-2 text-right tabular-nums">${fmt(d.value * d.count)}</td>
+                <td className="py-1 px-2 text-right tabular-nums">EC${fmt(d.value * d.count)}</td>
               </tr>
             ))}
+            {xcdDenominations.every(d => d.count === 0) && (
+              <tr><td colSpan={3} className="py-1 px-2 text-center text-gray-400 italic">No XCD denominations entered</td></tr>
+            )}
             <tr className="border-t-2 border-gray-800 font-bold">
-              <td colSpan={2} className="py-1 px-2">TOTAL CASH</td>
-              <td className="py-1 px-2 text-right tabular-nums">${fmt(denomTotal)}</td>
+              <td colSpan={2} className="py-1 px-2">TOTAL EC$</td>
+              <td className="py-1 px-2 text-right tabular-nums">EC${fmt(xcdTotal)}</td>
             </tr>
           </tbody>
         </table>
+
+        {/* Cash Count — USD */}
+        <p className="font-bold uppercase text-[11px] tracking-widest text-indigo-600 mb-2 mt-4">
+          Cash Count — US Dollar (US$)
+        </p>
+        <table className="w-full text-xs border border-indigo-200 mb-3">
+          <thead>
+            <tr className="bg-indigo-50">
+              <th className="text-left py-1 px-2 font-semibold text-indigo-700">Denomination</th>
+              <th className="text-center py-1 px-2 font-semibold text-indigo-700">Count</th>
+              <th className="text-right py-1 px-2 font-semibold text-indigo-700">Amount (US$)</th>
+              <th className="text-right py-1 px-2 font-semibold text-indigo-700">Equiv. (EC$)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usdDenominations.filter(d => d.count > 0).map(d => (
+              <tr key={d.label} className="border-t border-indigo-100">
+                <td className="py-1 px-2">US${d.label}</td>
+                <td className="py-1 px-2 text-center">{d.count}</td>
+                <td className="py-1 px-2 text-right tabular-nums">US${fmt(d.value * d.count)}</td>
+                <td className="py-1 px-2 text-right tabular-nums text-indigo-700">
+                  EC${fmt(round2(d.value * d.count * USD_TO_XCD))}
+                </td>
+              </tr>
+            ))}
+            {usdDenominations.every(d => d.count === 0) && (
+              <tr><td colSpan={4} className="py-1 px-2 text-center text-gray-400 italic">No USD denominations entered</td></tr>
+            )}
+            <tr className="border-t-2 border-indigo-800 font-bold">
+              <td colSpan={2} className="py-1 px-2 text-indigo-700">TOTAL US$</td>
+              <td className="py-1 px-2 text-right tabular-nums text-indigo-700">US${fmt(usdTotal)}</td>
+              <td className="py-1 px-2 text-right tabular-nums text-indigo-700">EC${fmt(usdInXCD)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Exchange rate note */}
+        <p className="text-[10px] text-gray-400 mb-3">
+          Exchange rate applied: 1 US$ = {USD_TO_XCD.toFixed(2)} EC$
+        </p>
+
+        {/* Combined totals */}
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between"><span>Opening Balance</span><span className="tabular-nums">EC${fmt(report.openingBalance)}</span></div>
+          <div className="flex justify-between"><span>Expected Closing</span><span className="tabular-nums font-semibold">EC${fmt(report.expectedClosingBalance)}</span></div>
+          <div className="flex justify-between"><span>Counted EC$ Cash</span><span className="tabular-nums font-semibold">EC${fmt(xcdTotal)}</span></div>
+          <div className="flex justify-between"><span>Counted US$ (in EC$)</span><span className="tabular-nums font-semibold">EC${fmt(usdInXCD)}</span></div>
+          <div className="flex justify-between font-bold border-t border-gray-300 pt-1">
+            <span>Combined Total (EC$)</span>
+            <span className="tabular-nums">EC${fmt(combinedXCDTotal)}</span>
+          </div>
+          <div className={`flex justify-between font-bold border-t border-gray-300 pt-1 ${Math.abs(diff) < 1 ? "text-emerald-700" : "text-red-600"}`}>
+            <span>Difference</span>
+            <span className="tabular-nums">{diff >= 0 ? "+" : ""}EC${fmt(diff)}</span>
+          </div>
+        </div>
       </div>
 
       {/* Sign-off */}
@@ -426,26 +562,52 @@ export default function POSClosingReport() {
   // ── Auth ───────────────────────────────────────────────────────────────────
   const { user } = useSelector((state: any) => state.auth);
 
-  // ── Denominations persisted per date ──────────────────────────────────────
-  const [denominations, setDenominations] = useState<DenominationEntry[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_DENOMINATIONS;
+  // ── XCD Denominations ─────────────────────────────────────────────────────
+  const [xcdDenominations, setXcdDenominations] = useState<DenominationEntry[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_XCD_DENOMS;
     try {
-      const saved = localStorage.getItem(`cash_count_${today}`);
-      return saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS;
-    } catch { return DEFAULT_DENOMINATIONS; }
+      const saved = localStorage.getItem(`cash_count_xcd_${today}`);
+      return saved ? JSON.parse(saved) : DEFAULT_XCD_DENOMS;
+    } catch { return DEFAULT_XCD_DENOMS; }
   });
 
+  // ── USD Denominations ─────────────────────────────────────────────────────
+  const [usdDenominations, setUsdDenominations] = useState<USDDenominationEntry[]>(() => {
+    if (typeof window === "undefined") return DEFAULT_USD_DENOMS;
+    try {
+      const saved = localStorage.getItem(`cash_count_usd_${today}`);
+      return saved ? JSON.parse(saved) : DEFAULT_USD_DENOMS;
+    } catch { return DEFAULT_USD_DENOMS; }
+  });
+
+  // Load both sets when date changes
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`cash_count_${selectedDate}`);
-      setDenominations(saved ? JSON.parse(saved) : DEFAULT_DENOMINATIONS);
-    } catch { setDenominations(DEFAULT_DENOMINATIONS); }
+      const savedXCD = localStorage.getItem(`cash_count_xcd_${selectedDate}`);
+      setXcdDenominations(savedXCD ? JSON.parse(savedXCD) : DEFAULT_XCD_DENOMS);
+      const savedUSD = localStorage.getItem(`cash_count_usd_${selectedDate}`);
+      setUsdDenominations(savedUSD ? JSON.parse(savedUSD) : DEFAULT_USD_DENOMS);
+    } catch {
+      setXcdDenominations(DEFAULT_XCD_DENOMS);
+      setUsdDenominations(DEFAULT_USD_DENOMS);
+    }
   }, [selectedDate]);
 
-  const updateDenominations = (updated: DenominationEntry[]) => {
-    setDenominations(updated);
-    try { localStorage.setItem(`cash_count_${selectedDate}`, JSON.stringify(updated)); } catch {}
+  const updateXCDDenominations = (updated: DenominationEntry[]) => {
+    setXcdDenominations(updated);
+    try { localStorage.setItem(`cash_count_xcd_${selectedDate}`, JSON.stringify(updated)); } catch {}
   };
+
+  const updateUSDDenominations = (updated: USDDenominationEntry[]) => {
+    setUsdDenominations(updated);
+    try { localStorage.setItem(`cash_count_usd_${selectedDate}`, JSON.stringify(updated)); } catch {}
+  };
+
+  // ── Derived totals ─────────────────────────────────────────────────────────
+  const xcdTotal        = round2(xcdDenominations.reduce((s, d) => s + d.value * d.count, 0));
+  const usdTotal        = round2(usdDenominations.reduce((s, d) => s + d.value * d.count, 0));
+  const usdInXCD        = round2(usdTotal * USD_TO_XCD);
+  const combinedXCDTotal = round2(xcdTotal + usdInXCD);
 
   // ── Quick range handler ────────────────────────────────────────────────────
   const handleRangeSelect = (range: QuickRange) => {
@@ -479,7 +641,7 @@ export default function POSClosingReport() {
 
   const [submitCashCount, { isLoading: submitting }] = useSubmitCashCountMutation();
 
-  // ── Derived values ─────────────────────────────────────────────────────────
+  // ── Derived calendar values ────────────────────────────────────────────────
   const monthDays = useMemo<MonthDay[]>(() => {
     if (!monthlyData?.days) return [];
     return monthlyData.days.map((d: any) => ({
@@ -496,11 +658,10 @@ export default function POSClosingReport() {
     netSales: 0, ordersCount: 0, activeDays: 0, avgPerDay: 0,
   };
 
-  const denomTotal     = denominations.reduce((s, d) => s + d.value * d.count, 0);
   const isLoading      = reportLoading || reportFetching;
   const isMonthLoading = monthLoading || monthFetching;
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Month nav ──────────────────────────────────────────────────────────────
   const handlePrevMonth = () => {
     if (calMonth === 1) { setCalMonth(12); setCalYear((y) => y - 1); }
     else setCalMonth((m) => m - 1);
@@ -510,19 +671,29 @@ export default function POSClosingReport() {
     else setCalMonth((m) => m + 1);
   };
 
+  // ── Submit cash count (saves both XCD + USD to MongoDB) ───────────────────
   const handleSubmitCashCount = async () => {
     setSubmitError(null);
     if (!report?.odooSessionId) { setSubmitError("No Odoo session found for this date"); return; }
     try {
       await submitCashCount({
-        date: selectedDate,
-        odooSessionId: report.odooSessionId,
-        denominations,
-        sessionName:   report.sessionName,
-        notes:         cashCountNotes,
-        submittedBy:   user?.name ?? "unknown",
-        role:          user?.role === "admin" ? "manager" : "cashier",
-      }).unwrap();
+        date:             selectedDate,
+        odooSessionId:    report.odooSessionId,
+        // XCD denominations (native)
+        denominations:    xcdDenominations,
+        xcdTotal,
+        // USD denominations (with XCD equivalent)
+        usdDenominations,
+        usdTotal,
+        usdInXCD,
+        // Combined
+        exchangeRate:     USD_TO_XCD,
+        combinedXCDTotal,
+        sessionName:      report.sessionName,
+        notes:            cashCountNotes,
+        submittedBy:      user?.name ?? "unknown",
+        role:             user?.role === "admin" ? "manager" : "cashier",
+      } as any).unwrap();
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
     } catch (err: any) {
@@ -552,200 +723,218 @@ export default function POSClosingReport() {
     const lineH  = 6;
     let y        = margin;
 
-    const text = (str: string, x: number, size = 10, style: "normal" | "bold" = "normal") => {
+    const setFont = (size: number, style: "normal" | "bold" = "normal") => {
       pdf.setFontSize(size);
       pdf.setFont("helvetica", style);
-      pdf.text(str, x, y);
     };
 
-    const line = (x1: number, x2: number, dashed = false) => {
-      if (dashed) pdf.setLineDashPattern([1, 1], 0);
-      else pdf.setLineDashPattern([], 0);
-      pdf.line(x1, y, x2, y);
+    const row = (left: string, right: string, bold = false) => {
+      setFont(9, bold ? "bold" : "normal");
+      pdf.text(left, margin, y);
+      pdf.text(right, W - margin, y, { align: "right" });
+      y += lineH;
     };
 
-    const newLine = (n = 1) => { y += lineH * n; };
+    const dashes = (solid = false) => {
+      if (solid) pdf.setLineDashPattern([], 0);
+      else pdf.setLineDashPattern([1, 1], 0);
+      pdf.line(margin, y, W - margin, y);
+      y += 4;
+    };
+
+    const sectionHeader = (title: string) => {
+      checkPage();
+      setFont(8, "bold");
+      pdf.text(title, margin, y);
+      y += 5;
+    };
 
     const checkPage = () => {
       if (y > 270) { pdf.addPage(); y = margin; }
     };
 
     // ── Header ──
-    pdf.setFontSize(16);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("CHEF'S WORLD", W / 2, y, { align: "center" });
-    y += 7;
-    pdf.setFontSize(9);
-    pdf.setFont("helvetica", "normal");
-    pdf.text("Point of Sale — Daily Closing Report (Z-Report)", W / 2, y, { align: "center" });
-    y += 5;
-    pdf.text(fmtDate(selectedDate), W / 2, y, { align: "center" });
-    y += 3;
-    pdf.setLineWidth(0.5);
-    line(margin, W - margin);
-    y += 6;
+    setFont(16, "bold");
+    pdf.text("CHEF'S WORLD", W / 2, y, { align: "center" }); y += 7;
+    setFont(9);
+    pdf.text("Point of Sale — Daily Closing Report (Z-Report)", W / 2, y, { align: "center" }); y += 5;
+    pdf.text(fmtDate(selectedDate), W / 2, y, { align: "center" }); y += 3;
+    pdf.setLineWidth(0.5); dashes(true);
 
-    // ── Session Info ──
-    pdf.setFontSize(8);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("SESSION", margin, y);
-    pdf.text("DETAILS", W / 2 + 5, y);
-    y += 5;
-
-    const sessionRows = [
-      ["Session", report.sessionName,                         "Date",      selectedDate],
-      ["Cashier", report.cashierName,                         "Printed",   new Date().toLocaleTimeString()],
-      ["Orders",  String(report.ordersCount),                  "Avg Order", `$${fmt(report.avgOrderValue)}`],
-    ];
-    pdf.setFontSize(9);
-    sessionRows.forEach(([l1, v1, l2, v2]) => {
+    // ── Session ──
+    sectionHeader("SESSION");
+    [
+      ["Session", report.sessionName, "Date",      selectedDate],
+      ["Cashier", report.cashierName, "Printed",   new Date().toLocaleTimeString()],
+      ["Orders",  String(report.ordersCount), "Avg Order", `EC$${fmt(report.avgOrderValue)}`],
+    ].forEach(([l1, v1, l2, v2]) => {
+      setFont(9);
       pdf.setFont("helvetica", "normal"); pdf.text(l1, margin, y);
       pdf.setFont("helvetica", "bold");   pdf.text(v1, margin + 28, y);
       pdf.setFont("helvetica", "normal"); pdf.text(l2, W / 2 + 5, y);
       pdf.setFont("helvetica", "bold");   pdf.text(v2, W / 2 + 33, y);
       y += lineH;
     });
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, y, W - margin, y);
-    y += 6;
+    dashes();
 
-    // ── Sales Summary ──
-    checkPage();
-    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
-    pdf.text("SALES SUMMARY", margin, y); y += 5;
-
-    const salesRows: [string, string, boolean][] = [
-      ["Gross Sales",     `$${fmt(report.grossSales)}`,              false],
-      ["Discounts",       `-$${fmt(report.discounts)}`,              false],
-      ["Refunds",         `-$${fmt(report.refunds)}`,                false],
-      ["Net Sales",       `$${fmt(report.netSales)}`,                true ],
-      ["VAT / Tax",       `+$${fmt(report.tax)}`,                    false],
-      ["TOTAL INCL. TAX", `$${fmt(report.netSales + report.tax)}`,   true ],
-    ];
-    salesRows.forEach(([label, value, bold]) => {
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", bold ? "bold" : "normal");
-      pdf.text(label, margin, y);
-      pdf.text(value, W - margin, y, { align: "right" });
-      y += lineH;
-    });
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, y, W - margin, y); y += 6;
+    // ── Sales ──
+    sectionHeader("SALES SUMMARY");
+    row("Gross Sales",     `EC$${fmt(report.grossSales)}`);
+    row("Discounts",       `−EC$${fmt(report.discounts)}`);
+    row("Refunds",         `−EC$${fmt(report.refunds)}`);
+    row("Net Sales",       `EC$${fmt(report.netSales)}`, true);
+    row("VAT / Tax",       `+EC$${fmt(report.tax)}`);
+    row("TOTAL INCL. TAX", `EC$${fmt(report.netSales + report.tax)}`, true);
+    dashes();
 
     // ── Payments ──
-    checkPage();
-    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
-    pdf.text("PAYMENTS COLLECTED", margin, y); y += 5;
-
+    sectionHeader("PAYMENTS COLLECTED");
     const payRows: [string, number, boolean][] = [
-      ["Cash",           report.payments.cash,       false],
-      ["Visa",           report.payments.visa,        false],
-      ["Mastercard",     report.payments.mastercard,  false],
-      ["Amex",           report.payments.amex,        false],
+      ["Cash (EC$)",    report.payments.cash,       false],
+      ["Visa",          report.payments.visa,        false],
+      ["Mastercard",    report.payments.mastercard,  false],
+      ["Amex",          report.payments.amex,        false],
       ...(report.payments.card > 0
         ? [["Card (other)", report.payments.card, false] as [string, number, boolean]]
         : []),
-      ["Check",          report.payments.check,       false],
-      ["Total Collected",report.payments.total,       true ],
+      ["Check",         report.payments.check,       false],
+      ["Total Collected",report.payments.total,      true ],
     ];
-    payRows.forEach(([label, value, bold]) => {
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", bold ? "bold" : "normal");
-      pdf.text(label, margin, y);
-      pdf.text(`$${fmt(Number(value))}`, W - margin, y, { align: "right" });
-      y += lineH;
-    });
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, y, W - margin, y); y += 6;
+    payRows.forEach(([label, value, bold]) => row(label, `EC$${fmt(Number(value))}`, bold));
+    dashes();
 
-    // ── Cash Register Count ──
-    checkPage();
-    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
-    pdf.text("CASH REGISTER COUNT", margin, y); y += 5;
-
-    const diff = denomTotal - report.expectedClosingBalance;
-    const cashRows: [string, string, boolean][] = [
-      ["Opening Balance",  `$${fmt(report.openingBalance)}`,         false],
-      ["Expected Closing", `$${fmt(report.expectedClosingBalance)}`, false],
-      ["Counted Cash",     `$${fmt(denomTotal)}`,                    false],
-      ["Difference",       `${diff >= 0 ? "+" : ""}$${fmt(diff)}`,  true ],
-    ];
-    cashRows.forEach(([label, value, bold]) => {
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", bold ? "bold" : "normal");
-      pdf.text(label, margin, y);
-      pdf.text(value, W - margin, y, { align: "right" });
-      y += lineH;
-    });
-
-    // Denomination table
-    y += 2;
+    // ── XCD Cash Count Table ──
+    sectionHeader("CASH COUNT — EASTERN CARIBBEAN DOLLAR (EC$)");
     pdf.setFillColor(240, 240, 240);
     pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
-    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+    setFont(8, "bold");
     pdf.text("Denomination", margin + 2, y);
     pdf.text("Count", W / 2, y, { align: "center" });
-    pdf.text("Amount", W - margin - 2, y, { align: "right" });
+    pdf.text("Amount (EC$)", W - margin - 2, y, { align: "right" });
     y += 5;
 
-    denominations.filter(d => d.count > 0).forEach(d => {
-      checkPage();
-      pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
-      pdf.text(`$${d.label}`, margin + 2, y);
-      pdf.text(String(d.count), W / 2, y, { align: "center" });
-      pdf.text(`$${fmt(d.value * d.count)}`, W - margin - 2, y, { align: "right" });
+    const xcdActive = xcdDenominations.filter(d => d.count > 0);
+    if (xcdActive.length > 0) {
+      xcdActive.forEach(d => {
+        checkPage();
+        setFont(9);
+        pdf.text(`EC$${d.label}`, margin + 2, y);
+        pdf.text(String(d.count), W / 2, y, { align: "center" });
+        pdf.text(`EC$${fmt(d.value * d.count)}`, W - margin - 2, y, { align: "right" });
+        y += lineH;
+      });
+    } else {
+      setFont(8);
+      pdf.setTextColor(150); pdf.text("No XCD denominations entered", margin + 2, y); pdf.setTextColor(0);
       y += lineH;
-    });
-    pdf.setFont("helvetica", "bold");
-    pdf.text("TOTAL CASH", margin + 2, y);
-    pdf.text(`$${fmt(denomTotal)}`, W - margin - 2, y, { align: "right" });
-    pdf.setLineDashPattern([1, 1], 0);
-    pdf.line(margin, y + 2, W - margin, y + 2); y += 8;
+    }
+
+    setFont(9, "bold");
+    pdf.text("TOTAL EC$", margin + 2, y);
+    pdf.text(`EC$${fmt(xcdTotal)}`, W - margin - 2, y, { align: "right" });
+    dashes(true); y += 2;
+
+    // ── USD Cash Count Table ──
+    checkPage();
+    pdf.setFillColor(237, 233, 254); // indigo-100
+    pdf.rect(margin, y - 2, W - margin * 2, 6, "F");
+    setFont(8, "bold");
+    pdf.setTextColor(79, 70, 229); // indigo
+    pdf.text("CASH COUNT — US DOLLAR (US$)", margin, y + 2);
+    pdf.setTextColor(0);
+    y += 8;
+
+    pdf.setFillColor(245, 243, 255); // indigo-50
+    pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
+    setFont(8, "bold");
+    pdf.text("Denomination", margin + 2, y);
+    pdf.text("Count", W / 2 - 20, y, { align: "center" });
+    pdf.text("Amount (US$)", W / 2 + 20, y, { align: "right" });
+    pdf.text("Equiv. (EC$)", W - margin - 2, y, { align: "right" });
+    y += 5;
+
+    const usdActive = usdDenominations.filter(d => d.count > 0);
+    if (usdActive.length > 0) {
+      usdActive.forEach(d => {
+        checkPage();
+        setFont(9);
+        pdf.text(`US$${d.label}`, margin + 2, y);
+        pdf.text(String(d.count), W / 2 - 20, y, { align: "center" });
+        pdf.text(`US$${fmt(d.value * d.count)}`, W / 2 + 20, y, { align: "right" });
+        pdf.text(`EC$${fmt(round2(d.value * d.count * USD_TO_XCD))}`, W - margin - 2, y, { align: "right" });
+        y += lineH;
+      });
+    } else {
+      setFont(8);
+      pdf.setTextColor(150); pdf.text("No USD denominations entered", margin + 2, y); pdf.setTextColor(0);
+      y += lineH;
+    }
+
+    setFont(9, "bold");
+    pdf.text("TOTAL US$", margin + 2, y);
+    pdf.text(`US$${fmt(usdTotal)}`, W / 2 + 20, y, { align: "right" });
+    pdf.text(`EC$${fmt(usdInXCD)}`, W - margin - 2, y, { align: "right" });
+    y += lineH;
+
+    setFont(7);
+    pdf.setTextColor(120);
+    pdf.text(`Exchange rate: 1 US$ = ${USD_TO_XCD.toFixed(2)} EC$`, margin, y);
+    pdf.setTextColor(0);
+    y += lineH;
+
+    // ── Combined Summary ──
+    dashes();
+    sectionHeader("COMBINED CASH REGISTER SUMMARY");
+    const diff = round2(combinedXCDTotal - report.expectedClosingBalance);
+    row("Opening Balance",      `EC$${fmt(report.openingBalance)}`);
+    row("Expected Closing",     `EC$${fmt(report.expectedClosingBalance)}`);
+    row("Counted EC$ Cash",     `EC$${fmt(xcdTotal)}`);
+    row("Counted US$ (in EC$)", `EC$${fmt(usdInXCD)}`);
+    row("Combined Total (EC$)", `EC$${fmt(combinedXCDTotal)}`, true);
+    // Colour difference
+    pdf.setTextColor(diff >= 0 ? 5 : 220, diff >= 0 ? 150 : 40, diff >= 0 ? 105 : 40);
+    setFont(9, "bold");
+    pdf.text("Difference", margin, y);
+    pdf.text(`${diff >= 0 ? "+" : ""}EC$${fmt(diff)}`, W - margin, y, { align: "right" });
+    pdf.setTextColor(0); y += lineH;
+    dashes();
 
     // ── Top Products ──
     if (report.topProducts?.length > 0) {
       checkPage();
-      pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
-      pdf.text("TOP PRODUCTS", margin, y); y += 5;
-
+      sectionHeader("TOP PRODUCTS");
       pdf.setFillColor(240, 240, 240);
       pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
+      setFont(8, "bold");
       pdf.text("#", margin + 2, y);
       pdf.text("Product", margin + 10, y);
       pdf.text("Qty", W - margin - 30, y, { align: "right" });
       pdf.text("Revenue", W - margin - 2, y, { align: "right" });
       y += 5;
-
       report.topProducts.slice(0, 5).forEach((p: any, i: number) => {
         checkPage();
-        pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+        setFont(9);
         pdf.text(String(i + 1), margin + 2, y);
         pdf.text(p.name, margin + 10, y);
         pdf.text(String(p.qty), W - margin - 30, y, { align: "right" });
-        pdf.text(`$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
+        pdf.text(`EC$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
         y += lineH;
       });
-      pdf.setLineDashPattern([1, 1], 0);
-      pdf.line(margin, y, W - margin, y); y += 6;
+      dashes();
     }
 
     // ── Sign-off ──
-    checkPage();
-    y += 4;
+    checkPage(); y += 4;
     const sigCols   = [margin, W / 2 - 20, W - margin - 40];
     const sigLabels = ["Cashier Signature", "Supervisor Signature", "Date & Stamp"];
+    pdf.setLineDashPattern([1, 1], 0);
     sigCols.forEach((x, i) => {
-      pdf.setLineDashPattern([1, 1], 0);
       pdf.line(x, y, x + 50, y);
-      pdf.setFontSize(7); pdf.setFont("helvetica", "normal");
-      pdf.text(sigLabels[i], x, y + 4);
+      setFont(7); pdf.text(sigLabels[i], x, y + 4);
     });
     y += 12;
-    pdf.setFontSize(7);
-    pdf.text(
-      `Chef's World POS · Generated ${new Date().toLocaleString()} · Confidential`,
-      W / 2, y, { align: "center" }
-    );
+    setFont(7);
+    pdf.text(`Chef's World POS · Generated ${new Date().toLocaleString()} · Confidential`, W / 2, y, { align: "center" });
 
     pdf.save(`ZReport_${selectedDate}.pdf`);
   };
@@ -758,8 +947,12 @@ export default function POSClosingReport() {
           <PrintableReport
             report={report}
             selectedDate={selectedDate}
-            denominations={denominations}
-            denomTotal={denomTotal}
+            xcdDenominations={xcdDenominations}
+            usdDenominations={usdDenominations}
+            xcdTotal={xcdTotal}
+            usdTotal={usdTotal}
+            usdInXCD={usdInXCD}
+            combinedXCDTotal={combinedXCDTotal}
           />
         </div>,
         document.body
@@ -796,7 +989,6 @@ export default function POSClosingReport() {
               onClick={() => refetchReport()}
               className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               title="Refresh data"
-              aria-label="Refresh data"
             >
               <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
             </button>
@@ -864,7 +1056,6 @@ export default function POSClosingReport() {
                   <ChevronRight size={14} />
                 </button>
               </div>
-
               {isMonthLoading ? (
                 <div className="h-44 flex items-center justify-center text-gray-400">
                   <RefreshCw size={16} className="animate-spin" />
@@ -878,7 +1069,6 @@ export default function POSClosingReport() {
                   onSelectDate={(d) => { setSelectedDate(d); setActiveRange("custom"); }}
                 />
               )}
-
               <div className="flex items-center gap-3 mt-2.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wide">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300 inline-block" />Today</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-100 border border-blue-400 inline-block" />Selected</span>
@@ -894,10 +1084,10 @@ export default function POSClosingReport() {
               </div>
               <div className="flex flex-col gap-2">
                 {[
-                  { label: "Total Revenue", value: `$${fmt(monthTotals.netSales)}`,          bold: true },
+                  { label: "Total Revenue", value: `EC$${fmt(monthTotals.netSales)}`, bold: true },
                   { label: "Total Orders",  value: monthTotals.ordersCount.toLocaleString() },
-                  { label: "Active Days",   value: String(monthTotals.activeDays)            },
-                  { label: "Avg / Day",     value: `$${fmt(monthTotals.avgPerDay)}`          },
+                  { label: "Active Days",   value: String(monthTotals.activeDays) },
+                  { label: "Avg / Day",     value: `EC$${fmt(monthTotals.avgPerDay)}` },
                 ].map(({ label, value, bold }) => (
                   <div key={label} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
                     <span className="text-xs text-gray-500">{label}</span>
@@ -923,7 +1113,7 @@ export default function POSClosingReport() {
                   <div className="flex justify-between"><span className="opacity-60">Orders</span><span className="font-bold">{report.ordersCount}</span></div>
                   <div className="flex justify-between mt-1 pt-1 border-t border-white/20">
                     <span className="opacity-60">Net Sales</span>
-                    <span className="font-extrabold text-sm">${fmt(report.netSales)}</span>
+                    <span className="font-extrabold text-sm">EC${fmt(report.netSales)}</span>
                   </div>
                 </div>
               </div>
@@ -974,7 +1164,6 @@ export default function POSClosingReport() {
 
                 {/* Sales + Payments */}
                 <div className="grid grid-cols-2 gap-4">
-
                   {/* Sales breakdown */}
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Sales Breakdown</h3>
@@ -986,65 +1175,40 @@ export default function POSClosingReport() {
                       ].map(({ label, value, cls }) => (
                         <div key={label} className="flex justify-between py-2.5 border-b border-gray-50 text-sm">
                           <span className="text-gray-600">{label}</span>
-                          <span className={`tabular-nums ${cls}`}>{value < 0 ? "−" : ""}${fmt(Math.abs(value))}</span>
+                          <span className={`tabular-nums ${cls}`}>{value < 0 ? "−" : ""}EC${fmt(Math.abs(value))}</span>
                         </div>
                       ))}
                       <div className="flex justify-between py-3 text-sm font-extrabold border-t-2 border-gray-200 mt-1">
                         <span>Net Sales</span>
-                        <span className="text-emerald-700 tabular-nums">${fmt(report.netSales)}</span>
+                        <span className="text-emerald-700 tabular-nums">EC${fmt(report.netSales)}</span>
                       </div>
                       <div className="flex justify-between py-2 text-xs">
                         <span className="text-gray-400">VAT / Tax</span>
-                        <span className="text-gray-600 tabular-nums">+${fmt(report.tax)}</span>
+                        <span className="text-gray-600 tabular-nums">+EC${fmt(report.tax)}</span>
                       </div>
                       <div className="flex justify-between py-2.5 text-sm font-extrabold bg-gray-50 rounded-lg px-3 -mx-1 mt-1">
                         <span className="text-gray-900">Total incl. Tax</span>
-                        <span className="tabular-nums text-gray-900">${fmt(report.netSales + report.tax)}</span>
+                        <span className="tabular-nums text-gray-900">EC${fmt(report.netSales + report.tax)}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Payment methods — individual card types */}
+                  {/* Payment methods */}
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Payment Methods</h3>
                     <div className="flex flex-col gap-4">
-
-                      {/* Cash */}
-                      <PaymentBar
-                        label="Cash"
-                        amount={report.payments.cash}
-                        total={report.payments.total}
-                        color="bg-emerald-400"
-                        icon={<Banknote size={13} className="text-emerald-600" />}
-                      />
-
-                      {/* Card types — only render rows that have a non-zero amount */}
+                      <PaymentBar label="Cash" amount={report.payments.cash} total={report.payments.total} color="bg-emerald-400" icon={<Banknote size={13} className="text-emerald-600" />} />
                       {CARD_TYPES.map(({ key, label, color, iconColor }) => {
-  const amount = report.payments[key] as number;
-  return amount > 0 ? (
-    <PaymentBar
-      key={key}
-      label={label}
-      amount={amount}
-      total={report.payments.total}
-      color={color}
-      icon={<CreditCard size={13} className={iconColor} />}
-    />
-  ) : null;
-})}
-
-                      {/* Check */}
-                      <PaymentBar
-                        label="Check"
-                        amount={report.payments.check}
-                        total={report.payments.total}
-                        color="bg-amber-400"
-                        icon={<ReceiptText size={13} className="text-amber-600" />}
-                      />
+                        const amount = report.payments[key] as number;
+                        return amount > 0 ? (
+                          <PaymentBar key={key} label={label} amount={amount} total={report.payments.total} color={color} icon={<CreditCard size={13} className={iconColor} />} />
+                        ) : null;
+                      })}
+                      <PaymentBar label="Check" amount={report.payments.check} total={report.payments.total} color="bg-amber-400" icon={<ReceiptText size={13} className="text-amber-600" />} />
                     </div>
                     <div className="mt-4 pt-3 border-t border-gray-100 flex justify-between text-sm font-extrabold">
                       <span>Total Collected</span>
-                      <span className="tabular-nums">${fmt(report.payments.total)}</span>
+                      <span className="tabular-nums">EC${fmt(report.payments.total)}</span>
                     </div>
                   </div>
                 </div>
@@ -1064,7 +1228,7 @@ export default function POSClosingReport() {
                           </div>
                           <div className="flex items-center gap-6">
                             <span className="text-gray-400 text-xs tabular-nums">{p.qty} units</span>
-                            <span className="font-bold tabular-nums text-gray-900 w-20 text-right">${fmt(p.revenue)}</span>
+                            <span className="font-bold tabular-nums text-gray-900 w-24 text-right">EC${fmt(p.revenue)}</span>
                           </div>
                         </div>
                       ))}
@@ -1072,11 +1236,17 @@ export default function POSClosingReport() {
                   </div>
                 )}
 
-                {/* Cash Register Count */}
+                {/* ── Cash Register Count ── */}
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cash Register Count</h3>
-                    <div className="flex flex-col items-end gap-1">
+                  {/* Section header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <div>
+                      <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cash Register Count</h3>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        Rate: <span className="font-semibold text-gray-600">1 US$ = {USD_TO_XCD.toFixed(2)} EC$</span>
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
                       <div className="flex items-center gap-2">
                         {submitSuccess && (
                           <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
@@ -1107,13 +1277,121 @@ export default function POSClosingReport() {
                     </div>
                   </div>
 
+                  {/* ── Two denomination tables side by side ── */}
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+
+                    {/* ── EC$ Table ── */}
+                    <div className="border border-emerald-100 rounded-xl overflow-hidden">
+                      {/* Table header badge */}
+                      <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2.5 flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-md bg-emerald-600 flex items-center justify-center">
+                          <Banknote size={11} className="text-white" />
+                        </div>
+                        <span className="text-[11px] font-extrabold text-emerald-800 uppercase tracking-widest">
+                          Eastern Caribbean Dollar
+                        </span>
+                        <span className="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">EC$</span>
+                      </div>
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-4">Bill / Coin</th>
+                            <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
+                            <th className="text-right text-[10px] font-bold text-emerald-500 uppercase tracking-widest py-2 pr-4">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {xcdDenominations.map((d, i) => (
+                            <XCDDenomRow
+                              key={d.label}
+                              denom={d}
+                              editable={denomEditable}
+                              onChange={(count) =>
+                                updateXCDDenominations(xcdDenominations.map((item, idx) => idx === i ? { ...item, count } : item))
+                              }
+                            />
+                          ))}
+                          <tr className="border-t-2 border-emerald-200 bg-emerald-50">
+                            <td colSpan={2} className="py-3 pl-4 text-sm font-extrabold text-emerald-900">Total EC$</td>
+                            <td className="py-3 pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">EC${fmt(xcdTotal)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* ── US$ Table ── */}
+                    <div className="border border-indigo-100 rounded-xl overflow-hidden">
+                      {/* Table header badge */}
+                      <div className="bg-indigo-50 border-b border-indigo-100 px-4 py-2.5 flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center">
+                          <Banknote size={11} className="text-white" />
+                        </div>
+                        <span className="text-[11px] font-extrabold text-indigo-800 uppercase tracking-widest">
+                          US Dollar
+                        </span>
+                        <span className="ml-auto text-[10px] font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded-full">US$</span>
+                      </div>
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-4">Bill / Coin</th>
+                            <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
+                            <th className="text-right text-[10px] font-bold text-indigo-500 uppercase tracking-widest py-2 pr-2">US$</th>
+                            <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-4">≈ EC$</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {usdDenominations.map((d, i) => (
+                            <USDDenomRow
+                              key={d.label}
+                              denom={d}
+                              editable={denomEditable}
+                              onChange={(count) =>
+                                updateUSDDenominations(usdDenominations.map((item, idx) => idx === i ? { ...item, count } : item))
+                              }
+                            />
+                          ))}
+                          <tr className="border-t-2 border-indigo-200 bg-indigo-50">
+                            <td colSpan={2} className="py-3 pl-4 text-sm font-extrabold text-indigo-900">Total US$</td>
+                            <td className="py-3 pr-2 text-right text-sm font-extrabold text-indigo-700 tabular-nums">US${fmt(usdTotal)}</td>
+                            <td className="py-3 pr-4 text-right text-sm font-bold text-gray-500 tabular-nums">EC${fmt(usdInXCD)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* ── Conversion bridge ── */}
+                  <div className="flex items-center gap-3 mb-4 bg-gradient-to-r from-emerald-50 via-gray-50 to-indigo-50 rounded-xl p-4 border border-gray-100">
+                    <div className="flex-1 text-center">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">EC$ Counted</p>
+                      <p className="text-xl font-extrabold text-emerald-700 tabular-nums">EC${fmt(xcdTotal)}</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 text-gray-300">
+                      <ArrowLeftRight size={16} />
+                      <span className="text-[10px] font-semibold text-gray-400">+ rate {USD_TO_XCD}</span>
+                    </div>
+                    <div className="flex-1 text-center">
+                      <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">US$ in EC$</p>
+                      <p className="text-xl font-extrabold text-indigo-700 tabular-nums">EC${fmt(usdInXCD)}</p>
+                      <p className="text-[10px] text-indigo-400 font-medium mt-0.5">US${fmt(usdTotal)} × {USD_TO_XCD}</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-1 text-gray-300">
+                      <span className="text-lg font-bold">=</span>
+                    </div>
+                    <div className="flex-1 text-center bg-white rounded-lg py-2 px-3 border border-gray-200 shadow-sm">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Combined Total</p>
+                      <p className="text-xl font-extrabold text-gray-900 tabular-nums">EC${fmt(combinedXCDTotal)}</p>
+                    </div>
+                  </div>
+
+                  {/* ── Closing summary + notes ── */}
                   <div className="grid grid-cols-2 gap-6">
-                    {/* Closing summary */}
                     <div className="flex flex-col gap-0">
                       {[
-                        { icon: <Clock size={13} className="text-gray-400" />,          label: "Opening Balance",      value: `$${fmt(report.openingBalance)}`,         cls: "text-gray-900" },
-                        { icon: <Banknote size={13} className="text-emerald-500" />,    label: "Cash Sales",            value: `+$${fmt(report.payments.cash)}`,          cls: "text-emerald-700 font-semibold" },
-                        { icon: <XCircle size={13} className="text-red-400" />,         label: "Cash Refunds (est.)",   value: `-$${fmt(report.refunds * 0.45)}`,         cls: "text-red-500" },
+                        { icon: <Clock size={13} className="text-gray-400" />,       label: "Opening Balance",    value: `EC$${fmt(report.openingBalance)}`,          cls: "text-gray-900" },
+                        { icon: <Banknote size={13} className="text-emerald-500" />, label: "Cash Sales",          value: `+EC$${fmt(report.payments.cash)}`,           cls: "text-emerald-700 font-semibold" },
+                        { icon: <XCircle size={13} className="text-red-400" />,      label: "Cash Refunds (est.)", value: `−EC$${fmt(report.refunds * 0.45)}`,          cls: "text-red-500" },
                       ].map(({ icon, label, value, cls }) => (
                         <div key={label} className="flex justify-between items-center py-2.5 border-b border-gray-50 text-sm">
                           <div className="flex items-center gap-2 text-gray-600">{icon}{label}</div>
@@ -1122,19 +1400,19 @@ export default function POSClosingReport() {
                       ))}
                       <div className="flex justify-between items-center py-3 font-extrabold text-sm border-t-2 border-gray-200 mt-1">
                         <span>Expected Closing</span>
-                        <span className="tabular-nums">${fmt(report.expectedClosingBalance)}</span>
+                        <span className="tabular-nums">EC${fmt(report.expectedClosingBalance)}</span>
                       </div>
                       <div className="flex justify-between items-center py-2 text-sm">
-                        <span className="text-gray-600">Counted (right →)</span>
-                        <span className={`font-extrabold tabular-nums ${Math.abs(denomTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-500"}`}>
-                          ${fmt(denomTotal)}
+                        <span className="text-gray-600">Combined Counted</span>
+                        <span className={`font-extrabold tabular-nums ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "text-emerald-700" : "text-red-500"}`}>
+                          EC${fmt(combinedXCDTotal)}
                         </span>
                       </div>
-                      <div className={`flex justify-between items-center py-2.5 rounded-xl px-3 text-sm mt-1 ${Math.abs(denomTotal - report.expectedClosingBalance) < 1 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
-                        <span className="font-semibold">Difference</span>
+                      <div className={`flex justify-between items-center py-2.5 rounded-xl px-3 text-sm mt-1 ${Math.abs(combinedXCDTotal - report.expectedClosingBalance) < 1 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                        <span className="font-semibold">Difference (EC$)</span>
                         <span className="font-extrabold tabular-nums">
-                          {denomTotal - report.expectedClosingBalance >= 0 ? "+" : ""}
-                          ${fmt(denomTotal - report.expectedClosingBalance)}
+                          {combinedXCDTotal - report.expectedClosingBalance >= 0 ? "+" : ""}
+                          EC${fmt(combinedXCDTotal - report.expectedClosingBalance)}
                         </span>
                       </div>
                       <textarea
@@ -1146,33 +1424,41 @@ export default function POSClosingReport() {
                       />
                     </div>
 
-                    {/* Denomination table */}
-                    <div className="border border-gray-100 rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pl-4">Bill / Coin</th>
-                            <th className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2">Count</th>
-                            <th className="text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest py-2 pr-4">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {denominations.map((d, i) => (
-                            <DenominationRow
-                              key={d.label}
-                              denom={d}
-                              editable={denomEditable}
-                              onChange={(count) =>
-                                updateDenominations(denominations.map((item, idx) => idx === i ? { ...item, count } : item))
-                              }
-                            />
-                          ))}
-                          <tr className="border-t-2 border-gray-200 bg-gray-50">
-                            <td colSpan={2} className="py-3 pl-4 text-sm font-extrabold text-gray-900">Total Cash</td>
-                            <td className="py-3 pr-4 text-right text-sm font-extrabold text-emerald-700 tabular-nums">${fmt(denomTotal)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                    {/* Currency breakdown mini summary */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Currency Breakdown</p>
+                      <div className="border border-gray-100 rounded-xl overflow-hidden">
+                        <div className="bg-emerald-50 px-4 py-3 flex justify-between items-center border-b border-emerald-100">
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center text-[9px] text-white font-bold">$</span>
+                            <span className="text-xs font-semibold text-emerald-800">Eastern Caribbean</span>
+                          </div>
+                          <span className="text-sm font-extrabold text-emerald-700 tabular-nums">EC${fmt(xcdTotal)}</span>
+                        </div>
+                        <div className="bg-indigo-50 px-4 py-3 flex justify-between items-center border-b border-indigo-100">
+                          <div className="flex items-center gap-2">
+                            <span className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center text-[9px] text-white font-bold">$</span>
+                            <span className="text-xs font-semibold text-indigo-800">US Dollar (face)</span>
+                          </div>
+                          <span className="text-sm font-extrabold text-indigo-700 tabular-nums">US${fmt(usdTotal)}</span>
+                        </div>
+                        <div className="bg-gray-50 px-4 py-3 flex justify-between items-center border-b border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <ArrowLeftRight size={12} className="text-gray-400" />
+                            <span className="text-xs font-semibold text-gray-600">US$ in EC$</span>
+                          </div>
+                          <span className="text-sm font-semibold text-gray-700 tabular-nums">EC${fmt(usdInXCD)}</span>
+                        </div>
+                        <div className="px-4 py-3 flex justify-between items-center bg-white">
+                          <span className="text-xs font-extrabold text-gray-800">Combined (EC$)</span>
+                          <span className="text-sm font-extrabold text-gray-900 tabular-nums">EC${fmt(combinedXCDTotal)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 text-center">
+                        <p className="text-[10px] text-gray-400 font-medium">Exchange rate applied</p>
+                        <p className="text-sm font-extrabold text-gray-700 mt-0.5">1 US$ = {USD_TO_XCD.toFixed(2)} EC$</p>
+                      </div>
                     </div>
                   </div>
                 </div>

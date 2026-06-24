@@ -55,7 +55,6 @@ export const getDailyClosingReport = CatchAsyncError(
           limit: 5000,
         }
       ),
-      // Refunds/returns: amount < 0
       odooRequest(
         "pos.order",
         "search_read",
@@ -100,20 +99,21 @@ export const getDailyClosingReport = CatchAsyncError(
       paymentTotals[method] = (paymentTotals[method] ?? 0) + (p.amount ?? 0);
     }
 
-    // Normalise into: cash | visa | mastercard | amex | card (generic) | check | <other>
-const normaliseMethod = (name: string): string => {
-  const l = name.toLowerCase();
-  if (l.includes("cash"))                                         return "cash";
-  if (l.includes("visa"))                                         return "visa";
-  if (l.includes("master"))                                       return "mastercard";
-  if (l.includes("amex") || l.includes("american"))              return "amex";
-  if (l.includes("customer account") || l.includes("check") || l.includes("cheque")) return "check";
-  if (l.includes("card") || l.includes("credit") || l.includes("debit"))             return "card";
-  return name;
-};
-console.log("[RAW PAYMENT METHODS FROM ODOO]:", 
-  [...new Set(payments.map((p: any) => p.payment_method_id?.[1]))]
-);
+    const normaliseMethod = (name: string): string => {
+      const l = name.toLowerCase();
+      if (l.includes("cash"))                                                          return "cash";
+      if (l.includes("visa"))                                                          return "visa";
+      if (l.includes("master"))                                                        return "mastercard";
+      if (l.includes("amex") || l.includes("american"))                               return "amex";
+      if (l.includes("customer account") || l.includes("check") || l.includes("cheque")) return "check";
+      if (l.includes("card") || l.includes("credit") || l.includes("debit"))          return "card";
+      return name;
+    };
+
+    console.log("[RAW PAYMENT METHODS FROM ODOO]:",
+      [...new Set(payments.map((p: any) => p.payment_method_id?.[1]))]
+    );
+
     const normalisedPayments: Record<string, number> = {};
     for (const [method, amount] of Object.entries(paymentTotals)) {
       const key = normaliseMethod(method);
@@ -140,7 +140,6 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
         )
       : [];
 
-    // Aggregate per product
     const productMap: Record<
       number,
       { name: string; qty: number; revenue: number }
@@ -148,15 +147,13 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
     let totalDiscountAmount = 0;
 
     for (const l of orderLines) {
-      const pid = l.product_id?.[0];
+      const pid   = l.product_id?.[0];
       const pname = l.product_id?.[1] ?? "Unknown";
       if (!productMap[pid]) {
         productMap[pid] = { name: pname, qty: 0, revenue: 0 };
       }
-      productMap[pid].qty += l.qty ?? 0;
+      productMap[pid].qty     += l.qty ?? 0;
       productMap[pid].revenue += l.price_subtotal_incl ?? 0;
-
-      // Discount saved = unit_price * qty * discount%/100
       totalDiscountAmount +=
         ((l.price_unit ?? 0) * (l.qty ?? 0) * (l.discount ?? 0)) / 100;
     }
@@ -166,7 +163,7 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
       .slice(0, 10)
       .map((p) => ({ ...p, revenue: Math.round(p.revenue * 100) / 100 }));
 
-    // ── 5. Hourly buckets for the revenue chart ──────────────────────────────
+    // ── 5. Hourly buckets ────────────────────────────────────────────────────
     const hourlyBuckets: Record<number, number> = {};
     for (let h = 0; h < 24; h++) hourlyBuckets[h] = 0;
     for (const o of orders) {
@@ -179,7 +176,6 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
     const sessionName = firstOrder?.session_id?.[1] ?? `POS/${date.replace(/-/g, "")}`;
     const cashierName = firstOrder?.user_id?.[1] ?? "—";
 
-    // Opening balance from Odoo session record
     let openingBalance = 0;
     if (firstOrder?.session_id?.[0]) {
       const sessionData = await odooRequest(
@@ -193,7 +189,6 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
       }
     }
 
-    // Also check MongoDB shift logs for our own data
     const shiftLog = await CashierShiftLog.findOne({
       createdAt: {
         $gte: new Date(`${date}T00:00:00`),
@@ -215,14 +210,11 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
     const totalRefunds = Math.abs(
       refundOrders.reduce((s: number, o: any) => s + (o.amount_total ?? 0), 0)
     );
-    const netSales = grossSales - totalDiscountAmount - totalRefunds;
-    const cashCollected = normalisedPayments["cash"] ?? 0;
+    const netSales             = grossSales - totalDiscountAmount - totalRefunds;
+    const cashCollected        = normalisedPayments["cash"] ?? 0;
     const expectedClosingBalance = openingBalance + cashCollected - (totalRefunds * 0.45);
-
-    const ordersCount = orders.length;
-
-    // Total payments = sum of all actual payment lines (more accurate than grossSales)
-    const paymentsTotal = Object.values(normalisedPayments).reduce((s, v) => s + v, 0);
+    const ordersCount          = orders.length;
+    const paymentsTotal        = Object.values(normalisedPayments).reduce((s, v) => s + v, 0);
 
     // ── 8. Build response ────────────────────────────────────────────────────
     res.status(200).json({
@@ -243,9 +235,8 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
         visa:       Math.round((normalisedPayments["visa"]       ?? 0) * 100) / 100,
         mastercard: Math.round((normalisedPayments["mastercard"] ?? 0) * 100) / 100,
         amex:       Math.round((normalisedPayments["amex"]       ?? 0) * 100) / 100,
-        card:       Math.round((normalisedPayments["card"]       ?? 0) * 100) / 100, // generic card fallback
+        card:       Math.round((normalisedPayments["card"]       ?? 0) * 100) / 100,
         check:      Math.round((normalisedPayments["check"]      ?? 0) * 100) / 100,
-        // Any payment methods that don't match any known category
         breakdown: Object.entries(normalisedPayments)
           .filter(([k]) => !["cash", "visa", "mastercard", "amex", "card", "check"].includes(k))
           .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 })),
@@ -264,79 +255,147 @@ console.log("[RAW PAYMENT METHODS FROM ODOO]:",
 );
 
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface DenominationEntry {
   value: number;
   label: string;
   count: number;
 }
 
-// submitCashCount controller
+interface USDDenominationEntry {
+  value: number;   // USD face value
+  label: string;
+  count: number;
+}
+
+// ─── submitCashCount ──────────────────────────────────────────────────────────
+// Now accepts both XCD and USD denomination sets, stores both in MongoDB,
+// and records the exchange-rate snapshot used at submission time.
+
 export const submitCashCount = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { date, odooSessionId, denominations, sessionName, notes, submittedBy, role } = req.body as {
-      date: string;
-      odooSessionId: number;
-      denominations: DenominationEntry[];
-      sessionName?: string;
-      notes?: string;
-      submittedBy?: string;
-      role?: "cashier" | "manager";
+    const {
+      date,
+      odooSessionId,
+      // XCD (EC$) cash
+      denominations,
+      xcdTotal,
+      // USD cash
+      usdDenominations,
+      usdTotal,
+      usdInXCD,
+      // Conversion meta
+      exchangeRate,
+      combinedXCDTotal,
+      // Session meta
+      sessionName,
+      notes,
+      submittedBy,
+      role,
+    } = req.body as {
+      date:              string;
+      odooSessionId:     number;
+      denominations:     DenominationEntry[];
+      xcdTotal:          number;
+      usdDenominations:  USDDenominationEntry[];
+      usdTotal:          number;
+      usdInXCD:          number;
+      exchangeRate:      number;
+      combinedXCDTotal:  number;
+      sessionName?:      string;
+      notes?:            string;
+      submittedBy?:      string;
+      role?:             "cashier" | "manager";
     };
 
+    // ── Validation ────────────────────────────────────────────────────────────
     if (!date || !odooSessionId || !denominations?.length) {
       return next(new ErrorHandler("date, odooSessionId and denominations are required", 400));
     }
 
-    const countedTotal = denominations.reduce((s, d) => s + d.value * d.count, 0);
+    // ── Recompute totals server-side for integrity ────────────────────────────
+    const USD_TO_XCD = exchangeRate ?? 2.70;
 
+    const computedXCDTotal = Math.round(
+      (denominations ?? []).reduce((s: number, d: DenominationEntry) => s + d.value * d.count, 0) * 100
+    ) / 100;
+
+    const computedUSDTotal = Math.round(
+      (usdDenominations ?? []).reduce((s: number, d: USDDenominationEntry) => s + d.value * d.count, 0) * 100
+    ) / 100;
+
+    const computedUSDInXCD = Math.round(computedUSDTotal * USD_TO_XCD * 100) / 100;
+
+    const computedCombinedXCD = Math.round((computedXCDTotal + computedUSDInXCD) * 100) / 100;
+
+    // ── Build the cashCount sub-document ──────────────────────────────────────
+    const cashCountPayload = {
+      // XCD denomination detail
+      denominations:   denominations,
+      xcdTotal:        computedXCDTotal,
+
+      // USD denomination detail
+      usdDenominations: usdDenominations ?? [],
+      usdTotal:         computedUSDTotal,
+      usdInXCD:         computedUSDInXCD,
+
+      // Aggregated
+      exchangeRate:     USD_TO_XCD,
+      combinedXCDTotal: computedCombinedXCD,
+
+      // Legacy field — keep for backwards compatibility with old reports
+      countedTotal:     computedCombinedXCD,
+
+      // Submission metadata
+      submittedAt:  new Date(),
+      submittedBy:  submittedBy ?? "unknown",
+      role:         role ?? "cashier",
+      notes:        notes ?? "",
+    };
+
+    // ── Upsert into MongoDB ───────────────────────────────────────────────────
     const shiftLog = await CashierShiftLog.findOneAndUpdate(
       { odooSessionId },
-      {
-        $set: {
-          cashCount: {
-            denominations,
-            countedTotal: Math.round(countedTotal * 100) / 100,
-            submittedAt: new Date(),
-            submittedBy: submittedBy ?? "unknown",
-            role: role ?? "cashier",
-            notes: notes ?? "",
-          },
-        },
-      },
+      { $set: { cashCount: cashCountPayload } },
       { new: true, upsert: false }
     );
 
     if (!shiftLog) {
+      // No existing shift log — create a new record keyed to this Odoo session
       await CashierShiftLog.create({
         odooSessionId,
         odooPartnerId: 0,
-        cashierId: new mongoose.Types.ObjectId(),
-        startTime: new Date(`${date}T00:00:00`),
-        state: "closed" as ShiftState,
-        cashCount: {
-          denominations,
-          countedTotal: Math.round(countedTotal * 100) / 100,
-          submittedAt: new Date(),
-          submittedBy: submittedBy ?? "unknown",
-          role: role ?? "cashier",
-          notes: notes ?? "",
-        },
+        cashierId:     new mongoose.Types.ObjectId(),
+        startTime:     new Date(`${date}T00:00:00`),
+        state:         "closed" as ShiftState,
+        cashCount:     cashCountPayload,
       });
 
       return res.status(200).json({
-        success: true,
-        warning: "No existing shift log — new record created from Odoo session",
-        countedTotal: Math.round(countedTotal * 100) / 100,
+        success:   true,
+        warning:   "No existing shift log — new record created from Odoo session",
+        // Summary totals for the client toast
+        xcdTotal:        computedXCDTotal,
+        usdTotal:        computedUSDTotal,
+        usdInXCD:        computedUSDInXCD,
+        exchangeRate:    USD_TO_XCD,
+        combinedXCDTotal: computedCombinedXCD,
         odooSessionId,
       });
     }
 
     res.status(200).json({
-      success: true,
-      message: "Cash count submitted successfully",
-      countedTotal: Math.round(countedTotal * 100) / 100,
-      shiftId: (shiftLog as any)._id.toString(),
-      role: role ?? "cashier",
+      success:  true,
+      message:  "Cash count submitted successfully",
+      // Full breakdown returned so the client can display a confirmation
+      xcdTotal:        computedXCDTotal,
+      usdTotal:        computedUSDTotal,
+      usdInXCD:        computedUSDInXCD,
+      exchangeRate:    USD_TO_XCD,
+      combinedXCDTotal: computedCombinedXCD,
+      shiftId:   (shiftLog as any)._id.toString(),
+      role:      role ?? "cashier",
     });
   }
 );
@@ -344,8 +403,8 @@ export const submitCashCount = CatchAsyncError(
 
 export const getMonthlyCalendarReport = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const year  = parseInt(req.query.year  as string) || new Date().getFullYear();
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+    const year     = parseInt(req.query.year  as string) || new Date().getFullYear();
+    const month    = parseInt(req.query.month as string) || new Date().getMonth() + 1;
     const configId = Number(req.query.configId) || undefined;
 
     const dateFrom = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -354,7 +413,6 @@ export const getMonthlyCalendarReport = CatchAsyncError(
 
     const sessionFilter: any[] = configId ? [["config_id", "=", configId]] : [];
 
-    // Fetch all paid orders for the month
     const [orders, refundOrders] = await Promise.all([
       odooRequest(
         "pos.order",
@@ -387,7 +445,6 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       ),
     ]);
 
-    // Fetch payments for cash/card split
     const allPaymentIds = orders.flatMap((o: any) => o.payment_ids ?? []);
     const payments: any[] = allPaymentIds.length
       ? await odooRequest(
@@ -398,7 +455,6 @@ export const getMonthlyCalendarReport = CatchAsyncError(
         )
       : [];
 
-    // Map payment to order — broken out by card type
     const paymentsByOrder: Record<
       number,
       { cash: number; check: number; cards: Record<string, number> }
@@ -407,13 +463,9 @@ export const getMonthlyCalendarReport = CatchAsyncError(
     for (const p of payments) {
       const oid = p.pos_order_id?.[0];
       if (!oid) continue;
-
-      if (!paymentsByOrder[oid]) {
-        paymentsByOrder[oid] = { cash: 0, check: 0, cards: {} };
-      }
+      if (!paymentsByOrder[oid]) paymentsByOrder[oid] = { cash: 0, check: 0, cards: {} };
 
       const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
-
       if (method.includes("cash")) {
         paymentsByOrder[oid].cash += p.amount;
       } else if (method.includes("visa")) {
@@ -429,7 +481,6 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       }
     }
 
-    // Aggregate by day
     const dayMap: Record<
       string,
       { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; cards: Record<string, number>; check: number }
@@ -459,7 +510,6 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       if (dayMap[key]) dayMap[key].refunds += Math.abs(o.amount_total ?? 0);
     }
 
-    // Build result
     const days = Object.entries(dayMap).map(([date, d]) => ({
       date,
       ordersCount: d.ordersCount,
