@@ -780,8 +780,8 @@ export default function POSClosingReport() {
     // ── Sales ──
     sectionHeader("SALES SUMMARY");
     row("Gross Sales",     `EC$${fmt(report.grossSales)}`);
-    row("Discounts",       `−EC$${fmt(report.discounts)}`);
-    row("Refunds",         `−EC$${fmt(report.refunds)}`);
+ row("Discounts", `-EC$${fmt(report.discounts)}`);
+row("Refunds",   `-EC$${fmt(report.refunds)}`);
     row("Net Sales",       `EC$${fmt(report.netSales)}`, true);
     row("VAT / Tax",       `+EC$${fmt(report.tax)}`);
     row("TOTAL INCL. TAX", `EC$${fmt(report.netSales + report.tax)}`, true);
@@ -895,34 +895,11 @@ export default function POSClosingReport() {
     pdf.setTextColor(diff >= 0 ? 5 : 220, diff >= 0 ? 150 : 40, diff >= 0 ? 105 : 40);
     setFont(9, "bold");
     pdf.text("Difference", margin, y);
-    pdf.text(`${diff >= 0 ? "+" : ""}EC$${fmt(diff)}`, W - margin, y, { align: "right" });
+   pdf.text(`${diff >= 0 ? "+" : "-"}EC$${fmt(Math.abs(diff))}`, W - margin, y, { align: "right" });
     pdf.setTextColor(0); y += lineH;
     dashes();
 
-    // ── Top Products ──
-    if (report.topProducts?.length > 0) {
-      checkPage();
-      sectionHeader("TOP PRODUCTS");
-      pdf.setFillColor(240, 240, 240);
-      pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
-      setFont(8, "bold");
-      pdf.text("#", margin + 2, y);
-      pdf.text("Product", margin + 10, y);
-      pdf.text("Qty", W - margin - 30, y, { align: "right" });
-      pdf.text("Revenue", W - margin - 2, y, { align: "right" });
-      y += 5;
-      report.topProducts.slice(0, 5).forEach((p: any, i: number) => {
-        checkPage();
-        setFont(9);
-        pdf.text(String(i + 1), margin + 2, y);
-        pdf.text(p.name, margin + 10, y);
-        pdf.text(String(p.qty), W - margin - 30, y, { align: "right" });
-        pdf.text(`EC$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
-        y += lineH;
-      });
-      dashes();
-    }
-
+ 
     // ── Sign-off ──
     checkPage(); y += 4;
     const sigCols   = [margin, W / 2 - 20, W - margin - 40];
