@@ -13,6 +13,7 @@ export interface ICartItem {
 export interface IPaymentLine {
   method: "cash" | "card"| "split";
   amount: number;
+  cardBrand?: "visa" | "mastercard" | "amex" | "card";
 }
 
 export type OrderStatus = "draft" | "paid" | "refunded" | "cancelled";

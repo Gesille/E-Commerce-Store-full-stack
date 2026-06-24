@@ -13,41 +13,44 @@ import POSOrder from "../models/POSOrder.js";
 
 const TAX_RATE = 0.17;
 
-async function getPaymentMethodId(method: string, configId: number) {
+async function getPaymentMethodId(method: string, configId: number, cardBrand?: string) {
   const methods = await odooRequest(
-    "pos.payment.method",
-    "search_read",
-    [
-      [
-        ["config_ids", "in", [configId]],
-      ],
-    ],
-    {
-      fields: ["id", "name", "is_cash_count"],
-    }
+    "pos.payment.method", "search_read",
+    [[["config_ids", "in", [configId]]]],
+    { fields: ["id", "name", "is_cash_count"] }
   );
 
-  const normalized = method.toLowerCase();
+  const aliases: Record<string, string> = {
+    cash:       "cash",
+    check:      "customer account",
+    cheque:     "customer account",
+    visa:       "visa",
+    mastercard: "master",
+    amex:       "amex",
+    card:       "card",
+  };
 
-const aliases: Record<string,string> = {
-  check: "customer account",
-  cheque: "customer account",
-  cash: "cash",
-  card: "card",
-};
-  const searchName = aliases[normalized] || normalized;
+  // Use cardBrand first if provided, otherwise fall back to method
+  const lookup = cardBrand
+    ? (aliases[cardBrand] ?? cardBrand)
+    : (aliases[method] ?? method);
 
-  const found = methods.find((m:any) =>
-    m.name.toLowerCase().includes(searchName)
+  const found = methods.find((m: any) =>
+    m.name.toLowerCase().includes(lookup)
   );
 
-  if (!found) {
+  // Fallback: any non-cash method if specific brand not found in Odoo
+  const fallback = !found && method === "card"
+    ? methods.find((m: any) => !m.is_cash_count)
+    : null;
+
+  if (!found && !fallback) {
     throw new Error(
-      `Payment method not found: ${method}. Available: ${methods.map((m:any)=>m.name).join(", ")}`
+      `Payment method not found: ${cardBrand ?? method}. Available: ${methods.map((m: any) => m.name).join(", ")}`
     );
   }
 
-  return found.id;
+  return (found ?? fallback).id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,6 +69,8 @@ interface CartItem {
 interface PaymentLine {
   method: "cash" | "card" ;
   amount: number;
+  cardBrand?: "visa" | "mastercard" | "amex" | "card";
+  checkNumber?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -967,19 +972,8 @@ export const createOrder = CatchAsyncError(
     const payment_ids = [];
 
 for (const p of paymentLines) {
-  const methodId = await getPaymentMethodId(
-    p.method,
-    configId
-  );
-
-  payment_ids.push([
-    0,
-    0,
-    {
-      amount: p.amount,
-      payment_method_id: methodId,
-    },
-  ]);
+  const methodId = await getPaymentMethodId(p.method, configId, p.cardBrand);
+  payment_ids.push([0, 0, { amount: p.amount, payment_method_id: methodId }]);
 }
 
     // ─── CREATE ORDER ─────────────────────────────────────────────
