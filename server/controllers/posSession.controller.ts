@@ -27,32 +27,21 @@ async function getPaymentMethodId(method: string, configId: number) {
     }
   );
 
-  console.log("ODOO PAYMENT METHODS:", methods);
-
   const normalized = method.toLowerCase();
 
-  const found = methods.find((m: any) => {
-    const name = m.name.toLowerCase();
+  const aliases: Record<string,string> = {
+    check: "customer account",
+    cheque: "customer account",
+    bank: "customer account",
+    cash: "cash",
+    card: "card",
+  };
 
-    return (
-      name.includes(normalized) ||
-      (normalized === "cash" && m.is_cash_count) ||
-      (normalized === "card" && (
-        name.includes("card") ||
-        name.includes("credit") ||
-        name.includes("visa")
-      )) ||
-      (normalized === "check" && (
-        name.includes("check") ||
-        name.includes("cheque")
-      )) ||
-      (normalized === "bank" && (
-        name.includes("bank") ||
-        name.includes("transfer")
-      ))
-    );
-  });
+  const searchName = aliases[normalized] || normalized;
 
+  const found = methods.find((m:any) =>
+    m.name.toLowerCase().includes(searchName)
+  );
 
   if (!found) {
     throw new Error(
