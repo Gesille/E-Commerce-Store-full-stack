@@ -6,6 +6,7 @@ import { odooRequest } from "../odoo/odoo.client.js";
 import userModel from "../models/user.model.js";
 import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
+import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -1065,19 +1066,56 @@ for (const p of paymentLines) {
     }
 
     // ─── SAVE TO MONGODB FOR SHIFT TRACKING ──────────────────────
-    try {
-      await POSOrder.create({
-        odooOrderId: orderId,
-        shiftId:     shift._id,
-        cashierId,
-        sessionId:   session.id,
-        subtotal:    Math.round(subtotal * 100) / 100,
-        total:       amountTotal,
-        status:      "paid",
-      });
-    } catch (e) {
-      console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
-    }
+// ─── SAVE TO MONGODB FOR SHIFT TRACKING ──────────────────────
+try {
+  await POSOrder.create({
+    // ── IDs ───────────────────────────────────────────────────
+    sessionId:  shift._id,        // shift's MongoDB ObjectId (not Odoo's numeric session.id)
+    shiftId:    shift._id,        // same shift
+    cashierId:  cashier._id,      // MongoDB ObjectId from resolveCashier()
+    openedBy:   cashier._id,      // same cashier
+
+    // ── Odoo reference ────────────────────────────────────────
+    odooOrderId:   orderId,       // Odoo numeric order ID
+    receiptNumber: odooRef,       // "POS-{timestamp}" — already generated above
+
+    // ── Cart ──────────────────────────────────────────────────
+    cart: resolvedCart.map((item) => ({
+      productId: new mongoose.Types.ObjectId(),  // no MongoDB product ObjectId available
+      name:      item.realProductName,
+      price:     item.price,
+      qty:       item.qty,
+      discount:  item.discount ?? 0,
+      note:      item.note ?? "",
+    })),
+
+    // ── Payments ──────────────────────────────────────────────
+    paymentLines: paymentLines.map((p) => ({
+      method: p.method,
+      amount: p.amount,
+      ...(p.method === "card" && p.cardBrand ? { cardBrand: p.cardBrand } : {}),
+    })),
+
+    // ── Totals ────────────────────────────────────────────────
+    subtotal:       Math.round(subtotal * 100) / 100,
+    taxAmount:      Math.round(totalTaxAmount * 100) / 100,
+    discountAmount: 0,
+    total:          amountTotal,
+    amountPaid:     amountPaid,
+    change:         amountReturn,
+
+    // ── Meta ──────────────────────────────────────────────────
+    note:   note ?? "",
+    status: "paid",
+
+    // ── Optional customer ─────────────────────────────────────
+    ...(customerId ? { customerName: String(customerId) } : {}),
+  });
+
+  console.log("[POS] POSOrder saved to MongoDB ✓");
+} catch (e) {
+  console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
+}
 
     // ─── UPDATE SHIFT ─────────────────────────────────────────────
     await CashierShiftLog.findByIdAndUpdate(shift._id, {

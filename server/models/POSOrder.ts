@@ -11,7 +11,7 @@ export interface ICartItem {
 }
 
 export interface IPaymentLine {
-  method: "cash" | "card"| "split";
+  method: "cash" | "card"| "check";
   amount: number;
   cardBrand?: "visa" | "mastercard" | "amex" | "card";
 }
@@ -67,14 +67,18 @@ const paymentLineSchema = new Schema<IPaymentLine>(
   {
     method: {
       type: String,
-      enum: ["cash", "card", "split"],
+      enum: ["cash", "card", "check"],
       required: true,
     },
     amount: { type: Number, required: true, min: 0 },
+    cardBrand: {
+      type: String,
+      enum: ["visa", "mastercard", "amex"],
+      required: false,
+    },
   },
   { _id: false },
 );
-
 const posOrderSchema = new Schema<IPOSOrder>(
   {
     sessionId: {
