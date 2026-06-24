@@ -558,78 +558,210 @@ useEffect(() => setMounted(true), []);
   };
 
   // Professional PDF export using browser print with a dedicated print layout
- const handleExportPDF = async () => {
-  const portal = document.getElementById("printable-report-portal");
-  if (!portal) return;
+const handleExportPDF = () => {
+  if (!report || report.empty) return;
 
-  portal.style.display = "block";
-  portal.style.position = "absolute";
-  portal.style.left = "-9999px";
-  portal.style.top = "0";
-  portal.style.width = "794px";
-  portal.style.background = "white";
-  portal.style.padding = "40px";
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const W = 210; // A4 width
+  const margin = 15;
+  const lineH = 6;
+  let y = margin;
 
-  try {
-    const canvas = await html2canvas(portal, {
-  scale: 2,
-  useCORS: true,
-  backgroundColor: "#ffffff",
-  logging: false,
-  onclone: (clonedDoc) => {
-    // Strip any stylesheets that contain lab/oklch/color() functions
-    // which html2canvas can't parse
-    const sheets = clonedDoc.styleSheets;
-    for (let i = sheets.length - 1; i >= 0; i--) {
-      try {
-        const rules = sheets[i].cssRules;
-        for (let j = rules.length - 1; j >= 0; j--) {
-          const text = rules[j].cssText;
-          if (
-            text.includes("lab(") ||
-            text.includes("oklch(") ||
-            text.includes("oklab(") ||
-            text.includes("color(")
-          ) {
-            sheets[i].deleteRule(j);
-          }
-        }
-      } catch {
-        // Cross-origin stylesheets can't be read — skip them
-      }
-    }
-  },
-});
+  const text = (str: string, x: number, size = 10, style: "normal" | "bold" = "normal") => {
+    pdf.setFontSize(size);
+    pdf.setFont("helvetica", style);
+    pdf.text(str, x, y);
+  };
 
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const line = (x1: number, x2: number, dashed = false) => {
+    if (dashed) pdf.setLineDashPattern([1, 1], 0);
+    else pdf.setLineDashPattern([], 0);
+    pdf.line(x1, y, x2, y);
+  };
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    let heightLeft = pdfHeight;
-    let position = 0;
+  const newLine = (n = 1) => { y += lineH * n; };
 
-    pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-    heightLeft -= pageHeight;
+  const checkPage = () => {
+    if (y > 270) { pdf.addPage(); y = margin; }
+  };
 
-    while (heightLeft > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-    }
+  // ── Header ──
+  pdf.setFillColor(255, 255, 255);
+  text("CHEF'S WORLD", W / 2, 16, "bold");
+  pdf.setFontSize(16);
+  pdf.text("CHEF'S WORLD", W / 2, y, { align: "center" });
+  y += 7;
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
+  pdf.text("Point of Sale — Daily Closing Report (Z-Report)", W / 2, y, { align: "center" });
+  y += 5;
+  pdf.text(fmtDate(selectedDate), W / 2, y, { align: "center" });
+  y += 3;
+  pdf.setLineWidth(0.5);
+  line(margin, W - margin);
+  y += 6;
 
-    pdf.save(`ZReport_${selectedDate}.pdf`);
-  } finally {
-    portal.style.display = "";
-    portal.style.position = "";
-    portal.style.left = "";
-    portal.style.top = "";
-    portal.style.width = "";
-    portal.style.background = "";
-    portal.style.padding = "";
+  // ── Session Info ──
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("SESSION", margin, y);
+  pdf.text("DETAILS", W / 2 + 5, y);
+  y += 5;
+
+  const sessionRows = [
+    ["Session", report.sessionName, "Date", selectedDate],
+    ["Cashier", report.cashierName, "Printed", new Date().toLocaleTimeString()],
+    ["Orders", String(report.ordersCount), "Avg Order", `$${fmt(report.avgOrderValue)}`],
+  ];
+  pdf.setFontSize(9);
+  sessionRows.forEach(([l1, v1, l2, v2]) => {
+    pdf.setFont("helvetica", "normal"); pdf.text(l1, margin, y);
+    pdf.setFont("helvetica", "bold");   pdf.text(v1, margin + 28, y);
+    pdf.setFont("helvetica", "normal"); pdf.text(l2, W / 2 + 5, y);
+    pdf.setFont("helvetica", "bold");   pdf.text(v2, W / 2 + 33, y);
+    y += lineH;
+  });
+  pdf.setLineDashPattern([1, 1], 0);
+  pdf.line(margin, y, W - margin, y);
+  y += 6;
+
+  // ── Sales Summary ──
+  checkPage();
+  pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+  pdf.text("SALES SUMMARY", margin, y); y += 5;
+
+  const salesRows = [
+    ["Gross Sales",      `$${fmt(report.grossSales)}`,  false],
+    ["Discounts",        `-$${fmt(report.discounts)}`,  false],
+    ["Refunds",          `-$${fmt(report.refunds)}`,    false],
+    ["Net Sales",        `$${fmt(report.netSales)}`,    true ],
+    ["VAT / Tax",        `+$${fmt(report.tax)}`,        false],
+    ["TOTAL INCL. TAX",  `$${fmt(report.netSales + report.tax)}`, true],
+  ];
+  salesRows.forEach(([label, value, bold]) => {
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", bold ? "bold" : "normal");
+    pdf.text(String(label), margin, y);
+    pdf.text(String(value), W - margin, y, { align: "right" });
+    y += lineH;
+  });
+  pdf.setLineDashPattern([1, 1], 0);
+  pdf.line(margin, y, W - margin, y); y += 6;
+
+  // ── Payments ──
+  checkPage();
+  pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+  pdf.text("PAYMENTS COLLECTED", margin, y); y += 5;
+
+  const payRows = [
+    ["Cash",              report.payments.cash ],
+    ["Credit/Debit Card", report.payments.card ],
+    ["Bank Transfer",     report.payments.bank ],
+    ["Check",             report.payments.check],
+    ...(report.payments.other > 0 ? [["Other", report.payments.other]] : []),
+    ["Total Collected",   report.payments.total],
+  ];
+  payRows.forEach(([label, value], i) => {
+    const isTotal = i === payRows.length - 1;
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", isTotal ? "bold" : "normal");
+    pdf.text(String(label), margin, y);
+    pdf.text(`$${fmt(Number(value))}`, W - margin, y, { align: "right" });
+    y += lineH;
+  });
+  pdf.setLineDashPattern([1, 1], 0);
+  pdf.line(margin, y, W - margin, y); y += 6;
+
+  // ── Cash Register Count ──
+  checkPage();
+  pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+  pdf.text("CASH REGISTER COUNT", margin, y); y += 5;
+
+  const diff = denomTotal - report.expectedClosingBalance;
+  const cashRows = [
+    ["Opening Balance",    `$${fmt(report.openingBalance)}`,         false],
+    ["Expected Closing",   `$${fmt(report.expectedClosingBalance)}`, false],
+    ["Counted Cash",       `$${fmt(denomTotal)}`,                    false],
+    ["Difference",         `${diff >= 0 ? "+" : ""}$${fmt(diff)}`,  true ],
+  ];
+  cashRows.forEach(([label, value, bold]) => {
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", bold ? "bold" : "normal");
+    pdf.text(String(label), margin, y);
+    pdf.text(String(value), W - margin, y, { align: "right" });
+    y += lineH;
+  });
+
+  // Denomination table
+  y += 2;
+  pdf.setFillColor(240, 240, 240);
+  pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
+  pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+  pdf.text("Denomination", margin + 2, y);
+  pdf.text("Count", W / 2, y, { align: "center" });
+  pdf.text("Amount", W - margin - 2, y, { align: "right" });
+  y += 5;
+
+  denominations.filter(d => d.count > 0).forEach(d => {
+    checkPage();
+    pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+    pdf.text(`$${d.label}`, margin + 2, y);
+    pdf.text(String(d.count), W / 2, y, { align: "center" });
+    pdf.text(`$${fmt(d.value * d.count)}`, W - margin - 2, y, { align: "right" });
+    y += lineH;
+  });
+  pdf.setFont("helvetica", "bold");
+  pdf.text("TOTAL CASH", margin + 2, y);
+  pdf.text(`$${fmt(denomTotal)}`, W - margin - 2, y, { align: "right" });
+  pdf.setLineDashPattern([1, 1], 0);
+  pdf.line(margin, y + 2, W - margin, y + 2); y += 8;
+
+  // ── Top Products ──
+  if (report.topProducts?.length > 0) {
+    checkPage();
+    pdf.setFontSize(8); pdf.setFont("helvetica", "bold");
+    pdf.text("TOP PRODUCTS", margin, y); y += 5;
+
+    pdf.setFillColor(240, 240, 240);
+    pdf.rect(margin, y - 4, W - margin * 2, 6, "F");
+    pdf.text("#", margin + 2, y);
+    pdf.text("Product", margin + 10, y);
+    pdf.text("Qty", W - margin - 30, y, { align: "right" });
+    pdf.text("Revenue", W - margin - 2, y, { align: "right" });
+    y += 5;
+
+    report.topProducts.slice(0, 5).forEach((p: any, i: number) => {
+      checkPage();
+      pdf.setFontSize(9); pdf.setFont("helvetica", "normal");
+      pdf.text(String(i + 1), margin + 2, y);
+      pdf.text(p.name, margin + 10, y);
+      pdf.text(String(p.qty), W - margin - 30, y, { align: "right" });
+      pdf.text(`$${fmt(p.revenue)}`, W - margin - 2, y, { align: "right" });
+      y += lineH;
+    });
+    pdf.setLineDashPattern([1, 1], 0);
+    pdf.line(margin, y, W - margin, y); y += 6;
   }
+
+  // ── Sign-off ──
+  checkPage();
+  y += 4;
+  const sigCols = [margin, W / 2 - 20, W - margin - 40];
+  const sigLabels = ["Cashier Signature", "Supervisor Signature", "Date & Stamp"];
+  sigCols.forEach((x, i) => {
+    pdf.setLineDashPattern([1, 1], 0);
+    pdf.line(x, y, x + 50, y);
+    pdf.setFontSize(7); pdf.setFont("helvetica", "normal");
+    pdf.text(sigLabels[i], x, y + 4);
+  });
+  y += 12;
+  pdf.setFontSize(7);
+  pdf.text(
+    `Chef's World POS · Generated ${new Date().toLocaleString()} · Confidential`,
+    W / 2, y, { align: "center" }
+  );
+
+  pdf.save(`ZReport_${selectedDate}.pdf`);
 };
 
   // ── Render ─────────────────────────────────────────────────────────────────
