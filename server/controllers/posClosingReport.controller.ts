@@ -105,7 +105,7 @@ export const getDailyClosingReport = CatchAsyncError(
       const l = name.toLowerCase();
       if (l.includes("cash")) return "cash";
       if (l.includes("card") || l.includes("credit") || l.includes("debit") || l.includes("visa") || l.includes("master")) return "card";
-      if (l.includes("bank") || l.includes("transfer") || l.includes("wire")) return "bank";
+  
       if (l.includes("check") || l.includes("cheque")) return "check";
       return name; // preserve original for "other" methods
     };
@@ -235,16 +235,16 @@ export const getDailyClosingReport = CatchAsyncError(
       payments: {
         cash:  Math.round((normalisedPayments["cash"]  ?? 0) * 100) / 100,
         card:  Math.round((normalisedPayments["card"]  ?? 0) * 100) / 100,
-        bank:  Math.round((normalisedPayments["bank"]  ?? 0) * 100) / 100,
+      
         check: Math.round((normalisedPayments["check"] ?? 0) * 100) / 100,
         other: Math.round(
           Object.entries(normalisedPayments)
-            .filter(([k]) => !["cash","card","bank","check"].includes(k))
+            .filter(([k]) => !["cash","card","check"].includes(k))
             .reduce((s, [, v]) => s + v, 0) * 100
         ) / 100,
         // Full detail for unknown/other methods
         breakdown: Object.entries(normalisedPayments)
-          .filter(([k]) => !["cash","card","bank","check"].includes(k))
+          .filter(([k]) => !["cash","card","check"].includes(k))
           .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 })),
         total: Math.round(grossSales * 100) / 100,
       },
@@ -399,27 +399,27 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       : [];
 
     // Map payment to order
-    const paymentsByOrder: Record<number, { cash: number; card: number; bank: number; check: number }> = {};
+    const paymentsByOrder: Record<number, { cash: number; card: number;  check: number }> = {};
     for (const p of payments) {
       const oid = p.pos_order_id?.[0];
       if (!oid) continue;
-      if (!paymentsByOrder[oid]) paymentsByOrder[oid] = { cash: 0, card: 0, bank: 0, check: 0 };
+      if (!paymentsByOrder[oid]) paymentsByOrder[oid] = { cash: 0, card: 0,  check: 0 };
       const method = (p.payment_method_id?.[1] ?? "").toLowerCase();
       if (method.includes("cash")) paymentsByOrder[oid].cash += p.amount;
       else if (method.includes("card") || method.includes("credit") || method.includes("debit")) paymentsByOrder[oid].card += p.amount;
-      else if (method.includes("bank") || method.includes("transfer")) paymentsByOrder[oid].bank += p.amount;
+     
       else if (method.includes("check") || method.includes("cheque")) paymentsByOrder[oid].check += p.amount;
     }
 
     // Aggregate by day
     const dayMap: Record<
       string,
-      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; card: number; bank: number; check: number }
+      { ordersCount: number; grossSales: number; refunds: number; tax: number; cash: number; card: number;  check: number }
     > = {};
 
     for (let d = 1; d <= lastDay; d++) {
       const key = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      dayMap[key] = { ordersCount: 0, grossSales: 0, refunds: 0, tax: 0, cash: 0, card: 0, bank: 0, check: 0 };
+      dayMap[key] = { ordersCount: 0, grossSales: 0, refunds: 0, tax: 0, cash: 0, card: 0, check: 0 };
     }
 
     for (const o of orders as any[]) {
@@ -431,7 +431,7 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       const pm = paymentsByOrder[o.id] ?? {};
       dayMap[key].cash  += pm.cash  ?? 0;
       dayMap[key].card  += pm.card  ?? 0;
-      dayMap[key].bank  += pm.bank  ?? 0;
+    
       dayMap[key].check += pm.check ?? 0;
     }
 
@@ -450,7 +450,7 @@ export const getMonthlyCalendarReport = CatchAsyncError(
       tax:           Math.round(d.tax         * 100) / 100,
       cash:          Math.round(d.cash        * 100) / 100,
       card:          Math.round(d.card        * 100) / 100,
-      bank:          Math.round(d.bank        * 100) / 100,
+      
       check:         Math.round(d.check       * 100) / 100,
     }));
 
@@ -463,10 +463,10 @@ export const getMonthlyCalendarReport = CatchAsyncError(
         tax:         acc.tax         + d.tax,
         cash:        acc.cash        + d.cash,
         card:        acc.card        + d.card,
-        bank:        acc.bank        + d.bank,
+        
         check:       acc.check       + d.check,
       }),
-      { ordersCount: 0, grossSales: 0, netSales: 0, refunds: 0, tax: 0, cash: 0, card: 0, bank: 0, check: 0 }
+      { ordersCount: 0, grossSales: 0, netSales: 0, refunds: 0, tax: 0, cash: 0, card: 0,  check: 0 }
     );
 
     res.status(200).json({
@@ -483,7 +483,7 @@ export const getMonthlyCalendarReport = CatchAsyncError(
         tax:          Math.round(monthTotals.tax         * 100) / 100,
         cash:         Math.round(monthTotals.cash        * 100) / 100,
         card:         Math.round(monthTotals.card        * 100) / 100,
-        bank:         Math.round(monthTotals.bank        * 100) / 100,
+        
         check:        Math.round(monthTotals.check       * 100) / 100,
         activeDays:   days.filter((d) => d.ordersCount > 0).length,
         avgPerDay:

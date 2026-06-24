@@ -11,7 +11,7 @@ export interface ICartItem {
 }
 
 export interface IPaymentLine {
-  method: "cash" | "card" | "bank" | "split";
+  method: "cash" | "card"| "split";
   amount: number;
 }
 
@@ -66,7 +66,7 @@ const paymentLineSchema = new Schema<IPaymentLine>(
   {
     method: {
       type: String,
-      enum: ["cash", "card", "bank", "split"],
+      enum: ["cash", "card", "split"],
       required: true,
     },
     amount: { type: Number, required: true, min: 0 },

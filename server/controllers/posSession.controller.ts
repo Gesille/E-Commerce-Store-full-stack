@@ -32,7 +32,7 @@ async function getPaymentMethodId(method: string, configId: number) {
   const aliases: Record<string,string> = {
     check: "customer account",
     cheque: "customer account",
-    bank: "customer account",
+  
     cash: "cash",
     card: "card",
   };
@@ -66,7 +66,7 @@ interface CartItem {
 }
 
 interface PaymentLine {
-  method: "cash" | "card" | "bank";
+  method: "cash" | "card" ;
   amount: number;
 }
 

@@ -323,8 +323,8 @@ function PrintableReport({ report, selectedDate, denominations, denomTotal }: {
         <div className="space-y-1 text-sm">
           {[
             { label: "Cash",             value: report.payments.cash  },
-            { label: "Credit/Debit Card",value: report.payments.card  },
-            { label: "Bank Transfer",    value: report.payments.bank  },
+            { label: "Visa / Master / Amex Card",value: report.payments.card  },
+            
             { label: "Check",            value: report.payments.check },
             ...(report.payments.other > 0 ? [{ label: "Other", value: report.payments.other }] : []),
           ].map(({ label, value }) => (
@@ -632,8 +632,8 @@ const handleExportPDF = () => {
 
   const payRows = [
     ["Cash",              report.payments.cash ],
-    ["Credit/Debit Card", report.payments.card ],
-    ["Bank Transfer",     report.payments.bank ],
+    ["Visa / Master / Amex Card", report.payments.card ],
+
     ["Check",             report.payments.check],
     ...(report.payments.other > 0 ? [["Other", report.payments.other]] : []),
     ["Total Collected",   report.payments.total],
@@ -1008,7 +1008,7 @@ const handleExportPDF = () => {
                     <div className="flex flex-col gap-4">
                       <PaymentBar label="Cash"               amount={report.payments.cash}  total={report.payments.total} color="bg-emerald-400" icon={<Banknote    size={13} className="text-emerald-600" />} />
                       <PaymentBar label="Visa / Master Card/ Amex Card" amount={report.payments.card}  total={report.payments.total} color="bg-blue-400"    icon={<CreditCard  size={13} className="text-blue-600"    />} />
-                      <PaymentBar label="Bank Transfer"       amount={report.payments.bank}  total={report.payments.total} color="bg-violet-400"  icon={<Building2   size={13} className="text-violet-600"  />} />
+                     
                       <PaymentBar label="Check"               amount={report.payments.check} total={report.payments.total} color="bg-amber-400"   icon={<ReceiptText size={13} className="text-amber-600"   />} />
                       {report.payments.other > 0 && (
                         <PaymentBar label="Other" amount={report.payments.other} total={report.payments.total} color="bg-gray-400" icon={<CreditCard size={13} className="text-gray-500" />} />

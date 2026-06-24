@@ -8,7 +8,7 @@ export type CardBrand = "visa" | "mastercard" | "amex";
 export type PaymentLine =
   | { method: "cash"; amount: number }
   | { method: "card"; amount: number; cardBrand: CardBrand }
-  | { method: "bank"; amount: number }
+  
   | { method: "check"; amount: number; checkNumber: string };
 
 
@@ -64,7 +64,7 @@ const CARD_BRANDS: { id: CardBrand; label: string; Logo: React.FC<{ size?: numbe
 const METHOD_META = {
   cash:  { icon: "💵", label: "Cash" },
   card:  { icon: "💳", label: "Card" },
-  bank:  { icon: "🏦", label: "Bank Transfer" },
+ 
   check: { icon: "📝", label: "Check" },
 } as const;
 
@@ -74,7 +74,7 @@ type MethodKey = keyof typeof METHOD_META;
 function makeDefaultLine(method: MethodKey, amount: number): PaymentLine {
   if (method === "card")  return { method: "card",  amount, cardBrand: "visa" };
   if (method === "check") return { method: "check", amount, checkNumber: "" };
-  if (method === "bank")  return { method: "bank",  amount };
+
   return { method: "cash", amount };
 }
 
@@ -222,7 +222,7 @@ export function PaymentModal({
     );
 
   const availableMethods = (
-    ["cash", "card", "bank", "check"] as MethodKey[]
+    ["cash", "card", "check"] as MethodKey[]
   ).filter((m) => !lines.find((l) => l.method === m));
 
   // ── Render ──────────────────────────────────────────────────────────────
