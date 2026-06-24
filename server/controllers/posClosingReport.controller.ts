@@ -100,15 +100,33 @@ export const getDailyClosingReport = CatchAsyncError(
       paymentTotals[method] = (paymentTotals[method] ?? 0) + (p.amount ?? 0);
     }
 
+const normaliseMethod = (name: string): string => {
+  const l = name.toLowerCase();
 
-    const normaliseMethod = (name: string): string => {
-      const l = name.toLowerCase();
-      if (l.includes("cash")) return "cash";
-      if (l.includes("card") || l.includes("credit") || l.includes("debit") || l.includes("visa") || l.includes("master")) return "card";
-  
-      if (l.includes("check") || l.includes("cheque")) return "check";
-      return name; // preserve original for "other" methods
-    };
+  if (l.includes("cash")) {
+    return "cash";
+  }
+
+  if (
+    l.includes("card") ||
+    l.includes("credit") ||
+    l.includes("debit") ||
+    l.includes("visa") ||
+    l.includes("master")
+  ) {
+    return "card";
+  }
+
+  if (
+    l.includes("check") ||
+    l.includes("cheque") ||
+    l.includes("customer account")
+  ) {
+    return "check";
+  }
+
+  return name;
+};
 
     const normalisedPayments: Record<string, number> = {};
     for (const [method, amount] of Object.entries(paymentTotals)) {
