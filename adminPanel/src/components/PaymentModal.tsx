@@ -257,9 +257,9 @@ export function PaymentModal({
 
   // XCD equivalents for validation
   const paidXCD      = round2(lines.reduce((s, l) => s + toXCD(l.amount, currency), 0));
-  const changeXCD    = round2(paidXCD - total);
-  const remainingXCD = round2(total - paidXCD);
-  const isComplete   = paidXCD >= total;
+const changeXCD = Math.max(0, round2(paidXCD - total));
+const remainingXCD = Math.max(0, round2(total - paidXCD - 0.005));
+  const isComplete = paidXCD >= total - 0.01;
 
   // Displayed equivalents
   const paidDisplay      = currency === "USD" ? round2(paidXCD / USD_TO_XCD) : paidXCD;
