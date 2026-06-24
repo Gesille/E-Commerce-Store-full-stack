@@ -111,6 +111,9 @@ const normaliseMethod = (name: string): string => {
   if (l.includes("card") || l.includes("credit") || l.includes("debit"))             return "card";
   return name;
 };
+console.log("[RAW PAYMENT METHODS FROM ODOO]:", 
+  [...new Set(payments.map((p: any) => p.payment_method_id?.[1]))]
+);
     const normalisedPayments: Record<string, number> = {};
     for (const [method, amount] of Object.entries(paymentTotals)) {
       const key = normaliseMethod(method);

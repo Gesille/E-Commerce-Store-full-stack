@@ -12,7 +12,6 @@ import POSOrder from "../models/POSOrder.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TAX_RATE = 0.17;
-
 async function getPaymentMethodId(method: string, configId: number, cardBrand?: string) {
   const methods = await odooRequest(
     "pos.payment.method", "search_read",
@@ -20,37 +19,57 @@ async function getPaymentMethodId(method: string, configId: number, cardBrand?: 
     { fields: ["id", "name", "is_cash_count"] }
   );
 
-  const aliases: Record<string, string> = {
-    cash:       "cash",
-    check:      "customer account",
-    cheque:     "customer account",
-    visa:       "visa",
-    mastercard: "master",
-    amex:       "amex",
-    card:       "card",
-  };
+  // LOG THIS SO YOU CAN SEE WHAT ODOO ACTUALLY HAS
+  console.log("[PAYMENT METHODS IN ODOO]:", methods.map((m: any) => `${m.id}: ${m.name}`));
 
-  // Use cardBrand first if provided, otherwise fall back to method
-  const lookup = cardBrand
-    ? (aliases[cardBrand] ?? cardBrand)
-    : (aliases[method] ?? method);
+  const l = (s: string) => s.toLowerCase();
 
-  const found = methods.find((m: any) =>
-    m.name.toLowerCase().includes(lookup)
-  );
-
-  // Fallback: any non-cash method if specific brand not found in Odoo
-  const fallback = !found && method === "card"
-    ? methods.find((m: any) => !m.is_cash_count)
-    : null;
-
-  if (!found && !fallback) {
-    throw new Error(
-      `Payment method not found: ${cardBrand ?? method}. Available: ${methods.map((m: any) => m.name).join(", ")}`
-    );
+  if (method === "cash") {
+    const found = methods.find((m: any) => m.is_cash_count || l(m.name).includes("cash"));
+    if (found) return found.id;
   }
 
-  return (found ?? fallback).id;
+  if (method === "check") {
+    const found = methods.find((m: any) =>
+      l(m.name).includes("check") ||
+      l(m.name).includes("cheque") ||
+      l(m.name).includes("customer account")
+    );
+    if (found) return found.id;
+  }
+
+  if (method === "card" && cardBrand) {
+    const brandMap: Record<string, string[]> = {
+      visa:       ["visa"],
+      mastercard: ["master", "mastercard"],
+      amex:       ["amex", "american express", "american"],
+    };
+    const keywords = brandMap[cardBrand] ?? [cardBrand];
+    const found = methods.find((m: any) =>
+      keywords.some((kw) => l(m.name).includes(kw))
+    );
+    if (found) {
+      console.log(`[PAYMENT] Matched "${cardBrand}" → Odoo method: "${found.name}" (id: ${found.id})`);
+      return found.id;
+    }
+
+    // Fallback: any non-cash card method
+    const fallback = methods.find((m: any) =>
+      !m.is_cash_count &&
+      !l(m.name).includes("check") &&
+      !l(m.name).includes("cheque") &&
+      !l(m.name).includes("customer account")
+    );
+    if (fallback) {
+      console.warn(`[PAYMENT] No Odoo method found for brand "${cardBrand}", falling back to: "${fallback.name}"`);
+      return fallback.id;
+    }
+  }
+
+  throw new Error(
+    `Payment method not found for method="${method}" brand="${cardBrand}". ` +
+    `Available: ${methods.map((m: any) => m.name).join(", ")}`
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,9 +86,9 @@ interface CartItem {
 }
 
 interface PaymentLine {
-  method: "cash" | "card" ;
+  method: "cash" | "card"  |"check";
   amount: number;
-  cardBrand?: "visa" | "mastercard" | "amex" | "card";
+  cardBrand?: "visa" | "mastercard" | "amex" ;
   checkNumber?: string;
 }
 
