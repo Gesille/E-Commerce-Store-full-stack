@@ -1424,42 +1424,7 @@ export default function POSClosingReport() {
                       />
                     </div>
 
-                    {/* Currency breakdown mini summary */}
-                    <div className="flex flex-col gap-2">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Currency Breakdown</p>
-                      <div className="border border-gray-100 rounded-xl overflow-hidden">
-                        <div className="bg-emerald-50 px-4 py-3 flex justify-between items-center border-b border-emerald-100">
-                          <div className="flex items-center gap-2">
-                            <span className="w-4 h-4 rounded bg-emerald-600 flex items-center justify-center text-[9px] text-white font-bold">$</span>
-                            <span className="text-xs font-semibold text-emerald-800">Eastern Caribbean</span>
-                          </div>
-                          <span className="text-sm font-extrabold text-emerald-700 tabular-nums">EC${fmt(xcdTotal)}</span>
-                        </div>
-                        <div className="bg-indigo-50 px-4 py-3 flex justify-between items-center border-b border-indigo-100">
-                          <div className="flex items-center gap-2">
-                            <span className="w-4 h-4 rounded bg-indigo-600 flex items-center justify-center text-[9px] text-white font-bold">$</span>
-                            <span className="text-xs font-semibold text-indigo-800">US Dollar (face)</span>
-                          </div>
-                          <span className="text-sm font-extrabold text-indigo-700 tabular-nums">US${fmt(usdTotal)}</span>
-                        </div>
-                        <div className="bg-gray-50 px-4 py-3 flex justify-between items-center border-b border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <ArrowLeftRight size={12} className="text-gray-400" />
-                            <span className="text-xs font-semibold text-gray-600">US$ in EC$</span>
-                          </div>
-                          <span className="text-sm font-semibold text-gray-700 tabular-nums">EC${fmt(usdInXCD)}</span>
-                        </div>
-                        <div className="px-4 py-3 flex justify-between items-center bg-white">
-                          <span className="text-xs font-extrabold text-gray-800">Combined (EC$)</span>
-                          <span className="text-sm font-extrabold text-gray-900 tabular-nums">EC${fmt(combinedXCDTotal)}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 p-3 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                        <p className="text-[10px] text-gray-400 font-medium">Exchange rate applied</p>
-                        <p className="text-sm font-extrabold text-gray-700 mt-0.5">1 US$ = {USD_TO_XCD.toFixed(2)} EC$</p>
-                      </div>
-                    </div>
+               
                   </div>
                 </div>
 
