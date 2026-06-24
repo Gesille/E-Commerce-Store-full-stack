@@ -101,17 +101,17 @@ export const getDailyClosingReport = CatchAsyncError(
     }
 
     // Normalise into: cash | visa | mastercard | amex | card (generic) | check | <other>
-    const normaliseMethod = (name: string): string => {
-      const l = name.toLowerCase();
-      if (l.includes("cash"))                             return "cash";
-      if (l.includes("visa"))                             return "visa";
-      if (l.includes("master"))                           return "mastercard";
-      if (l.includes("amex") || l.includes("american"))  return "amex";
-      if (l.includes("credit") || l.includes("debit") || l.includes("card")) return "card";
-      if (l.includes("check") || l.includes("cheque") || l.includes("customer account")) return "check";
-      return name; // keep unknown names as-is
-    };
-
+const normaliseMethod = (name: string): string => {
+  const l = name.toLowerCase();
+  if (l.includes("cash"))                              return "cash";
+  if (l.includes("visa") && !l.includes("master"))    return "visa";
+  if (l.includes("master"))                            return "mastercard";
+  if (l.includes("amex") || l.includes("american"))   return "amex";
+  
+  if (l.includes("card") || l.includes("credit") || l.includes("debit")) return "card";
+  if (l.includes("check") || l.includes("cheque") || l.includes("customer account")) return "check";
+  return name;
+};
     const normalisedPayments: Record<string, number> = {};
     for (const [method, amount] of Object.entries(paymentTotals)) {
       const key = normaliseMethod(method);
