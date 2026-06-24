@@ -136,44 +136,32 @@ const addDays = (iso: string, days: number) => {
 const todayISO = () => new Date().toISOString().split("T")[0];
 
 // ─── KpiCard ──────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  label,
-  value,
-  sub,
-  icon,
-  color,
-  trend,
-}: {
-  label: string;
-  value: number;
-  sub?: string;
-  icon: React.ReactNode;
-  color: string;
-  trend?: number;
+function KpiCard({ label, value, sub, icon, color, trend }: {
+  label: string; value: number; sub?: string;
+  icon: React.ReactNode; color: string; trend?: number;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow min-w-0">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-widest truncate">
-          {label}
+    <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-all duration-200 min-w-0 group">
+      <div className="flex items-start justify-between gap-2">
+        <span className={`p-2 rounded-xl shrink-0 ${color} group-hover:scale-105 transition-transform`}>
+          {icon}
         </span>
-        <span className={`p-1.5 rounded-lg shrink-0 ${color}`}>{icon}</span>
-      </div>
-      <div className="text-xl sm:text-2xl font-extrabold text-gray-900 tabular-nums tracking-tight truncate">
-        ${fmt(value)}
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        {sub && <div className="text-xs text-gray-400 truncate">{sub}</div>}
         {trend !== undefined && (
-          <span
-            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
-              trend >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
-            }`}
-          >
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+            trend >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"
+          }`}>
             {trend >= 0 ? "▲" : "▼"} {Math.abs(trend).toFixed(1)}%
           </span>
         )}
+      </div>
+      <div>
+        <div className="text-2xl font-black text-gray-900 tabular-nums tracking-tight">
+          ${fmt(value)}
+        </div>
+        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1 leading-tight">
+          {label}
+        </div>
+        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -198,8 +186,7 @@ function PaymentBar({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between text-sm gap-2">
-        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-0 truncate">
-          {icon}
+        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-0">          {icon}
           <span className="truncate">{label}</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -281,7 +268,7 @@ function CalendarGrid({
   const maxSales = Math.max(...days.map((d) => d.netSales), 1);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
         {WEEKDAYS.map((d) => (
           <div
@@ -363,11 +350,11 @@ function QuickRangePicker({
           key={r.key}
           onClick={() => onSelect(r.key)}
           aria-pressed={activeRange === r.key}
-          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors ${
-            activeRange === r.key
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
+        className={`px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-all duration-150 ${
+  activeRange === r.key
+    ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
+    : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200"
+}`}
         >
           {r.label}
         </button>
@@ -1042,9 +1029,9 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
       `}</style>
 
       {/* ── Main UI ── */}
-      <div className="min-h-screen bg-[#F0F2F7] font-sans print:hidden">
+      <div className="min-h-screen bg-[#EEF0F6] font-sans print:hidden">
         {/* ── Header ── */}
-        <div className="bg-white border-b border-gray-100 px-3 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm gap-2">
+        <div className="bg-white/95 backdrop-blur border-b border-gray-100 px-3 sm:px-6 py-3.5 flex items-center justify-between sticky top-0 z-20 shadow-sm gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen((v) => !v)}
@@ -1125,13 +1112,15 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
           {/* ── LEFT SIDEBAR ── */}
           <div className={`flex flex-col gap-4 ${sidebarOpen ? "block" : "hidden"} lg:block`}>
             {/* Quick ranges */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <CalendarRange size={13} className="text-blue-600" />
-                <span className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">
-                  Quick Range
-                </span>
-              </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+             <div className="flex items-center gap-2 mb-3">
+    <div className="p-1.5 bg-blue-50 rounded-lg">
+      <CalendarRange size={12} className="text-blue-600" />
+    </div>
+    <span className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">
+      Quick Range
+    </span>
+  </div>
               <QuickRangePicker activeRange={activeRange} onSelect={handleRangeSelect} />
 
               {/* Custom date picker */}
@@ -1158,7 +1147,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             </div>
 
             {/* Month calendar */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={handlePrevMonth}
@@ -1216,7 +1205,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             </div>
 
             {/* Month summary */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <BarChart3 size={13} className="text-blue-600" />
                 <span className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">
@@ -1317,7 +1306,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
             ) : report ? (
               <>
                 {/* Report header */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 sm:px-6 py-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 sm:px-6 py-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-base sm:text-lg font-extrabold text-gray-900 tracking-tight truncate">
@@ -1373,7 +1362,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                 {/* Sales + Payments */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Sales breakdown */}
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Sales Breakdown
                     </h3>
@@ -1411,7 +1400,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                   </div>
 
                   {/* Payment methods */}
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Payment Methods
                     </h3>
@@ -1463,7 +1452,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
 
                 {/* Top Products */}
                 {report.topProducts?.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
                       Top Products
                     </h3>
@@ -1494,7 +1483,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                 )}
 
                 {/* Cash Register Count */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                       Cash Register Count
@@ -1698,7 +1687,7 @@ const denomTotalUSD = denominationsUSD.reduce((s, d) => s + d.value * d.count, 0
                 </div>
 
                 {/* Cashier Sign-Off */}
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                   <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-5">
                     Cashier Sign-Off
                   </h3>
