@@ -30,6 +30,7 @@ import {
   useSubmitCashCountMutation,
 } from "@/redux/report/posClosingReportApi";
 import { useSelector } from "react-redux";
+import { createPortal } from "react-dom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -431,7 +432,8 @@ export default function POSClosingReport() {
   const [submitError, setSubmitError]         = useState<string | null>(null);
   const [saveOdooSuccess, setSaveOdooSuccess] = useState(false);
   const [savingOdoo, setSavingOdoo]           = useState(false);
-  const printRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+useEffect(() => setMounted(true), []);
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   const { user } = useSelector((state: any) => state.auth);
@@ -561,30 +563,33 @@ export default function POSClosingReport() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* ── Print stylesheet ── */}
-      <style>{`
-        @media print {
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body > * { display: none !important; }
-          #printable-report { display: block !important; }
-          #printable-report { font-size: 11pt; max-width: 80mm; margin: 0 auto; }
-          @page { size: A4; margin: 15mm; }
-        }
-        @media screen {
-          #printable-report { display: none; }
-        }
-      `}</style>
 
-      {/* ── Printable Z-report (hidden on screen) ── */}
-      {report && !report.empty && (
+
+
+     {mounted && report && !report.empty && createPortal(
+      <div id="printable-report-portal">
         <PrintableReport
           report={report}
           selectedDate={selectedDate}
           denominations={denominations}
           denomTotal={denomTotal}
         />
-      )}
-
+      </div>,
+      document.body
+    )}
+    {/* ── Print stylesheet ── */}
+<style>{`
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body > *:not(#printable-report-portal) { display: none !important; }
+    #printable-report-portal { display: block !important; position: static !important; }
+    #printable-report-portal { font-size: 11pt; max-width: 80mm; margin: 0 auto; }
+    @page { size: A4; margin: 15mm; }
+  }
+  @media screen {
+    #printable-report-portal { display: none !important; }
+  }
+`}</style>
       {/* ── Main UI ── */}
       <div className="min-h-screen bg-[#F0F2F7] font-sans print:hidden">
 
