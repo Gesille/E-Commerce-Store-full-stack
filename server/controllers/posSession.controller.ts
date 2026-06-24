@@ -29,13 +29,12 @@ async function getPaymentMethodId(method: string, configId: number) {
 
   const normalized = method.toLowerCase();
 
-  const aliases: Record<string,string> = {
-    check: "customer account",
-    cheque: "customer account",
-  
-    cash: "cash",
-    card: "card",
-  };
+ const aliases: Record<string,string> = {
+  check: "check",
+  cheque: "check",
+  cash: "cash",
+  card: "card",
+};
 
   const searchName = aliases[normalized] || normalized;
 
