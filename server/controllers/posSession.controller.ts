@@ -27,25 +27,37 @@ async function getPaymentMethodId(method: string, configId: number) {
     }
   );
 
+  console.log("ODOO PAYMENT METHODS:", methods);
+
   const normalized = method.toLowerCase();
 
   const found = methods.find((m: any) => {
     const name = m.name.toLowerCase();
 
-    if (normalized === "cash")
-      return m.is_cash_count || name.includes("cash");
-
-    if (normalized === "card")
-      return name.includes("card") || name.includes("bank");
-
-    if (normalized === "bank")
-      return name.includes("bank");
-
-    return false;
+    return (
+      name.includes(normalized) ||
+      (normalized === "cash" && m.is_cash_count) ||
+      (normalized === "card" && (
+        name.includes("card") ||
+        name.includes("credit") ||
+        name.includes("visa")
+      )) ||
+      (normalized === "check" && (
+        name.includes("check") ||
+        name.includes("cheque")
+      )) ||
+      (normalized === "bank" && (
+        name.includes("bank") ||
+        name.includes("transfer")
+      ))
+    );
   });
 
+
   if (!found) {
-    throw new Error(`Payment method not found: ${method}`);
+    throw new Error(
+      `Payment method not found: ${method}. Available: ${methods.map((m:any)=>m.name).join(", ")}`
+    );
   }
 
   return found.id;
