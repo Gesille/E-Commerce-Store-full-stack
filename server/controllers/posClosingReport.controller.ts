@@ -237,11 +237,7 @@ export const getDailyClosingReport = CatchAsyncError(
         card:  Math.round((normalisedPayments["card"]  ?? 0) * 100) / 100,
       
         check: Math.round((normalisedPayments["check"] ?? 0) * 100) / 100,
-        other: Math.round(
-          Object.entries(normalisedPayments)
-            .filter(([k]) => !["cash","card","check"].includes(k))
-            .reduce((s, [, v]) => s + v, 0) * 100
-        ) / 100,
+       
         // Full detail for unknown/other methods
         breakdown: Object.entries(normalisedPayments)
           .filter(([k]) => !["cash","card","check"].includes(k))
