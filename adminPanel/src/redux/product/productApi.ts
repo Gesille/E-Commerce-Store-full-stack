@@ -152,7 +152,7 @@ supplier?: string;
       transformResponse: (response: { success: boolean; product: any }) =>
         response.product,
     }),
-    // In productApi
+    
 getOdooLocations: builder.query<{ id: number; name: string; complete_name: string }[], void>({
   query: () => ({
     url: "location",
