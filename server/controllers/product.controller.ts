@@ -1121,6 +1121,30 @@ export const getProductHistory = CatchAsyncError(
         };
       });
 
+      // 2b. Clean up "Confirmed" (qty:0) + "Updated" (real qty) move pairs.
+      // Odoo logs two records per manual quantity edit: a zero-qty "Confirmed"
+      // entry and a real-qty "Updated" entry, usually seconds apart. Drop the
+      // zero-qty one whenever its paired real-qty entry exists nearby, so the
+      // list shows the actual quantity instead of a misleading 0.
+      const CONFIRM_PAIR_WINDOW_MS = 5 * 1000; // 5 seconds
+
+      const cleanedStockMoves = stockMoves.filter((m: any) => {
+        if (m.qty === 0 && m.reference.includes("Confirmed")) {
+          const mTime = new Date(m.insertedDate).getTime();
+          const hasPairedUpdate = stockMoves.some((other: any) => {
+            if (other === m) return false;
+            const otherTime = new Date(other.insertedDate).getTime();
+            return (
+              other.qty > 0 &&
+              other.reference.includes("Updated") &&
+              Math.abs(mTime - otherTime) <= CONFIRM_PAIR_WINDOW_MS
+            );
+          });
+          return !hasPairedUpdate; // drop the zero-qty confirmation if its pair exists
+        }
+        return true;
+      });
+
       // 3. POS sales history
       const posLines = await odooRequest(
         "pos.order.line",
@@ -1163,7 +1187,7 @@ export const getProductHistory = CatchAsyncError(
       // vs Main Warehouse) just because they occurred close together in time.
       const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
-      const restockMoves = stockMoves
+      const restockMoves = cleanedStockMoves
         .filter((m: any) => m.type === "restock" && m.qty > 0)
         .sort(
           (a: any, b: any) =>
@@ -1197,7 +1221,7 @@ export const getProductHistory = CatchAsyncError(
       return res.json({
         success: true,
         lastRestock,
-        stockMoves,
+        stockMoves: cleanedStockMoves,
         salesHistory,
       });
     } catch (err: any) {
