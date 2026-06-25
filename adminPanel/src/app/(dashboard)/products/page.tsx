@@ -1,7 +1,6 @@
-// app/products/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getColumns, Product } from "./columns";
 import { DataTable } from "./data-table";
 import { useGetAllProductsQuery } from "@/redux/product/productApi";
@@ -9,12 +8,35 @@ import { UpdateProductModal } from "@/components/product/UpdateProductModal";
 import { DeleteProductModal } from "@/components/product/DeleteProductModal";
 import { ProductHistoryDrawer } from "@/components/product/ProductHistoryDrawer";
 
+// Shape returned by /api/products/last-restock-batch
+type RestockMap = Record<string, { date: string; qty: number }>;
+
 const ProductsPage = () => {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+  const [restockMap, setRestockMap] = useState<RestockMap>({});
 
-  const { data: products = [], isLoading, isError, refetch } = useGetAllProductsQuery();
- const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
+  const { data: rawProducts = [], isLoading, isError, refetch } =
+    useGetAllProductsQuery();
+
+  // Fetch batch restock data once on mount (and after refetch)
+  useEffect(() => {
+    if (!rawProducts.length) return;
+    fetch("/api/products/last-restock-batch")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setRestockMap(json.data);
+      })
+      .catch(() => {/* silently ignore */});
+  }, [rawProducts.length]);
+
+  // Merge lastRestock into each product
+  const products: Product[] = rawProducts.map((p: any) => ({
+    ...p,
+    lastRestock: restockMap[String(p.id)] ?? null,
+  }));
+
   const columns = getColumns(
     (p) => setEditProduct(p),
     (p) => setDeleteProduct(p),
@@ -45,10 +67,11 @@ const ProductsPage = () => {
         onClose={() => setDeleteProduct(null)}
         onSuccess={refetch}
       />
+
       <ProductHistoryDrawer
-      product ={historyProduct}
-      open ={!!historyProduct}
-      onClose={() => setHistoryProduct(null)}
+        product={historyProduct}
+        open={!!historyProduct}
+        onClose={() => setHistoryProduct(null)}
       />
     </div>
   );

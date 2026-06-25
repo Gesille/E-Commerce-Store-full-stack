@@ -1223,3 +1223,97 @@ if (ref.includes("quantity confirmed")) {
     }
   }
 );
+
+export const getLastRestockBatch = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // 1. Get every active product template id
+      const templates = await odooRequest(
+        "product.template",
+        "search_read",
+        [[["active", "=", true]]],
+        { fields: ["id"] }
+      );
+ 
+      const templateIds: number[] = templates.map((t: any) => t.id);
+      if (!templateIds.length) return res.json({ success: true, data: {} });
+ 
+      // 2. Get all variants for those templates in one query
+      const variants = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["product_tmpl_id", "in", templateIds]]],
+        { fields: ["id", "product_tmpl_id"] }
+      );
+ 
+      // Map: variantId → templateId
+      const variantToTemplate: Record<number, number> = {};
+      for (const v of variants) {
+        variantToTemplate[v.id] = v.product_tmpl_id[0];
+      }
+      const allVariantIds = variants.map((v: any) => v.id);
+ 
+      if (!allVariantIds.length) return res.json({ success: true, data: {} });
+ 
+      // 3. Fetch ALL done stock moves for all variants in one query
+      //    Only restock-direction moves (from inventory adjustment → internal)
+      const moves = await odooRequest(
+        "stock.move",
+        "search_read",
+        [[
+          ["product_id", "in", allVariantIds],
+          ["state", "=", "done"],
+          ["location_id.usage", "=", "inventory"],          // from inventory adjustment
+          ["location_dest_id.usage", "=", "internal"],      // to stock
+        ]],
+        {
+          fields: ["product_id", "product_qty", "create_date", "reference"],
+          order: "create_date desc",
+        }
+      );
+ 
+      // 4. Group moves by templateId, find last restock session per template
+      const SESSION_WINDOW_MS = 60 * 1000; // 60 seconds = same session
+ 
+      // templateId → sorted restock moves
+      const byTemplate: Record<number, { qty: number; date: string }[]> = {};
+ 
+      for (const m of moves) {
+        const variantId = m.product_id[0];
+        const templateId = variantToTemplate[variantId];
+        if (!templateId) continue;
+ 
+        if (!byTemplate[templateId]) byTemplate[templateId] = [];
+        byTemplate[templateId].push({ qty: m.product_qty, date: m.create_date });
+      }
+ 
+      // 5. For each template, resolve the latest session qty
+      const result: Record<number, { date: string; qty: number }> = {};
+ 
+      for (const [tmplIdStr, movesArr] of Object.entries(byTemplate)) {
+        const tmplId = Number(tmplIdStr);
+        if (!movesArr.length) continue;
+ 
+        // Already sorted desc by create_date from Odoo
+        const latest = movesArr[0];
+        const latestTime = new Date(latest.date).getTime();
+ 
+        const sessionQty = movesArr
+          .filter(
+            (m) =>
+              Math.abs(new Date(m.date).getTime() - latestTime) <= SESSION_WINDOW_MS
+          )
+          .reduce((sum, m) => sum + (m.qty || 0), 0);
+ 
+        result[tmplId] = {
+          date: latest.date,
+          qty: sessionQty,
+        };
+      }
+ 
+      return res.json({ success: true, data: result });
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 500));
+    }
+  }
+);
