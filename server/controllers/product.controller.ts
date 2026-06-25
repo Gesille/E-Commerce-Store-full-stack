@@ -1052,16 +1052,13 @@ export const getProductHistory = CatchAsyncError(
       }
 
       // ==========================
-      // 1. Product variants
+      // 1. Variants
       // ==========================
-
       const variants = await odooRequest(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", templateId]]],
-        {
-          fields: ["id"],
-        },
+        { fields: ["id"] }
       );
 
       const variantIds = variants.map((v: any) => v.id);
@@ -1072,13 +1069,13 @@ export const getProductHistory = CatchAsyncError(
           lastRestock: null,
           stockMoves: [],
           salesHistory: [],
+          currentStock: 0,
         });
       }
 
       // ==========================
       // 2. Current stock
       // ==========================
-
       const quants = await odooRequest(
         "stock.quant",
         "search_read",
@@ -1088,14 +1085,12 @@ export const getProductHistory = CatchAsyncError(
             ["location_id.usage", "=", "internal"],
           ],
         ],
-        {
-          fields: ["quantity", "location_id"],
-        },
+        { fields: ["quantity"] }
       );
 
       const currentStock = quants.reduce(
         (sum: number, q: any) => sum + Number(q.quantity || 0),
-        0,
+        0
       );
 
       console.log("CURRENT STOCK:", currentStock);
@@ -1103,7 +1098,6 @@ export const getProductHistory = CatchAsyncError(
       // ==========================
       // 3. Stock moves
       // ==========================
-
       const moves = await odooRequest(
         "stock.move",
         "search_read",
@@ -1115,6 +1109,7 @@ export const getProductHistory = CatchAsyncError(
         ],
         {
           fields: [
+            "id",
             "date",
             "create_date",
             "write_date",
@@ -1124,135 +1119,109 @@ export const getProductHistory = CatchAsyncError(
             "reference",
             "move_line_ids",
             "product_uom_qty",
+            "quantity_done",
           ],
           order: "create_date desc",
           limit: 50,
-        },
+        }
       );
 
-     const stockMoves = [];
+      const stockMoves = [];
 
-for (const m of moves) {
-  let qty = 0;
+      for (const m of moves) {
+        let qty = 0;
 
-  try {
-    if (m.move_line_ids?.length) {
-      const lines = await odooRequest(
-        "stock.move.line",
-        "search_read",
-        [
-          [
-            ["id", "in", m.move_line_ids],
-          ],
-        ],
-        {
-          fields: [
-            "id",
-            "qty_done",
-            "quantity",
-          ],
-        },
-      );
+        try {
+          // ==========================
+          // 3.1 Move line quantity
+          // ==========================
+          if (m.move_line_ids?.length) {
+            const lines = await odooRequest(
+              "stock.move.line",
+              "search_read",
+              [[["id", "in", m.move_line_ids]]],
+              { fields: ["qty_done", "quantity"] }
+            );
 
-      qty = lines.reduce(
-        (sum: number, l: any) =>
-          sum + Number(l.qty_done ?? l.quantity ?? 0),
-        0,
-      );
-    }
-  } catch (e: any) {
-    console.log(
-      "stock.move.line failed",
-      {
-        moveId: m.id,
-        lines: m.move_line_ids,
-        error: e.message,
-      },
-    );
-  }
+            qty = lines.reduce(
+              (sum: number, l: any) =>
+                sum + Number(l.qty_done || l.quantity || 0),
+              0
+            );
+          }
 
+          // ==========================
+          // 3.2 Move fallback quantity
+          // ==========================
+          if (!qty) {
+            qty = Number(m.product_uom_qty || m.quantity_done || 0);
+          }
+        } catch (e: any) {
+          console.log("stock.move.line failed", {
+            moveId: m.id,
+            error: e.message,
+          });
 
-  // fallback
-  if (!qty && m.product_uom_qty) {
-    qty = Number(m.product_uom_qty);
-  }
+          // fallback even on error
+          qty = Number(m.product_uom_qty || 0);
+        }
 
+        // ==========================
+        // 3.3 Filter fake/system moves
+        // ==========================
+        const reference = String(m.reference || m.origin || "").toLowerCase();
 
-  const reference = String(
-    m.reference || m.origin || "",
-  );
+        const isInventory =
+          reference.includes("inventory") ||
+          reference.includes("quantity") ||
+          m.location_dest_id?.[1]?.toLowerCase().includes("inventory");
 
-  const ref = reference.toLowerCase();
+        const isSale =
+          reference.includes("pos") || reference.includes("sale");
 
-  const to = String(
-    m.location_dest_id?.[1] || "",
-  ).toLowerCase();
+        const isReturn = reference.includes("return");
 
+        let type: "restock" | "sale" | "return" | "adjustment" =
+          isInventory
+            ? "restock"
+            : isSale
+            ? "sale"
+            : isReturn
+            ? "return"
+            : "adjustment";
 
-  let type:
-    | "restock"
-    | "sale"
-    | "return"
-    | "adjustment" = "adjustment";
+        // ❗ IMPORTANT: ignore system "confirmation" zero-moves
+        if (qty === 0 && type === "restock") continue;
 
+        stockMoves.push({
+          movementDate: m.date,
+          insertedDate: m.create_date,
+          lastModified: m.write_date,
+          qty,
+          type,
+          reference: m.reference || m.origin || "—",
+          from: m.location_id?.[1] || "—",
+          to: m.location_dest_id?.[1] || "—",
+        });
+      }
 
-  if (
-    ref.includes("quantity") ||
-    ref.includes("inventory") ||
-    to.includes("inventory")
-  ) {
-    type = "restock";
-  } else if (
-    ref.includes("pos") ||
-    ref.includes("sale")
-  ) {
-    type = "sale";
-  } else if (
-    ref.includes("return")
-  ) {
-    type = "return";
-  }
-
-
-  stockMoves.push({
-    movementDate: m.date,
-
-    insertedDate: m.create_date,
-
-    lastModified: m.write_date,
-
-    qty,
-
-    type,
-
-    reference:
-      m.reference ||
-      m.origin ||
-      "—",
-
-    from:
-      m.location_id?.[1] ||
-      "—",
-
-    to:
-      m.location_dest_id?.[1] ||
-      "—",
-  });
-}
+      // ==========================
+      // 4. POS history
+      // ==========================
       const posLines = await odooRequest(
         "pos.order.line",
         "search_read",
         [[["product_id", "in", variantIds]]],
         {
           fields: ["qty", "price_subtotal", "order_id", "create_date"],
-
           order: "create_date desc",
-
           limit: 50,
-        },
+        }
       );
 
-      const orderIds = [...new Set(posLines.map((l: any) => l.order_id?.[0]))];
+      const orderIds = [
+        ...new Set(posLines.map((l: any) => l.order_id?.[0])),
+      ];
 
       let orders: any[] = [];
 
@@ -1261,14 +1230,11 @@ for (const m of moves) {
           "pos.order",
           "search_read",
           [[["id", "in", orderIds]]],
-          {
-            fields: ["id", "name", "date_order"],
-          },
+          { fields: ["id", "name", "date_order"] }
         );
       }
 
       const orderMap: any = {};
-
       orders.forEach((o: any) => {
         orderMap[o.id] = {
           name: o.name,
@@ -1278,24 +1244,21 @@ for (const m of moves) {
 
       const salesHistory = posLines.map((l: any) => ({
         date: orderMap[l.order_id?.[0]]?.date ?? l.create_date,
-
-        orderId: orderMap[l.order_id?.[0]]?.name ?? "#" + l.order_id?.[0],
-
+        orderId:
+          orderMap[l.order_id?.[0]]?.name ?? "#" + l.order_id?.[0],
         qty: Number(l.qty || 0),
-
         total: Number(l.price_subtotal || 0),
       }));
 
       // ==========================
       // 5. Last restock
       // ==========================
-
       const restocks = stockMoves
         .filter((m: any) => m.type === "restock" && m.qty > 0)
         .sort(
           (a: any, b: any) =>
             new Date(b.insertedDate).getTime() -
-            new Date(a.insertedDate).getTime(),
+            new Date(a.insertedDate).getTime()
         );
 
       let lastRestock = null;
@@ -1305,14 +1268,13 @@ for (const m of moves) {
 
         lastRestock = {
           date: latest.insertedDate,
-
           qty: restocks
             .filter(
               (x: any) =>
                 Math.abs(
                   new Date(x.insertedDate).getTime() -
-                    new Date(latest.insertedDate).getTime(),
-                ) < 60000,
+                    new Date(latest.insertedDate).getTime()
+                ) < 60000
             )
             .reduce((s: number, x: any) => s + x.qty, 0),
         };
@@ -1320,13 +1282,9 @@ for (const m of moves) {
 
       return res.json({
         success: true,
-
         currentStock,
-
         lastRestock,
-
         stockMoves,
-
         salesHistory,
       });
     } catch (err: any) {
@@ -1334,9 +1292,8 @@ for (const m of moves) {
 
       return res.status(500).json({
         success: false,
-
         message: err?.message || "Product history failed",
       });
     }
-  },
+  }
 );
