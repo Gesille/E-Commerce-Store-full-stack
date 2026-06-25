@@ -1127,37 +1127,48 @@ export const getProductHistory = CatchAsyncError(
       for (const m of moves) {
         let qty = 0;
 
-        try {
-          // ✅ IMPORTANT FIX: query by move_id (NOT move_line_ids)
-          const lines = await odooRequest(
-            "stock.move.line",
-            "search_read",
-            [[["move_id", "=", m.id]]],
-            { fields: ["qty_done"] }
-          );
+        const from = String(m.location_id?.[1] || "").toLowerCase();
+        const to = String(m.location_dest_id?.[1] || "").toLowerCase();
 
-          qty = lines.reduce(
-            (sum: number, l: any) => sum + Number(l.qty_done || 0),
-            0
-          );
-        } catch (e: any) {
-          console.log("move line error:", e.message);
-        }
+        const isInventoryAdjustment =
+          from.includes("inventory") || to.includes("inventory");
 
-        // fallback
-        if (!qty) {
+        if (isInventoryAdjustment) {
+          // For inventory adjustments, qty_done on move lines is often 0.
+          // Use product_uom_qty from the move itself — it holds the adjusted quantity.
           qty = Number(m.product_uom_qty || 0);
+        } else {
+          // For real moves (sales, transfers), use move lines
+          try {
+            const lines = await odooRequest(
+              "stock.move.line",
+              "search_read",
+              [[["move_id", "=", m.id]]],
+              { fields: ["qty_done"] }
+            );
+
+            qty = lines.reduce(
+              (sum: number, l: any) => sum + Number(l.qty_done || 0),
+              0
+            );
+          } catch (e: any) {
+            console.log("move line error:", e.message);
+          }
+
+          // fallback
+          if (!qty) {
+            qty = Number(m.product_uom_qty || 0);
+          }
         }
 
         const reference = String(m.reference || m.origin || "").toLowerCase();
-        const to = String(m.location_dest_id?.[1] || "").toLowerCase();
 
-        let type: "restock" | "sale" | "return" | "adjustment" =
-          "adjustment";
+        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
 
         if (
           reference.includes("inventory") ||
           reference.includes("quantity") ||
+          from.includes("inventory") ||
           to.includes("inventory")
         ) {
           type = "restock";
@@ -1215,14 +1226,13 @@ export const getProductHistory = CatchAsyncError(
 
       const salesHistory = posLines.map((l: any) => ({
         date: orderMap[l.order_id?.[0]]?.date ?? l.create_date,
-        orderId:
-          orderMap[l.order_id?.[0]]?.name ?? "#" + l.order_id?.[0],
+        orderId: orderMap[l.order_id?.[0]]?.name ?? "#" + l.order_id?.[0],
         qty: Number(l.qty || 0),
         total: Number(l.price_subtotal || 0),
       }));
 
       // ==========================
-      // 5. Last Restock (FIXED)
+      // 5. Last Restock
       // ==========================
       const restocks = stockMoves
         .filter((m) => m.type === "restock" && m.qty > 0)
