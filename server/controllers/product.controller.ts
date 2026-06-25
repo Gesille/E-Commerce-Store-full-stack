@@ -1031,51 +1031,51 @@ export const getProductHistory = CatchAsyncError(
       }
 
       // 2. Stock movements (incoming = restocks, outgoing = sales/adjustments)
-      const moves = await odooRequest(
-        "stock.move",
-        "search_read",
-        [
-          [
-            ["product_id", "in", variantIds],
-            ["state", "=", "done"],
-          ],
-        ],
-        {
-          fields: [
-            "date",
-            "product_qty",
-            "location_id",
-            "location_dest_id",
-            "origin",
-            "reference",
-            "picking_type_id",
-          ],
-          order: "date desc",
-          limit: 50,
-        }
-      );
+   const moves = await odooRequest(
+  "stock.move",
+  "search_read",
+  [
+    [
+      ["product_id", "in", variantIds],
+      ["state", "=", "done"],
+    ],
+  ],
+  {
+    fields: [
+      "date",
+      "create_date", 
+      "write_date",  
+      "product_qty",
+      "location_id",
+      "location_dest_id",
+      "origin",
+      "reference",
+      "picking_type_id",
+    ],
+    order: "create_date desc", 
+    limit: 50,
+  }
+);
 
-      const stockMoves = moves.map((m: any) => {
-        const destUsage = m.location_dest_id?.[1] ?? "";
-        const srcUsage = m.location_id?.[1] ?? "";
+  const stockMoves = moves.map((m: any) => {
+  let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+  const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
 
-        // Determine direction
-        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-        const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
+  if (ref.includes("pos/") || ref.includes("sale")) type = "sale";
+  else if (ref.includes("return") || ref.includes("ret/")) type = "return";
+  else if (ref.includes("wh/in") || ref.includes("receipt")) type = "restock";
 
-        if (ref.includes("pos/") || ref.includes("sale")) type = "sale";
-        else if (ref.includes("return") || ref.includes("ret/")) type = "return";
-        else if (ref.includes("wh/in") || ref.includes("receipt")) type = "restock";
-
-        return {
-          date: m.date,
-          qty: m.product_qty,
-          type,
-          reference: m.reference || m.origin || "—",
-          from: m.location_id?.[1] ?? "—",
-          to: m.location_dest_id?.[1] ?? "—",
-        };
-      });
+  return {
+    movementDate: m.date,       
+    insertedDate: m.create_date, 
+    lastModified: m.write_date,  
+    qty: m.product_qty,
+    type,
+    reference: m.reference || m.origin || "—",
+    from: m.location_id?.[1] ?? "—",
+    to: m.location_dest_id?.[1] ?? "—",
+  };
+});
 
       // 3. POS sales history
       const posLines = await odooRequest(
