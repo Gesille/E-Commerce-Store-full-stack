@@ -244,7 +244,7 @@ export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
                 )}
               </section>
 
-              {/* ── POS Sales History ────────────────────────── */}
+   
               <section>
                 <div className="flex items-center gap-2 mb-3">
                   <ShoppingCart size={14} className="text-muted-foreground" />
