@@ -35,6 +35,6 @@ productRouter.get(
 
 productRouter.get("/barcode/:code", isAuthenticated, getProductByBarcode);
 productRouter.get("/product-history/:id",isAuthenticated,authorizeRoles("admin","cashier"),getProductHistory)
-productRouter.get("last-restock-batch",isAuthenticated,authorizeRoles("admin","cashier"),getLastRestockBatch)
+productRouter.get("/last-restock-batch",isAuthenticated,authorizeRoles("admin","cashier"),getLastRestockBatch)
 
 export default productRouter;
