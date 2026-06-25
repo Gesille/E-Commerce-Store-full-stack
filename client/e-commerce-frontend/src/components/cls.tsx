@@ -3,7 +3,7 @@ import React from 'react'
 const cls = () => {
   return (
     <div>
-      ghjvvvvvkjhvgfd
+      ghjvvvvvkjhvg
     </div>
   )
 }
