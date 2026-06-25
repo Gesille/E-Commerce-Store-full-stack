@@ -1104,10 +1104,10 @@ export const getProductHistory = CatchAsyncError(
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
-          // Inventory adjustment → stock/warehouse = stock increase (restock)
+          // Only FROM inventory adjustment INTO stock/warehouse = real restock
+          // The reverse (stock → inventory adjustment) stays as "adjustment"
           type = "restock";
         }
-        // Note: stock/warehouse → inventory adjustment stays as "adjustment" (the outgoing pair)
 
         return {
           movementDate: m.date,
@@ -1119,30 +1119,6 @@ export const getProductHistory = CatchAsyncError(
           from: m.location_id?.[1] ?? "—",
           to: m.location_dest_id?.[1] ?? "—",
         };
-      });
-
-      // 2b. Clean up "Confirmed" (qty:0) + "Updated" (real qty) move pairs.
-      // Odoo logs two records per manual quantity edit: a zero-qty "Confirmed"
-      // entry and a real-qty "Updated" entry, usually seconds apart. Drop the
-      // zero-qty one whenever its paired real-qty entry exists nearby, so the
-      // list shows the actual quantity instead of a misleading 0.
-      const CONFIRM_PAIR_WINDOW_MS = 5 * 1000; // 5 seconds
-
-      const cleanedStockMoves = stockMoves.filter((m: any) => {
-        if (m.qty === 0 && m.reference.includes("Confirmed")) {
-          const mTime = new Date(m.insertedDate).getTime();
-          const hasPairedUpdate = stockMoves.some((other: any) => {
-            if (other === m) return false;
-            const otherTime = new Date(other.insertedDate).getTime();
-            return (
-              other.qty > 0 &&
-              other.reference.includes("Updated") &&
-              Math.abs(mTime - otherTime) <= CONFIRM_PAIR_WINDOW_MS
-            );
-          });
-          return !hasPairedUpdate; // drop the zero-qty confirmation if its pair exists
-        }
-        return true;
       });
 
       // 3. POS sales history
@@ -1180,15 +1156,13 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — find the most recent session where stock was actually added (qty > 0).
-      // Group moves within a 30-minute window of the latest restock move, but only those
-      // sharing the SAME destination location as the latest move. This prevents merging
-      // separate restock sessions that happen to land in different locations (e.g. WH/Stock
-      // vs Main Warehouse) just because they occurred close together in time.
-      const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-
-      const restockMoves = cleanedStockMoves
-        .filter((m: any) => m.type === "restock" && m.qty > 0)
+      // 4. Last restock — group by reference + same destination + 30-min window
+      // Triple condition prevents lumping separate edit sessions together:
+      // - same reference text (same operation type)
+      // - same destination location (same warehouse target)
+      // - within 30 minutes of the most recent restock move
+      const restockMoves = stockMoves
+        .filter((m: any) => m.type === "restock")
         .sort(
           (a: any, b: any) =>
             new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime()
@@ -1199,18 +1173,19 @@ export const getProductHistory = CatchAsyncError(
       if (restockMoves.length > 0) {
         const latestMove = restockMoves[0];
         const latestTime = new Date(latestMove.insertedDate).getTime();
-        const latestDest = latestMove.to; // anchor destination for this session
+        const latestRef = latestMove.reference;
+        const latestDest = latestMove.to;
+        const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
-        // Group restock moves within 30 minutes of the latest one AND going to the
-        // same destination location.
         const sessionMoves = restockMoves.filter((m: any) => {
+          const sameRef = m.reference === latestRef;
+          const sameDest = m.to === latestDest;
           const withinWindow =
             latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
-          const sameDest = m.to === latestDest;
-          return withinWindow && sameDest;
+          return sameRef && sameDest && withinWindow;
         });
 
-        const totalQty = sessionMoves.reduce((sum: number, m: any) => sum + m.qty, 0);
+        const totalQty = sessionMoves.reduce((sum: any, m: any) => sum + m.qty, 0);
 
         lastRestock = {
           date: latestMove.insertedDate,
@@ -1221,7 +1196,7 @@ export const getProductHistory = CatchAsyncError(
       return res.json({
         success: true,
         lastRestock,
-        stockMoves: cleanedStockMoves,
+        stockMoves,
         salesHistory,
       });
     } catch (err: any) {
