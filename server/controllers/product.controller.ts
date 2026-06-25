@@ -1156,8 +1156,11 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — find the most recent session where stock was actually added (qty > 0)
-      // Group moves within a 30-minute window of the latest restock move and sum their qty.
+      // 4. Last restock — find the most recent session where stock was actually added (qty > 0).
+      // Group moves within a 30-minute window of the latest restock move, but only those
+      // sharing the SAME destination location as the latest move. This prevents merging
+      // separate restock sessions that happen to land in different locations (e.g. WH/Stock
+      // vs Main Warehouse) just because they occurred close together in time.
       const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
       const restockMoves = stockMoves
@@ -1172,10 +1175,15 @@ export const getProductHistory = CatchAsyncError(
       if (restockMoves.length > 0) {
         const latestMove = restockMoves[0];
         const latestTime = new Date(latestMove.insertedDate).getTime();
+        const latestDest = latestMove.to; // anchor destination for this session
 
-        // Group all restock moves within 30 minutes of the latest one (regardless of location)
+        // Group restock moves within 30 minutes of the latest one AND going to the
+        // same destination location.
         const sessionMoves = restockMoves.filter((m: any) => {
-          return latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
+          const withinWindow =
+            latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
+          const sameDest = m.to === latestDest;
+          return withinWindow && sameDest;
         });
 
         const totalQty = sessionMoves.reduce((sum: number, m: any) => sum + m.qty, 0);
