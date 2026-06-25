@@ -1130,88 +1130,115 @@ export const getProductHistory = CatchAsyncError(
         },
       );
 
-      const stockMoves = await Promise.all(
-        moves.map(async (m: any) => {
-          let qty = 0;
+     const stockMoves = [];
 
-          try {
-            if (m.move_line_ids?.length) {
-              const lines = await odooRequest(
-                "stock.move.line",
-                "search_read",
-                [[["id", "in", m.move_line_ids]]],
-                {
-                  fields: ["qty_done", "quantity"],
-                },
-              );
+for (const m of moves) {
+  let qty = 0;
 
-              qty = lines.reduce(
-                (sum: number, l: any) =>
-                  sum + Number(l.qty_done ?? l.quantity ?? 0),
-                0,
-              );
-            }
-          } catch (e) {
-            console.log("move line error", e);
-          }
-
-          // fallback for inventory adjustments
-          if (qty === 0 && m.product_uom_qty) {
-            qty = Number(m.product_uom_qty);
-          }
-
-          const reference = String(m.reference || m.origin || "");
-
-          const ref = reference.toLowerCase();
-
-          const from = String(m.location_id?.[1] || "").toLowerCase();
-
-          const to = String(m.location_dest_id?.[1] || "").toLowerCase();
-
-          let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-
-          // Inventory adjustment
-          if (
-            ref.includes("quantity") ||
-            ref.includes("inventory") ||
-            to.includes("inventory")
-          ) {
-            type = "restock";
-          }
-
-          // POS
-          else if (ref.includes("pos") || ref.includes("sale")) {
-            type = "sale";
-          }
-
-          // return
-          else if (ref.includes("return")) {
-            type = "return";
-          }
-
-          return {
-            movementDate: m.date,
-
-            insertedDate: m.create_date,
-
-            lastModified: m.write_date,
-
-            qty,
-
-            type,
-
-            reference: m.reference || m.origin || "—",
-
-            from: m.location_id?.[1] || "—",
-
-            to: m.location_dest_id?.[1] || "—",
-          };
-        }),
+  try {
+    if (m.move_line_ids?.length) {
+      const lines = await odooRequest(
+        "stock.move.line",
+        "search_read",
+        [
+          [
+            ["id", "in", m.move_line_ids],
+          ],
+        ],
+        {
+          fields: [
+            "id",
+            "qty_done",
+            "quantity",
+          ],
+        },
       );
-      // ==========================
-      // 4. POS sales
-      // ==========================
 
+      qty = lines.reduce(
+        (sum: number, l: any) =>
+          sum + Number(l.qty_done ?? l.quantity ?? 0),
+        0,
+      );
+    }
+  } catch (e: any) {
+    console.log(
+      "stock.move.line failed",
+      {
+        moveId: m.id,
+        lines: m.move_line_ids,
+        error: e.message,
+      },
+    );
+  }
+
+
+  // fallback
+  if (!qty && m.product_uom_qty) {
+    qty = Number(m.product_uom_qty);
+  }
+
+
+  const reference = String(
+    m.reference || m.origin || "",
+  );
+
+  const ref = reference.toLowerCase();
+
+  const to = String(
+    m.location_dest_id?.[1] || "",
+  ).toLowerCase();
+
+
+  let type:
+    | "restock"
+    | "sale"
+    | "return"
+    | "adjustment" = "adjustment";
+
+
+  if (
+    ref.includes("quantity") ||
+    ref.includes("inventory") ||
+    to.includes("inventory")
+  ) {
+    type = "restock";
+  } else if (
+    ref.includes("pos") ||
+    ref.includes("sale")
+  ) {
+    type = "sale";
+  } else if (
+    ref.includes("return")
+  ) {
+    type = "return";
+  }
+
+
+  stockMoves.push({
+    movementDate: m.date,
+
+    insertedDate: m.create_date,
+
+    lastModified: m.write_date,
+
+    qty,
+
+    type,
+
+    reference:
+      m.reference ||
+      m.origin ||
+      "—",
+
+    from:
+      m.location_id?.[1] ||
+      "—",
+
+    to:
+      m.location_dest_id?.[1] ||
+      "—",
+  });
+}
       const posLines = await odooRequest(
         "pos.order.line",
         "search_read",
