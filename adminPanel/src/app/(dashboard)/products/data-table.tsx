@@ -25,8 +25,8 @@ interface DataTableProps<TData, TValue> {
 export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]); // ✅
-  const [globalFilter, setGlobalFilter] = useState("");                        // ✅
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]); 
+  const [globalFilter, setGlobalFilter] = useState("");                       
 
   const table = useReactTable({
     data,
@@ -34,16 +34,16 @@ export function DataTable<TData, TValue>({ columns, data }: DataTableProps<TData
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(), // ✅
+    getFilteredRowModel: getFilteredRowModel(), 
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
-    onColumnFiltersChange: setColumnFilters,    // ✅
-    onGlobalFilterChange: setGlobalFilter,      // ✅
+    onColumnFiltersChange: setColumnFilters,   
+    onGlobalFilterChange: setGlobalFilter,      
     state: {
       sorting,
       rowSelection,
       columnFilters,
-      globalFilter,                             // ✅
+      globalFilter,                           
     },
   });
 

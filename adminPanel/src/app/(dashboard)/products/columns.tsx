@@ -118,22 +118,7 @@ export const getColumns = (
     );
   },
 },
-{
-  accessorKey: "lastRestock",
-  header: "Last Restocked",
-  cell: ({ row }) => {
-    const v = row.original as any;
-    if (!v.lastRestock) return <span className="text-[11px] text-muted-foreground">—</span>;
-    return (
-      <div className="text-[11px] leading-tight">
-        <p className="text-foreground font-medium">+{v.lastRestock.qty} units</p>
-        <p className="text-muted-foreground">
-          {format(new Date(v.lastRestock.date), "MMM d, yyyy")}
-        </p>
-      </div>
-    );
-  },
-},
+
  
   {
     id: "actions",
