@@ -1030,52 +1030,64 @@ export const getProductHistory = CatchAsyncError(
         return res.json({ success: true, stockMoves: [], salesHistory: [] });
       }
 
-      // 2. Stock movements (incoming = restocks, outgoing = sales/adjustments)
-   const moves = await odooRequest(
-  "stock.move",
-  "search_read",
-  [
-    [
-      ["product_id", "in", variantIds],
-      ["state", "=", "done"],
-    ],
-  ],
-  {
-    fields: [
-      "date",
-      "create_date", 
-      "write_date",  
-      "product_qty",
-      "location_id",
-      "location_dest_id",
-      "origin",
-      "reference",
-      "picking_type_id",
-    ],
-    order: "create_date desc", 
-    limit: 50,
-  }
-);
+      // 2. Stock movements
+      const moves = await odooRequest(
+        "stock.move",
+        "search_read",
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["state", "=", "done"],
+          ],
+        ],
+        {
+          fields: [
+            "date",
+            "create_date",   // when record was inserted
+            "write_date",    // when record was last modified
+            "product_qty",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "picking_type_id",
+          ],
+          order: "create_date desc",
+          limit: 50,
+        }
+      );
 
-  const stockMoves = moves.map((m: any) => {
-  let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-  const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
+      const stockMoves = moves.map((m: any) => {
+        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+        const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
+        const from: string = (m.location_id?.[1] ?? "").toLowerCase();
+        const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
 
-  if (ref.includes("pos/") || ref.includes("sale")) type = "sale";
-  else if (ref.includes("return") || ref.includes("ret/")) type = "return";
-  else if (ref.includes("wh/in") || ref.includes("receipt")) type = "restock";
+        if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
+          type = "sale";
+        } else if (ref.includes("return") || ref.includes("ret/")) {
+          type = "return";
+        } else if (ref.includes("wh/in") || ref.includes("receipt")) {
+          type = "restock";
+        } else if (
+          // Inventory adjustment flowing INTO a warehouse = restock
+          from.includes("inventory adjustment") &&
+          (to.includes("stock") || to.includes("warehouse"))
+        ) {
+          type = "restock";
+        }
 
-  return {
-    movementDate: m.date,       
-    insertedDate: m.create_date, 
-    lastModified: m.write_date,  
-    qty: m.product_qty,
-    type,
-    reference: m.reference || m.origin || "—",
-    from: m.location_id?.[1] ?? "—",
-    to: m.location_dest_id?.[1] ?? "—",
-  };
-});
+        return {
+          movementDate: m.date,        // physical move date
+          insertedDate: m.create_date, // when it was recorded
+          lastModified: m.write_date,  // when it was last changed
+          qty: m.product_qty,
+          type,
+          reference: m.reference || m.origin || "—",
+          from: m.location_id?.[1] ?? "—",
+          to: m.location_dest_id?.[1] ?? "—",
+        };
+      });
 
       // 3. POS sales history
       const posLines = await odooRequest(
@@ -1089,7 +1101,6 @@ export const getProductHistory = CatchAsyncError(
         }
       );
 
-      // Get order dates for those orders
       const orderIds = [...new Set(posLines.map((l: any) => l.order_id[0]))];
       const orders =
         orderIds.length > 0
@@ -1113,13 +1124,13 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock summary for the table column
+      // 4. Last restock summary
       const lastRestock = stockMoves.find((m:any) => m.type === "restock") ?? null;
 
       return res.json({
         success: true,
         lastRestock: lastRestock
-          ? { date: lastRestock.date, qty: lastRestock.qty }
+          ? { date: lastRestock.insertedDate, qty: lastRestock.qty }
           : null,
         stockMoves,
         salesHistory,
