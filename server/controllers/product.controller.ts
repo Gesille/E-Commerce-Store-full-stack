@@ -1061,28 +1061,26 @@ export const getProductHistory = CatchAsyncError(
         return res.json({ success: true, stockMoves: [], salesHistory: [], lastRestock: null });
       }
 
-      // 2. Get CURRENT stock from stock.quant (source of truth)
-      const warehouses = await odooRequest(
-        "stock.warehouse",
+      // 2. Get CURRENT stock across ALL internal locations (source of truth)
+      // We do NOT filter by a specific location because restocks may go to
+      // "Main Warehouse", "WH/Stock", or other internal locations.
+      const allQuants = await odooRequest(
+        "stock.quant",
         "search_read",
-        [[]],
-        { fields: ["id", "lot_stock_id", "name"], limit: 1 }
+        [[
+          ["product_id", "in", variantIds],
+          ["location_id.usage", "=", "internal"],
+        ]],
+        { fields: ["quantity", "location_id"] }
       );
 
-      let currentStock = 0;
-      if (warehouses.length && warehouses[0].lot_stock_id) {
-        const stockLocationId = warehouses[0].lot_stock_id[0];
-        const quants = await odooRequest(
-          "stock.quant",
-          "search_read",
-          [[
-            ["product_id", "in", variantIds],
-            ["location_id", "=", stockLocationId],
-          ]],
-          { fields: ["quantity"] }
-        );
-        currentStock = quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0);
-      }
+      const currentStock = allQuants.reduce(
+        (sum: number, q: any) => sum + (q.quantity || 0),
+        0
+      );
+
+      console.log(`📦 currentStock across all internal locations: ${currentStock}`);
+      console.log(`📦 quant breakdown:`, allQuants.map((q: any) => `${q.location_id?.[1]}: ${q.quantity}`));
 
       // 3. Stock movements
       const moves = await odooRequest(
@@ -1102,7 +1100,6 @@ export const getProductHistory = CatchAsyncError(
             "location_dest_id",
             "origin",
             "reference",
-            "picking_type_id",
           ],
           order: "create_date desc",
           limit: 50,
@@ -1175,15 +1172,13 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 5. Last restock — THE CORRECT APPROACH
+      // 5. Last restock — correct formula:
+      //    restockedQty = currentStock + salesSinceLastRestock
       //
-      // We can't trust move qty values because Odoo stores the absolute
-      // value it SET the stock to, not the delta.
-      //
-      // Formula: lastRestockQty = currentStock + salesSinceLastRestock
-      //
-      // "salesSinceLastRestock" = all sale moves that happened AFTER
-      // the most recent restock move's date.
+      //    We count sales from stock.move (not pos history) because
+      //    pos history may include older sales beyond our 50-move window.
+      //    Sales in stockMoves are capped at 50 total moves, so we only
+      //    count the ones that actually appear after the last restock.
 
       const restockMoves = stockMoves
         .filter((m: any) => m.type === "restock" && m.qty > 0)
@@ -1198,7 +1193,7 @@ export const getProductHistory = CatchAsyncError(
         const latestRestockMove = restockMoves[0];
         const latestRestockTime = new Date(latestRestockMove.insertedDate).getTime();
 
-        // Sum all sales (from stock moves) that happened AFTER the last restock
+        // Only count sales that appear in our stockMoves window AND after the restock
         const salesAfterRestock = stockMoves
           .filter(
             (m: any) =>
@@ -1207,12 +1202,13 @@ export const getProductHistory = CatchAsyncError(
           )
           .reduce((sum: number, m: any) => sum + m.qty, 0);
 
-        // currentStock + units sold since restock = what was added at restock
+        console.log(`📊 salesAfterRestock: ${salesAfterRestock}, currentStock: ${currentStock}`);
+
         const restockedQty = currentStock + salesAfterRestock;
 
         lastRestock = {
           date: latestRestockMove.insertedDate,
-          qty: restockedQty > 0 ? restockedQty : latestRestockMove.qty, // fallback to raw if something's off
+          qty: restockedQty > 0 ? restockedQty : latestRestockMove.qty,
         };
       }
 
