@@ -1042,6 +1042,7 @@ export const getProductByBarcode = CatchAsyncError(
 );
 
 // Product History
+// Product History
 export const getProductHistory = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1096,85 +1097,92 @@ export const getProductHistory = CatchAsyncError(
       // ==========================
       // 3. Stock Moves
       // ==========================
-    const moves = await odooRequest(
-  "stock.move",
-  "search_read",
-  [
-    [
-      ["product_id", "in", variantIds],
-      ["state", "=", "done"],
-    ],
-  ],
-  {
-    fields: [
-      "id",
-      "date",
-      "create_date",
-      "write_date",
-      "location_id",
-      "location_dest_id",
-      "origin",
-      "reference",
-      "product_uom_qty",
-    ],
-    order: "create_date desc",
-    limit: 100,
-  }
-);
+      const moves = await odooRequest(
+        "stock.move",
+        "search_read",
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["state", "=", "done"],
+          ],
+        ],
+        {
+          fields: [
+            "id",
+            "date",
+            "create_date",
+            "write_date",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "product_uom_qty",
+          ],
+          order: "create_date desc",
+          limit: 100,
+        }
+      );
+
       const stockMoves: any[] = [];
 
       for (const m of moves) {
-        let qty = 0;
-
         const from = String(m.location_id?.[1] || "").toLowerCase();
         const to = String(m.location_dest_id?.[1] || "").toLowerCase();
-
-        const isInventoryAdjustment =
-          from.includes("inventory") || to.includes("inventory");
-
-        if (isInventoryAdjustment) {
-          // For inventory adjustments, qty_done on move lines is often 0.
-          // Use product_uom_qty from the move itself — it holds the adjusted quantity.
-          qty = Number(m.product_uom_qty || 0);
-        } else {
-          // For real moves (sales, transfers), use move lines
-          try {
-            const lines = await odooRequest(
-              "stock.move.line",
-              "search_read",
-              [[["move_id", "=", m.id]]],
-              { fields: ["qty_done"] }
-            );
-
-            qty = lines.reduce(
-              (sum: number, l: any) => sum + Number(l.qty_done || 0),
-              0
-            );
-          } catch (e: any) {
-            console.log("move line error:", e.message);
-          }
-
-          // fallback
-          if (!qty) {
-            qty = Number(m.product_uom_qty || 0);
-          }
-        }
-
         const reference = String(m.reference || m.origin || "").toLowerCase();
 
+        // ─── Determine move type ───────────────────────────────────────────
         let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
 
-        if (
+        if (reference.includes("pos") || reference.includes("sale")) {
+          type = "sale";
+        } else if (reference.includes("return")) {
+          type = "return";
+        } else if (
           reference.includes("inventory") ||
           reference.includes("quantity") ||
           from.includes("inventory") ||
           to.includes("inventory")
         ) {
           type = "restock";
-        } else if (reference.includes("pos") || reference.includes("sale")) {
-          type = "sale";
-        } else if (reference.includes("return")) {
-          type = "return";
+        }
+
+        // ─── "Confirmed" moves are zero-qty bookkeeping — skip them ────────
+        // Odoo emits these when stock is confirmed but not actually changed.
+        // They always have qty=0 on both the move and move lines.
+        const isConfirmation = reference.includes("confirmed");
+        if (isConfirmation) {
+          continue; // filter out noisy confirmed moves
+        }
+
+        // ─── Read qty from move lines for ALL move types ───────────────────
+        // This fixes the inventory-adjustment branch that was returning 0
+        // because it skipped move lines and relied on product_uom_qty instead.
+        let qty = 0;
+
+        try {
+          const lines = await odooRequest(
+            "stock.move.line",
+            "search_read",
+            [[["move_id", "=", m.id]]],
+            { fields: ["qty_done"] }
+          );
+
+          qty = lines.reduce(
+            (sum: number, l: any) => sum + Number(l.qty_done || 0),
+            0
+          );
+        } catch (e: any) {
+          console.log("move line error:", e.message);
+        }
+
+        // Fallback: use product_uom_qty if move lines gave nothing
+        if (!qty) {
+          qty = Number(m.product_uom_qty || 0);
+        }
+
+        // Skip moves that ended up with zero qty (nothing actually happened)
+        if (!qty && type !== "sale") {
+          continue;
         }
 
         stockMoves.push({
@@ -1233,8 +1241,19 @@ export const getProductHistory = CatchAsyncError(
       // ==========================
       // 5. Last Restock
       // ==========================
+      // Only consider "Updated" moves (not "Confirmed") with real qty > 0
+      // and where stock actually increased (from inventory adj → warehouse)
       const restocks = stockMoves
-        .filter((m) => m.type === "restock" && m.qty > 0)
+        .filter((m) => {
+          const ref = m.reference.toLowerCase();
+          const toLocation = m.to.toLowerCase();
+          return (
+            m.type === "restock" &&
+            m.qty > 0 &&
+            ref.includes("updated") &&          // must be an "Updated" move
+            !toLocation.includes("inventory")   // must be flowing INTO warehouse, not out
+          );
+        })
         .sort(
           (a, b) =>
             new Date(b.insertedDate).getTime() -
@@ -1246,6 +1265,7 @@ export const getProductHistory = CatchAsyncError(
       if (restocks.length) {
         const latest = restocks[0];
 
+        // Group moves that happened within 60 seconds of the latest (same batch)
         const sameBatch = restocks.filter(
           (x) =>
             Math.abs(
@@ -1264,7 +1284,7 @@ export const getProductHistory = CatchAsyncError(
         success: true,
         currentStock,
         lastRestock,
-        stockMoves,
+        stockMoves,   // already filtered: no "Confirmed" zero-qty noise
         salesHistory,
       });
     } catch (err: any) {
