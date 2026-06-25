@@ -1058,19 +1058,40 @@ export const getProductHistory = CatchAsyncError(
 
       const variantIds = variants.map((v: any) => v.id);
       if (!variantIds.length) {
-        return res.json({ success: true, stockMoves: [], salesHistory: [] });
+        return res.json({ success: true, stockMoves: [], salesHistory: [], lastRestock: null });
       }
 
-      // 2. Stock movements
+      // 2. Get CURRENT stock from stock.quant (source of truth)
+      const warehouses = await odooRequest(
+        "stock.warehouse",
+        "search_read",
+        [[]],
+        { fields: ["id", "lot_stock_id", "name"], limit: 1 }
+      );
+
+      let currentStock = 0;
+      if (warehouses.length && warehouses[0].lot_stock_id) {
+        const stockLocationId = warehouses[0].lot_stock_id[0];
+        const quants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [[
+            ["product_id", "in", variantIds],
+            ["location_id", "=", stockLocationId],
+          ]],
+          { fields: ["quantity"] }
+        );
+        currentStock = quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0);
+      }
+
+      // 3. Stock movements
       const moves = await odooRequest(
         "stock.move",
         "search_read",
-        [
-          [
-            ["product_id", "in", variantIds],
-            ["state", "=", "done"],
-          ],
-        ],
+        [[
+          ["product_id", "in", variantIds],
+          ["state", "=", "done"],
+        ]],
         {
           fields: [
             "date",
@@ -1119,7 +1140,7 @@ export const getProductHistory = CatchAsyncError(
         };
       });
 
-      // 3. POS sales history
+      // 4. POS sales history
       const posLines = await odooRequest(
         "pos.order.line",
         "search_read",
@@ -1154,13 +1175,17 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — use stock.quant for the current absolute qty,
-      //    then derive delta by comparing against sales since last restock move.
-      
-      const SESSION_WINDOW_MS = 30 * 1000; // 30 seconds — one "set stock" op = one move
+      // 5. Last restock — THE CORRECT APPROACH
+      //
+      // We can't trust move qty values because Odoo stores the absolute
+      // value it SET the stock to, not the delta.
+      //
+      // Formula: lastRestockQty = currentStock + salesSinceLastRestock
+      //
+      // "salesSinceLastRestock" = all sale moves that happened AFTER
+      // the most recent restock move's date.
 
-      // Only incoming moves with qty > 0 are real restocks
-      const incomingMoves = stockMoves
+      const restockMoves = stockMoves
         .filter((m: any) => m.type === "restock" && m.qty > 0)
         .sort(
           (a: any, b: any) =>
@@ -1169,39 +1194,25 @@ export const getProductHistory = CatchAsyncError(
 
       let lastRestock: { date: string; qty: number } | null = null;
 
-      if (incomingMoves.length > 0) {
-        const latestMove = incomingMoves[0];
-        const latestTime = new Date(latestMove.insertedDate).getTime();
+      if (restockMoves.length > 0) {
+        const latestRestockMove = restockMoves[0];
+        const latestRestockTime = new Date(latestRestockMove.insertedDate).getTime();
 
-        // Group moves that happened within 30s (same "set stock" operation)
-        const sessionMoves = incomingMoves.filter(
-          (m: any) =>
-            latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS
-        );
+        // Sum all sales (from stock moves) that happened AFTER the last restock
+        const salesAfterRestock = stockMoves
+          .filter(
+            (m: any) =>
+              m.type === "sale" &&
+              new Date(m.insertedDate).getTime() > latestRestockTime
+          )
+          .reduce((sum: number, m: any) => sum + m.qty, 0);
 
-        // Everything older than this session
-        const previousMoves = incomingMoves.filter(
-          (m: any) =>
-            new Date(m.insertedDate).getTime() < latestTime - SESSION_WINDOW_MS
-        );
-
-        // Latest session absolute qty (what Odoo set the stock to)
-        const latestAbsoluteQty = sessionMoves.reduce(
-          (sum: number, m: any) => sum + m.qty,
-          0
-        );
-
-        // Previous session absolute qty (what stock was before)
-        const previousAbsoluteQty =
-          previousMoves.length > 0 ? previousMoves[0].qty : 0;
-
-        // Delta = how many units were actually added
-        const delta = latestAbsoluteQty - previousAbsoluteQty;
+        // currentStock + units sold since restock = what was added at restock
+        const restockedQty = currentStock + salesAfterRestock;
 
         lastRestock = {
-          date: latestMove.insertedDate,
-          // If delta > 0 use it; if not (e.g. first ever stock or data gap) fall back to raw qty
-          qty: delta > 0 ? delta : latestAbsoluteQty,
+          date: latestRestockMove.insertedDate,
+          qty: restockedQty > 0 ? restockedQty : latestRestockMove.qty, // fallback to raw if something's off
         };
       }
 
