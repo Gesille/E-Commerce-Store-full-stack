@@ -1096,7 +1096,10 @@ export const getProductHistory = CatchAsyncError(
       // ==========================
       // 3. Stock Moves
       // ==========================
-    const moves = await odooRequest(
+// ==========================
+// 3. Stock Moves
+// ==========================
+const moves = await odooRequest(
   "stock.move",
   "search_read",
   [
@@ -1121,7 +1124,8 @@ export const getProductHistory = CatchAsyncError(
     limit: 100,
   }
 );
-  const stockMoves: any[] = [];
+
+const stockMoves: any[] = [];
 
 for (const m of moves) {
   let qty = 0;
@@ -1134,42 +1138,52 @@ for (const m of moves) {
     from.includes("inventory") || to.includes("inventory");
 
   if (isInventoryAdjustment) {
+    // First try product_uom_qty (works for "Updated" moves)
     qty = Number(m.product_uom_qty || 0);
 
-    // ─── KEY FIX ───────────────────────────────────────────────────────
-    // "Product Quantity Confirmed" moves are Odoo's internal bookkeeping
-    // when action_apply_inventory finds no difference (or a decrease).
-    // They always have qty = 0 and carry no useful info — skip them.
-    if (
-      qty === 0 &&
-      (reference.includes("confirmed") || reference.includes("quantity confirmed"))
-    ) {
-      continue;
-    }
-
-    // If qty is still 0 after reading product_uom_qty, try reading
-    // the quant directly to get the absolute stock at that moment.
+    // If still 0 (e.g. "Confirmed" moves), try move lines with BOTH qty_done and quantity fields
     if (qty === 0) {
       try {
-        const quantSnapshot = await odooRequest(
-          "stock.quant",
+        const lines = await odooRequest(
+          "stock.move.line",
           "search_read",
-          [
-            [
-              ["product_id", "in", variantIds],
-              ["location_id.usage", "=", "internal"],
-            ],
-          ],
-          { fields: ["quantity"], limit: 1 }
+          [[["move_id", "=", m.id]]],
+          { fields: ["qty_done", "quantity", "reserved_qty"] }
         );
-        qty = quantSnapshot.reduce(
-          (sum: number, q: any) => sum + Number(q.quantity || 0),
-          0
-        );
+
+        // Try qty_done first, then quantity (Odoo 17+), then reserved_qty
+        qty = lines.reduce((sum: number, l: any) => {
+          const val =
+            Number(l.qty_done || 0) ||
+            Number(l.quantity || 0) ||
+            Number(l.reserved_qty || 0);
+          return sum + val;
+        }, 0);
       } catch (e: any) {
-        console.log("quant snapshot error:", e.message);
+        console.log("move line error:", e.message);
       }
     }
+
+    // Last resort: query stock.move directly for the SVL (stock valuation layer)
+    if (qty === 0) {
+      try {
+        const svl = await odooRequest(
+          "stock.valuation.layer",
+          "search_read",
+          [[["stock_move_id", "=", m.id]]],
+          { fields: ["quantity"] }
+        );
+        qty = Math.abs(
+          svl.reduce((sum: number, s: any) => sum + Number(s.quantity || 0), 0)
+        );
+      } catch (e: any) {
+        console.log("SVL error:", e.message);
+      }
+    }
+
+    // Skip if we truly cannot find a qty
+    if (qty === 0) continue;
+
   } else {
     // For real moves (sales, transfers), use move lines
     try {
@@ -1177,25 +1191,22 @@ for (const m of moves) {
         "stock.move.line",
         "search_read",
         [[["move_id", "=", m.id]]],
-        { fields: ["qty_done"] }
+        { fields: ["qty_done", "quantity"] }
       );
 
-      qty = lines.reduce(
-        (sum: number, l: any) => sum + Number(l.qty_done || 0),
-        0
-      );
+      qty = lines.reduce((sum: number, l: any) => {
+        return sum + (Number(l.qty_done || 0) || Number(l.quantity || 0));
+      }, 0);
     } catch (e: any) {
       console.log("move line error:", e.message);
     }
 
-    // fallback
     if (!qty) {
       qty = Number(m.product_uom_qty || 0);
     }
-  }
 
-  // Skip entirely if qty is still 0 — nothing useful to show
-  if (qty === 0) continue;
+    if (qty === 0) continue;
+  }
 
   let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
 
