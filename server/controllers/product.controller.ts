@@ -1043,8 +1043,8 @@ export const getProductHistory = CatchAsyncError(
         {
           fields: [
             "date",
-            "create_date",   // when record was inserted
-            "write_date",    // when record was last modified
+            "create_date",
+            "write_date",
             "product_qty",
             "location_id",
             "location_dest_id",
@@ -1070,7 +1070,6 @@ export const getProductHistory = CatchAsyncError(
         } else if (ref.includes("wh/in") || ref.includes("receipt")) {
           type = "restock";
         } else if (
-          // Inventory adjustment flowing INTO a warehouse = restock
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
@@ -1078,9 +1077,9 @@ export const getProductHistory = CatchAsyncError(
         }
 
         return {
-          movementDate: m.date,        // physical move date
-          insertedDate: m.create_date, // when it was recorded
-          lastModified: m.write_date,  // when it was last changed
+          movementDate: m.date,
+          insertedDate: m.create_date,
+          lastModified: m.write_date,
           qty: m.product_qty,
           type,
           reference: m.reference || m.origin || "—",
@@ -1124,14 +1123,36 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock summary
-      const lastRestock = stockMoves.find((m:any) => m.type === "restock") ?? null;
+      // 4. Last restock — group moves within 5 min window into one session
+      const restockMoves = stockMoves
+        .filter((m:any) => m.type === "restock")
+        .sort(
+          (a:any, b:any) =>
+            new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime()
+        );
+
+      let lastRestock: { date: string; qty: number } | null = null;
+
+      if (restockMoves.length > 0) {
+        const latestDate = new Date(restockMoves[0].insertedDate).getTime();
+        const SESSION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+        const sessionMoves = restockMoves.filter((m:any) => {
+          const diff = latestDate - new Date(m.insertedDate).getTime();
+          return diff <= SESSION_WINDOW_MS;
+        });
+
+        const totalQty = sessionMoves.reduce((sum:any, m:any) => sum + m.qty, 0);
+
+        lastRestock = {
+          date: restockMoves[0].insertedDate,
+          qty: totalQty,
+        };
+      }
 
       return res.json({
         success: true,
-        lastRestock: lastRestock
-          ? { date: lastRestock.insertedDate, qty: lastRestock.qty }
-          : null,
+        lastRestock,
         stockMoves,
         salesHistory,
       });
