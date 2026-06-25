@@ -1104,10 +1104,10 @@ export const getProductHistory = CatchAsyncError(
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
-          // FROM inventory adjustment INTO stock/warehouse = real restock
+          // Only FROM inventory adjustment INTO stock/warehouse = real restock
+          // The reverse (stock → inventory adjustment) stays as "adjustment"
           type = "restock";
         }
-        // stock → inventory adjustment falls through as "adjustment" (Odoo correction move)
 
         return {
           movementDate: m.date,
@@ -1156,7 +1156,8 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — group by reference instead of time window
+      // 4. Last restock — group by reference + 2-hour session window
+      // This prevents summing ALL historical restocks that share the same reference text
       const restockMoves = stockMoves
         .filter((m: any) => m.type === "restock")
         .sort(
@@ -1167,17 +1168,23 @@ export const getProductHistory = CatchAsyncError(
       let lastRestock: { date: string; qty: number } | null = null;
 
       if (restockMoves.length > 0) {
-        const latestReference = restockMoves[0].reference;
+        const latestMove = restockMoves[0];
+        const latestTime = new Date(latestMove.insertedDate).getTime();
+        const latestRef = latestMove.reference;
+        const SESSION_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-        // Group all moves that share the same reference as the most recent restock
-        const sessionMoves = restockMoves.filter(
-          (m: any) => m.reference === latestReference
-        );
+        // Same reference AND within 2 hours of the most recent restock move
+        const sessionMoves = restockMoves.filter((m: any) => {
+          const sameRef = m.reference === latestRef;
+          const withinWindow =
+            latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
+          return sameRef && withinWindow;
+        });
 
         const totalQty = sessionMoves.reduce((sum: any, m: any) => sum + m.qty, 0);
 
         lastRestock = {
-          date: restockMoves[0].insertedDate,
+          date: latestMove.insertedDate,
           qty: totalQty,
         };
       }
