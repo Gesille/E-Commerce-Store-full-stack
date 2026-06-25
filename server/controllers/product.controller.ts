@@ -1104,10 +1104,8 @@ export const getProductHistory = CatchAsyncError(
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
-          // Inventory adjustment → stock/warehouse = stock increase (restock)
           type = "restock";
         }
-        // Note: stock/warehouse → inventory adjustment stays as "adjustment" (the outgoing pair)
 
         return {
           movementDate: m.date,
@@ -1156,11 +1154,13 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — find the most recent session where stock was actually added (qty > 0)
-      // Group moves within a 30-minute window of the latest restock move and sum their qty.
-      const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+      // 4. Last restock — use stock.quant for the current absolute qty,
+      //    then derive delta by comparing against sales since last restock move.
+      
+      const SESSION_WINDOW_MS = 30 * 1000; // 30 seconds — one "set stock" op = one move
 
-      const restockMoves = stockMoves
+      // Only incoming moves with qty > 0 are real restocks
+      const incomingMoves = stockMoves
         .filter((m: any) => m.type === "restock" && m.qty > 0)
         .sort(
           (a: any, b: any) =>
@@ -1169,20 +1169,39 @@ export const getProductHistory = CatchAsyncError(
 
       let lastRestock: { date: string; qty: number } | null = null;
 
-      if (restockMoves.length > 0) {
-        const latestMove = restockMoves[0];
+      if (incomingMoves.length > 0) {
+        const latestMove = incomingMoves[0];
         const latestTime = new Date(latestMove.insertedDate).getTime();
 
-        // Group all restock moves within 30 minutes of the latest one (regardless of location)
-        const sessionMoves = restockMoves.filter((m: any) => {
-          return latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
-        });
+        // Group moves that happened within 30s (same "set stock" operation)
+        const sessionMoves = incomingMoves.filter(
+          (m: any) =>
+            latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS
+        );
 
-        const totalQty = sessionMoves.reduce((sum: number, m: any) => sum + m.qty, 0);
+        // Everything older than this session
+        const previousMoves = incomingMoves.filter(
+          (m: any) =>
+            new Date(m.insertedDate).getTime() < latestTime - SESSION_WINDOW_MS
+        );
+
+        // Latest session absolute qty (what Odoo set the stock to)
+        const latestAbsoluteQty = sessionMoves.reduce(
+          (sum: number, m: any) => sum + m.qty,
+          0
+        );
+
+        // Previous session absolute qty (what stock was before)
+        const previousAbsoluteQty =
+          previousMoves.length > 0 ? previousMoves[0].qty : 0;
+
+        // Delta = how many units were actually added
+        const delta = latestAbsoluteQty - previousAbsoluteQty;
 
         lastRestock = {
           date: latestMove.insertedDate,
-          qty: totalQty,
+          // If delta > 0 use it; if not (e.g. first ever stock or data gap) fall back to raw qty
+          qty: delta > 0 ? delta : latestAbsoluteQty,
         };
       }
 
