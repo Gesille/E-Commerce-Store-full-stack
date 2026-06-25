@@ -1099,32 +1099,31 @@ export const getProductHistory = CatchAsyncError(
       // 3. Stock moves
       // ==========================
       const moves = await odooRequest(
-        "stock.move",
-        "search_read",
-        [
-          [
-            ["product_id", "in", variantIds],
-            ["state", "=", "done"],
-          ],
-        ],
-        {
-          fields: [
-            "id",
-            "date",
-            "create_date",
-            "write_date",
-            "location_id",
-            "location_dest_id",
-            "origin",
-            "reference",
-            "move_line_ids",
-            "product_uom_qty",
-            "quantity_done",
-          ],
-          order: "create_date desc",
-          limit: 50,
-        }
-      );
+  "stock.move",
+  "search_read",
+  [
+    [
+      ["product_id", "in", variantIds],
+      ["state", "=", "done"],
+    ],
+  ],
+  {
+    fields: [
+      "id",
+      "date",
+      "create_date",
+      "write_date",
+      "location_id",
+      "location_dest_id",
+      "origin",
+      "reference",
+      "move_line_ids",
+      "product_uom_qty", // ✅ correct
+    ],
+    order: "create_date desc",
+    limit: 50,
+  }
+);
 
       const stockMoves = [];
 
