@@ -163,34 +163,20 @@ getOdooLocations: builder.query<{ id: number; name: string; complete_name: strin
 }),
 getProductHistory: builder.query<
   {
-    lastRestock: { 
-      date:string; 
-      qty:number 
-    } | null;
-
-    stockMoves:{
-      movementDate:string;
-      insertedDate:string;
-      lastModified:string;
-
-      qty:number;
-
-      type:
-        | "restock"
-        | "sale"
-        | "return"
-        | "adjustment";
-
-      reference:string;
-      from:string;
-      to:string;
+    lastRestock: { date: string; qty: number } | null;
+    stockMoves: {
+      date: string;
+      qty: number;
+      type: "restock" | "sale" | "return" | "adjustment";
+      reference: string;
+      from: string;
+      to: string;
     }[];
-
-    salesHistory:{
-      date:string;
-      orderId:string;
-      qty:number;
-      total:number;
+    salesHistory: {
+      date: string;
+      orderId: string;
+      qty: number;
+      total: number;
     }[];
   },
   string | number
@@ -224,6 +210,5 @@ export const {
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
   useGetOdooLocationsQuery,
-  useLazyGetProductHistoryQuery,
-  useGetLastRestockBatchQuery
+  useLazyGetProductHistoryQuery
 } = productApi;
