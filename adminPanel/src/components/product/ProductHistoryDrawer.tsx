@@ -32,7 +32,11 @@ type StockMove = {
   type: MovementType;
   reference: string;
   qty: number;
-  date: string;
+
+  movementDate: string;
+  insertedDate: string;
+  lastModified: string;
+
   from: string;
   to: string;
 };
@@ -186,7 +190,7 @@ export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
                               </span>
                             </div>
                             <p className="text-[10px] text-muted-foreground mt-0.5">
-                             {fmt(m.date)}
+                             {fmt(m.movementDate)}
                             </p>
                             <p className="text-[10px] text-muted-foreground truncate">
                               {m.from} → {m.to}
