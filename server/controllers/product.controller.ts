@@ -1007,3 +1007,125 @@ export const getProductByBarcode = CatchAsyncError(
     res.status(200).json({ success: true, product: product[0] });
   },
 );
+
+
+
+// Product History
+export const getProductHistory = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const templateId = Number(req.params.id);
+      if (!templateId) return next(new ErrorHandler("Invalid product id", 400));
+
+      // 1. Get all variants for this template
+      const variants = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["product_tmpl_id", "=", templateId]]],
+        { fields: ["id"] }
+      );
+
+      const variantIds = variants.map((v: any) => v.id);
+      if (!variantIds.length) {
+        return res.json({ success: true, stockMoves: [], salesHistory: [] });
+      }
+
+      // 2. Stock movements (incoming = restocks, outgoing = sales/adjustments)
+      const moves = await odooRequest(
+        "stock.move",
+        "search_read",
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["state", "=", "done"],
+          ],
+        ],
+        {
+          fields: [
+            "date",
+            "product_qty",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "picking_type_id",
+          ],
+          order: "date desc",
+          limit: 50,
+        }
+      );
+
+      const stockMoves = moves.map((m: any) => {
+        const destUsage = m.location_dest_id?.[1] ?? "";
+        const srcUsage = m.location_id?.[1] ?? "";
+
+        // Determine direction
+        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+        const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
+
+        if (ref.includes("pos/") || ref.includes("sale")) type = "sale";
+        else if (ref.includes("return") || ref.includes("ret/")) type = "return";
+        else if (ref.includes("wh/in") || ref.includes("receipt")) type = "restock";
+
+        return {
+          date: m.date,
+          qty: m.product_qty,
+          type,
+          reference: m.reference || m.origin || "—",
+          from: m.location_id?.[1] ?? "—",
+          to: m.location_dest_id?.[1] ?? "—",
+        };
+      });
+
+      // 3. POS sales history
+      const posLines = await odooRequest(
+        "pos.order.line",
+        "search_read",
+        [[["product_id", "in", variantIds]]],
+        {
+          fields: ["qty", "price_subtotal", "order_id", "create_date"],
+          order: "create_date desc",
+          limit: 50,
+        }
+      );
+
+      // Get order dates for those orders
+      const orderIds = [...new Set(posLines.map((l: any) => l.order_id[0]))];
+      const orders =
+        orderIds.length > 0
+          ? await odooRequest(
+              "pos.order",
+              "search_read",
+              [[["id", "in", orderIds]]],
+              { fields: ["id", "name", "date_order"] }
+            )
+          : [];
+
+      const orderMap: Record<number, { name: string; date: string }> = {};
+      for (const o of orders) {
+        orderMap[o.id] = { name: o.name, date: o.date_order };
+      }
+
+      const salesHistory = posLines.map((l: any) => ({
+        date: orderMap[l.order_id[0]]?.date ?? l.create_date,
+        orderId: orderMap[l.order_id[0]]?.name ?? `#${l.order_id[0]}`,
+        qty: l.qty,
+        total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
+      }));
+
+      // 4. Last restock summary for the table column
+      const lastRestock = stockMoves.find((m:any) => m.type === "restock") ?? null;
+
+      return res.json({
+        success: true,
+        lastRestock: lastRestock
+          ? { date: lastRestock.date, qty: lastRestock.qty }
+          : null,
+        stockMoves,
+        salesHistory,
+      });
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 500));
+    }
+  }
+);
