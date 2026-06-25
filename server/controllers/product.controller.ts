@@ -1104,10 +1104,10 @@ export const getProductHistory = CatchAsyncError(
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
-          // Only FROM inventory adjustment INTO stock/warehouse = real restock
-          // The reverse (stock → inventory adjustment) stays as "adjustment"
+          // Inventory adjustment → stock/warehouse = stock increase (restock)
           type = "restock";
         }
+        // Note: stock/warehouse → inventory adjustment stays as "adjustment" (the outgoing pair)
 
         return {
           movementDate: m.date,
@@ -1156,11 +1156,19 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — group by reference + same destination + 30-min window
-      // Triple condition prevents lumping separate edit sessions together:
-      // - same reference text (same operation type)
-      // - same destination location (same warehouse target)
-      // - within 30 minutes of the most recent restock move
+      // 4. Last restock — net delta calculation
+      //
+      // When Odoo adjusts stock (e.g. 36 → 40), it creates TWO moves with the same reference:
+      //   - "adjustment": warehouse → inventory adjustment (old qty going out, e.g. 36)
+      //   - "restock":    inventory adjustment → warehouse (new qty coming in, e.g. 40)
+      //
+      // To get the real change (+4), we compute:
+      //   net = sum(restock qty) - sum(paired adjustment qty)
+      // grouped by reference + destination + 30-minute window.
+
+      const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+
+      // Sort all restock moves newest first
       const restockMoves = stockMoves
         .filter((m: any) => m.type === "restock")
         .sort(
@@ -1175,9 +1183,9 @@ export const getProductHistory = CatchAsyncError(
         const latestTime = new Date(latestMove.insertedDate).getTime();
         const latestRef = latestMove.reference;
         const latestDest = latestMove.to;
-        const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
-        const sessionMoves = restockMoves.filter((m: any) => {
+        // All restock moves in this session (same ref + same dest + within 30 min)
+        const sessionRestocks = restockMoves.filter((m: any) => {
           const sameRef = m.reference === latestRef;
           const sameDest = m.to === latestDest;
           const withinWindow =
@@ -1185,11 +1193,28 @@ export const getProductHistory = CatchAsyncError(
           return sameRef && sameDest && withinWindow;
         });
 
-        const totalQty = sessionMoves.reduce((sum: any, m: any) => sum + m.qty, 0);
+        // Find the paired "adjustment" (outgoing) moves for this same session:
+        // same reference, same time window, direction is warehouse → inventory adjustment
+        const sessionAdjustmentsOut = stockMoves.filter((m: any) => {
+          if (m.type !== "adjustment") return false;
+          const sameRef = m.reference === latestRef;
+          const withinWindow =
+            latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
+          // The "from" should match the destination of the restock (same warehouse)
+          const pairedLocation = m.from === latestDest;
+          return sameRef && withinWindow && pairedLocation;
+        });
+
+        const totalIn = sessionRestocks.reduce((sum: number, m: any) => sum + m.qty, 0);
+        const totalOut = sessionAdjustmentsOut.reduce((sum: number, m: any) => sum + m.qty, 0);
+
+        // Net delta: how many units were actually added
+        // If Odoo recorded a "confirmed" zero-change move, net will be 0 — skip it
+        const netQty = totalIn - totalOut;
 
         lastRestock = {
           date: latestMove.insertedDate,
-          qty: totalQty,
+          qty: netQty > 0 ? netQty : totalIn, // fallback to raw total if net is negative/zero (e.g. WH/IN receipts with no out pair)
         };
       }
 
