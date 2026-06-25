@@ -1114,202 +1114,100 @@ export const getProductHistory = CatchAsyncError(
           ],
         ],
         {
-        fields: [
-  "date",
-  "create_date",
-  "write_date",
-  "location_id",
-  "location_dest_id",
-  "origin",
-  "reference",
-  "move_line_ids",
-  "product_uom_qty",
-],
+          fields: [
+            "date",
+            "create_date",
+            "write_date",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "move_line_ids",
+            "product_uom_qty",
+          ],
           order: "create_date desc",
           limit: 50,
         },
       );
 
-  const stockMoves = await Promise.all(
-  moves.map(async (m: any) => {
+      const stockMoves = await Promise.all(
+        moves.map(async (m: any) => {
+          let qty = 0;
 
-    let qty = 0;
+          try {
+            if (m.move_line_ids?.length) {
+              const lines = await odooRequest(
+                "stock.move.line",
+                "search_read",
+                [[["id", "in", m.move_line_ids]]],
+                {
+                  fields: ["qty_done", "quantity"],
+                },
+              );
 
+              qty = lines.reduce(
+                (sum: number, l: any) =>
+                  sum + Number(l.qty_done ?? l.quantity ?? 0),
+                0,
+              );
+            }
+          } catch (e) {
+            console.log("move line error", e);
+          }
 
-    try {
+          // fallback for inventory adjustments
+          if (qty === 0 && m.product_uom_qty) {
+            qty = Number(m.product_uom_qty);
+          }
 
-      if (m.move_line_ids?.length) {
+          const reference = String(m.reference || m.origin || "");
 
+          const ref = reference.toLowerCase();
 
-        const lines = await odooRequest(
-          "stock.move.line",
-          "search_read",
-          [
-            [
-              ["id", "in", m.move_line_ids]
-            ]
-          ],
-          {
-            fields: [
-              "qty_done",
-              "quantity",
-              "product_uom_qty"
-            ],
-          },
-        );
+          const from = String(m.location_id?.[1] || "").toLowerCase();
 
+          const to = String(m.location_dest_id?.[1] || "").toLowerCase();
 
-        qty = lines.reduce(
-          (sum:number, l:any)=>
-            sum +
-            Number(
-              l.qty_done ??
-              l.quantity ??
-              l.product_uom_qty ??
-              0
-            ),
-          0
-        );
+          let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
 
-      }
+          // Inventory adjustment
+          if (
+            ref.includes("quantity") ||
+            ref.includes("inventory") ||
+            to.includes("inventory")
+          ) {
+            type = "restock";
+          }
 
+          // POS
+          else if (ref.includes("pos") || ref.includes("sale")) {
+            type = "sale";
+          }
 
-    } catch(e){
+          // return
+          else if (ref.includes("return")) {
+            type = "return";
+          }
 
-      console.log(
-        "move line error",
-        e
+          return {
+            movementDate: m.date,
+
+            insertedDate: m.create_date,
+
+            lastModified: m.write_date,
+
+            qty,
+
+            type,
+
+            reference: m.reference || m.origin || "—",
+
+            from: m.location_id?.[1] || "—",
+
+            to: m.location_dest_id?.[1] || "—",
+          };
+        }),
       );
-
-    }
-
-
-
-    // fallback for inventory adjustments
-    if(
-      qty === 0 &&
-      m.product_uom_qty
-    ){
-
-      qty = Number(
-        m.product_uom_qty
-      );
-
-    }
-
-
-
-    const reference =
-      String(
-        m.reference ||
-        m.origin ||
-        ""
-      );
-
-
-
-    const ref =
-      reference.toLowerCase();
-
-
-
-    const from =
-      String(
-        m.location_id?.[1] || ""
-      ).toLowerCase();
-
-
-
-    const to =
-      String(
-        m.location_dest_id?.[1] || ""
-      ).toLowerCase();
-
-
-
-
-    let type:
-      | "restock"
-      | "sale"
-      | "return"
-      | "adjustment"
-      =
-      "adjustment";
-
-
-
-
-    // Inventory adjustment
-    if(
-      ref.includes("quantity") ||
-      ref.includes("inventory") ||
-      to.includes("inventory")
-    ){
-
-      type="restock";
-
-    }
-
-
-    // POS
-    else if(
-      ref.includes("pos") ||
-      ref.includes("sale")
-    ){
-
-      type="sale";
-
-    }
-
-
-    // return
-    else if(
-      ref.includes("return")
-    ){
-
-      type="return";
-
-    }
-
-
-
-
-
-    return {
-
-      movementDate:m.date,
-
-      insertedDate:m.create_date,
-
-      lastModified:m.write_date,
-
-
-      qty,
-
-
-      type,
-
-
-      reference:
-        m.reference ||
-        m.origin ||
-        "—",
-
-
-      from:
-        m.location_id?.[1] ||
-        "—",
-
-
-      to:
-        m.location_dest_id?.[1] ||
-        "—"
-
-    };
-
-
-  })
-);
       // ==========================
       // 4. POS sales
       // ==========================
