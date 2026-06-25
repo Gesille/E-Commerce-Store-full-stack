@@ -161,7 +161,32 @@ getOdooLocations: builder.query<{ id: number; name: string; complete_name: strin
   }),
   transformResponse: (res: any) => res.locations,
 }),
-
+getProductHistory: builder.query<
+  {
+    lastRestock: { date: string; qty: number } | null;
+    stockMoves: {
+      date: string;
+      qty: number;
+      type: "restock" | "sale" | "return" | "adjustment";
+      reference: string;
+      from: string;
+      to: string;
+    }[];
+    salesHistory: {
+      date: string;
+      orderId: string;
+      qty: number;
+      total: number;
+    }[];
+  },
+  string | number
+>({
+  query: (id) => ({
+    url: `product/${id}/history`,
+    method: "GET",
+    credentials: "include" as const,
+  }),
+}),
   }),
 });
 
@@ -173,5 +198,6 @@ export const {
   useGetLowStockAlertsQuery,
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
-  useGetOdooLocationsQuery
+  useGetOdooLocationsQuery,
+  useLazyGetProductHistoryQuery
 } = productApi;

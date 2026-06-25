@@ -7,16 +7,18 @@ import { DataTable } from "./data-table";
 import { useGetAllProductsQuery } from "@/redux/product/productApi";
 import { UpdateProductModal } from "@/components/product/UpdateProductModal";
 import { DeleteProductModal } from "@/components/product/DeleteProductModal";
+import { ProductHistoryDrawer } from "@/components/product/ProductHistoryDrawer";
 
 const ProductsPage = () => {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
   const { data: products = [], isLoading, isError, refetch } = useGetAllProductsQuery();
- 
+ const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
   const columns = getColumns(
     (p) => setEditProduct(p),
-    (p) => setDeleteProduct(p)
+    (p) => setDeleteProduct(p),
+    (p) => setHistoryProduct(p)
   );
 
   if (isLoading) return <p className="p-4">Loading products...</p>;
@@ -42,6 +44,11 @@ const ProductsPage = () => {
         open={!!deleteProduct}
         onClose={() => setDeleteProduct(null)}
         onSuccess={refetch}
+      />
+      <ProductHistoryDrawer
+      product ={historyProduct}
+      open ={!!historyProduct}
+      onClose={() => setHistoryProduct(null)}
       />
     </div>
   );

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ColumnDef } from "@tanstack/react-table";
+import { format } from "date-fns";
 import { ArrowUpDown, MoreHorizontal } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -34,7 +35,8 @@ export type Product = {
 
 export const getColumns = (
   onEdit: (product: Product) => void,
-  onDelete: (product: Product) => void
+  onDelete: (product: Product) => void,
+  onHistory: (product: Product) => void
 ): ColumnDef<Product>[] => [
   {
     id: "select",
@@ -116,6 +118,23 @@ export const getColumns = (
     );
   },
 },
+{
+  accessorKey: "lastRestock",
+  header: "Last Restocked",
+  cell: ({ row }) => {
+    const v = row.original as any;
+    if (!v.lastRestock) return <span className="text-[11px] text-muted-foreground">—</span>;
+    return (
+      <div className="text-[11px] leading-tight">
+        <p className="text-foreground font-medium">+{v.lastRestock.qty} units</p>
+        <p className="text-muted-foreground">
+          {format(new Date(v.lastRestock.date), "MMM d, yyyy")}
+        </p>
+      </div>
+    );
+  },
+},
+ 
   {
     id: "actions",
     cell: ({ row }) => {
@@ -140,6 +159,9 @@ export const getColumns = (
             >
               Delete Product
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onHistory(product)}>
+  View History
+</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       );
