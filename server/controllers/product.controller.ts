@@ -1083,64 +1083,106 @@ export const getProductHistory = CatchAsyncError(
       console.log(`📦 quant breakdown:`, allQuants.map((q: any) => `${q.location_id?.[1]}: ${q.quantity}`));
 
       // 3. Stock movements
-      const moves = await odooRequest(
-        "stock.move",
+   const moves = await odooRequest(
+  "stock.move",
+  "search_read",
+  [[
+    ["product_id", "in", variantIds],
+    ["state", "=", "done"],
+  ]],
+  {
+    fields: [
+      "date",
+      "create_date",
+      "write_date",
+      "location_id",
+      "location_dest_id",
+      "origin",
+      "reference",
+      "move_line_ids",
+    ],
+    order: "create_date desc",
+    limit: 50,
+  }
+);
+const stockMoves = await Promise.all(
+  moves.map(async (m: any) => {
+
+    let qty = 0;
+
+    if (m.move_line_ids?.length) {
+      const lines = await odooRequest(
+        "stock.move.line",
         "search_read",
         [[
-          ["product_id", "in", variantIds],
-          ["state", "=", "done"],
+          ["id", "in", m.move_line_ids]
         ]],
         {
-          fields: [
-            "date",
-            "create_date",
-            "write_date",
-            "product_qty",
-            "location_id",
-            "location_dest_id",
-            "origin",
-            "reference",
-          ],
-          order: "create_date desc",
-          limit: 50,
+          fields: ["qty_done"]
         }
       );
 
-      const stockMoves = moves.map((m: any) => {
-        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-        const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
-        const from: string = (m.location_id?.[1] ?? "").toLowerCase();
-        const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
-// More precise type detection
-if (ref.includes("quantity confirmed")) {
-  type = "adjustment"; // confirmed = no change, can be hidden in UI
-} else if (ref.includes("quantity updated")) {
-  // Check direction to distinguish restock vs shrinkage
-  if (from.includes("inventory adjustment")) {
-    type = "restock";
-  } else {
-    type = "adjustment"; // stock was reduced via inventory
-  }
-} else if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
-  type = "sale";
-} else if (ref.includes("return") || ref.includes("ret/")) {
-  type = "return";
-} else if (ref.includes("wh/in") || ref.includes("receipt")) {
-  type = "restock";
-}
+      qty = lines.reduce(
+        (sum:number, l:any)=> sum + (l.qty_done || 0),
+        0
+      );
+    }
 
-        return {
-          movementDate: m.date,
-          insertedDate: m.create_date,
-          lastModified: m.write_date,
-          qty: m.product_qty,
-          type,
-          reference: m.reference || m.origin || "—",
-          from: m.location_id?.[1] ?? "—",
-          to: m.location_dest_id?.[1] ?? "—",
-        };
-      });
 
+    let type:
+      | "restock"
+      | "sale"
+      | "return"
+      | "adjustment" = "adjustment";
+
+
+    const ref =
+      (m.reference ?? m.origin ?? "").toLowerCase();
+
+    const from =
+      (m.location_id?.[1] ?? "").toLowerCase();
+
+    const to =
+      (m.location_dest_id?.[1] ?? "").toLowerCase();
+
+
+    if (
+      ref.includes("quantity updated") &&
+      from.includes("inventory adjustment")
+    ) {
+      type = "restock";
+    }
+    else if (
+      ref.includes("pos") ||
+      ref.includes("sale")
+    ) {
+      type = "sale";
+    }
+    else if (
+      ref.includes("return")
+    ) {
+      type = "return";
+    }
+    else {
+      type = "adjustment";
+    }
+
+
+    return {
+      movementDate: m.date,
+      insertedDate: m.create_date,
+      lastModified: m.write_date,
+
+      // now real quantity
+      qty,
+
+      type,
+      reference: m.reference || m.origin || "—",
+      from: m.location_id?.[1] ?? "—",
+      to: m.location_dest_id?.[1] ?? "—",
+    };
+  })
+);
       // 4. POS sales history
       const posLines = await odooRequest(
         "pos.order.line",
@@ -1185,7 +1227,14 @@ if (ref.includes("quantity confirmed")) {
       //    count the ones that actually appear after the last restock.
 
       const restockMoves = stockMoves
-        .filter((m: any) => m.type === "restock" && m.qty > 0)
+       .filter(
+ (m:any)=>
+  m.qty > 0 &&
+  (
+    m.type==="restock" ||
+    m.reference.toLowerCase().includes("quantity updated")
+  )
+)
         .sort(
           (a: any, b: any) =>
             new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime()
