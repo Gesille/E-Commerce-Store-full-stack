@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getColumns, Product } from "./columns";
 import { DataTable } from "./data-table";
-import { useGetAllProductsQuery } from "@/redux/product/productApi";
+import { useGetAllProductsQuery, useGetLastRestockBatchQuery } from "@/redux/product/productApi";
 import { UpdateProductModal } from "@/components/product/UpdateProductModal";
 import { DeleteProductModal } from "@/components/product/DeleteProductModal";
 import { ProductHistoryDrawer } from "@/components/product/ProductHistoryDrawer";
@@ -15,22 +15,13 @@ const ProductsPage = () => {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
-  const [restockMap, setRestockMap] = useState<RestockMap>({});
+
 
   const { data: rawProducts = [], isLoading, isError, refetch } =
     useGetAllProductsQuery();
 
-  // Fetch batch restock data once on mount (and after refetch)
-  useEffect(() => {
-    if (!rawProducts.length) return;
-    fetch("/api/products/last-restock-batch")
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.success) setRestockMap(json.data);
-      })
-      .catch(() => {/* silently ignore */});
-  }, [rawProducts.length]);
-
+ 
+const { data: restockMap = {} } = useGetLastRestockBatchQuery();
   // Merge lastRestock into each product
   const products: Product[] = rawProducts.map((p: any) => ({
     ...p,

@@ -1267,7 +1267,13 @@ export const getLastRestockBatch = CatchAsyncError(
           ["location_dest_id.usage", "=", "internal"],      // to stock
         ]],
         {
-          fields: ["product_id", "product_qty", "create_date", "reference"],
+         fields: [
+  "product_id",
+  "product_qty",
+  "quantity_done",
+  "create_date",
+  "reference"
+],
           order: "create_date desc",
         }
       );
@@ -1284,7 +1290,10 @@ export const getLastRestockBatch = CatchAsyncError(
         if (!templateId) continue;
  
         if (!byTemplate[templateId]) byTemplate[templateId] = [];
-        byTemplate[templateId].push({ qty: m.product_qty, date: m.create_date });
+       byTemplate[templateId].push({
+  qty: m.quantity_done || m.product_qty || 0,
+  date: m.create_date,
+});
       }
  
       // 5. For each template, resolve the latest session qty
