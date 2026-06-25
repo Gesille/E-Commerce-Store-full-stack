@@ -1053,12 +1053,17 @@ export const getProductHistory = CatchAsyncError(
         "product.product",
         "search_read",
         [[["product_tmpl_id", "=", templateId]]],
-        { fields: ["id"] }
+        { fields: ["id"] },
       );
 
       const variantIds = variants.map((v: any) => v.id);
       if (!variantIds.length) {
-        return res.json({ success: true, stockMoves: [], salesHistory: [], lastRestock: null });
+        return res.json({
+          success: true,
+          stockMoves: [],
+          salesHistory: [],
+          lastRestock: null,
+        });
       }
 
       // 2. Get CURRENT stock across ALL internal locations (source of truth)
@@ -1067,122 +1072,114 @@ export const getProductHistory = CatchAsyncError(
       const allQuants = await odooRequest(
         "stock.quant",
         "search_read",
-        [[
-          ["product_id", "in", variantIds],
-          ["location_id.usage", "=", "internal"],
-        ]],
-        { fields: ["quantity", "location_id"] }
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["location_id.usage", "=", "internal"],
+          ],
+        ],
+        { fields: ["quantity", "location_id"] },
       );
 
       const currentStock = allQuants.reduce(
         (sum: number, q: any) => sum + (q.quantity || 0),
-        0
+        0,
       );
 
-      console.log(`📦 currentStock across all internal locations: ${currentStock}`);
-      console.log(`📦 quant breakdown:`, allQuants.map((q: any) => `${q.location_id?.[1]}: ${q.quantity}`));
+      console.log(
+        `📦 currentStock across all internal locations: ${currentStock}`,
+      );
+      console.log(
+        `📦 quant breakdown:`,
+        allQuants.map((q: any) => `${q.location_id?.[1]}: ${q.quantity}`),
+      );
 
       // 3. Stock movements
-   const moves = await odooRequest(
-  "stock.move",
+      const moves = await odooRequest(
+        "stock.move",
+        "search_read",
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["state", "=", "done"],
+          ],
+        ],
+        {
+          fields: [
+            "date",
+            "create_date",
+            "write_date",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "move_line_ids",
+          ],
+          order: "create_date desc",
+          limit: 50,
+        },
+      );
+      const stockMoves = await Promise.all(
+        moves.map(async (m: any) => {
+          let qty = 0;
+
+          if (m.move_line_ids?.length) {
+            const lines = await odooRequest(
+  "stock.move.line",
   "search_read",
-  [[
-    ["product_id", "in", variantIds],
-    ["state", "=", "done"],
-  ]],
+  [
+    [
+      ["id", "in", m.move_line_ids]
+    ]
+  ],
   {
-    fields: [
-      "date",
-      "create_date",
-      "write_date",
-      "location_id",
-      "location_dest_id",
-      "origin",
-      "reference",
-      "move_line_ids",
-    ],
-    order: "create_date desc",
-    limit: 50,
+ fields: ["qty_done", "quantity"]
   }
 );
-const stockMoves = await Promise.all(
-  moves.map(async (m: any) => {
 
-    let qty = 0;
-
-    if (m.move_line_ids?.length) {
-      const lines = await odooRequest(
-        "stock.move.line",
-        "search_read",
-        [[
-          ["id", "in", m.move_line_ids]
-        ]],
-        {
-          fields: ["qty_done"]
-        }
-      );
-
-      qty = lines.reduce(
-        (sum:number, l:any)=> sum + (l.qty_done || 0),
-        0
-      );
-    }
-
-
-    let type:
-      | "restock"
-      | "sale"
-      | "return"
-      | "adjustment" = "adjustment";
-
-
-    const ref =
-      (m.reference ?? m.origin ?? "").toLowerCase();
-
-    const from =
-      (m.location_id?.[1] ?? "").toLowerCase();
-
-    const to =
-      (m.location_dest_id?.[1] ?? "").toLowerCase();
-
-
-    if (
-      ref.includes("quantity updated") &&
-      from.includes("inventory adjustment")
-    ) {
-      type = "restock";
-    }
-    else if (
-      ref.includes("pos") ||
-      ref.includes("sale")
-    ) {
-      type = "sale";
-    }
-    else if (
-      ref.includes("return")
-    ) {
-      type = "return";
-    }
-    else {
-      type = "adjustment";
-    }
-
-
-    return {
-      movementDate: m.date,
-      insertedDate: m.create_date,
-      lastModified: m.write_date,
-
-      // now real quantity
-      qty,
-
-      type,
-      reference: m.reference || m.origin || "—",
-      from: m.location_id?.[1] ?? "—",
-      to: m.location_dest_id?.[1] ?? "—",
-    };
-  })
+           qty = lines.reduce(
+  (sum:number, l:any)=> 
+    sum + Number(l.qty_done || l.quantity || 0),
+  0
 );
+          }
+
+          let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+
+          const ref = (m.reference ?? m.origin ?? "").toLowerCase();
+
+          const from = (m.location_id?.[1] ?? "").toLowerCase();
+
+          const to = (m.location_dest_id?.[1] ?? "").toLowerCase();
+
+          if (
+            ref.includes("quantity updated") &&
+            from.includes("inventory adjustment")
+          ) {
+            type = "restock";
+          } else if (ref.includes("pos") || ref.includes("sale")) {
+            type = "sale";
+          } else if (ref.includes("return")) {
+            type = "return";
+          } else {
+            type = "adjustment";
+          }
+
+          return {
+            movementDate: m.date,
+            insertedDate: m.create_date,
+            lastModified: m.write_date,
+
+            // now real quantity
+            qty,
+
+            type,
+            reference: m.reference || m.origin || "—",
+            from: m.location_id?.[1] ?? "—",
+            to: m.location_dest_id?.[1] ?? "—",
+          };
+        }),
+      );
       // 4. POS sales history
       const posLines = await odooRequest(
         "pos.order.line",
@@ -1192,7 +1189,7 @@ const stockMoves = await Promise.all(
           fields: ["qty", "price_subtotal", "order_id", "create_date"],
           order: "create_date desc",
           limit: 50,
-        }
+        },
       );
 
       const orderIds = [...new Set(posLines.map((l: any) => l.order_id[0]))];
@@ -1202,7 +1199,7 @@ const stockMoves = await Promise.all(
               "pos.order",
               "search_read",
               [[["id", "in", orderIds]]],
-              { fields: ["id", "name", "date_order"] }
+              { fields: ["id", "name", "date_order"] },
             )
           : [];
 
@@ -1227,39 +1224,42 @@ const stockMoves = await Promise.all(
       //    count the ones that actually appear after the last restock.
 
       const restockMoves = stockMoves
-       .filter(
- (m:any)=>
-  m.qty > 0 &&
-  (
-    m.type==="restock" ||
-    m.reference.toLowerCase().includes("quantity updated")
-  )
-)
+        .filter(
+          (m: any) =>
+            m.qty > 0 &&
+            (m.type === "restock" ||
+              m.reference.toLowerCase().includes("quantity updated")),
+        )
         .sort(
           (a: any, b: any) =>
-            new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime()
+            new Date(b.insertedDate).getTime() -
+            new Date(a.insertedDate).getTime(),
         );
 
       let lastRestock: { date: string; qty: number } | null = null;
 
-     if (restockMoves.length > 0) {
-  const latestRestockMove = restockMoves[0];
-  const latestRestockTime = new Date(latestRestockMove.insertedDate).getTime();
+      if (restockMoves.length > 0) {
+        const latestRestockMove = restockMoves[0];
+        const latestRestockTime = new Date(
+          latestRestockMove.insertedDate,
+        ).getTime();
 
-  // Sum ALL restock moves within 60 seconds of the latest one (same session)
-  const SESSION_WINDOW_MS = 60 * 1000;
-  const sessionRestockQty = restockMoves
-    .filter(
-      (m: any) =>
-        Math.abs(new Date(m.insertedDate).getTime() - latestRestockTime) <= SESSION_WINDOW_MS
-    )
-    .reduce((sum: number, m: any) => sum + m.qty, 0);
+        // Sum ALL restock moves within 60 seconds of the latest one (same session)
+        const SESSION_WINDOW_MS = 60 * 1000;
+        const sessionRestockQty = restockMoves
+          .filter(
+            (m: any) =>
+              Math.abs(
+                new Date(m.insertedDate).getTime() - latestRestockTime,
+              ) <= SESSION_WINDOW_MS,
+          )
+          .reduce((sum: number, m: any) => sum + m.qty, 0);
 
-  lastRestock = {
-    date: latestRestockMove.insertedDate,
-    qty: sessionRestockQty,
-  };
-}
+        lastRestock = {
+          date: latestRestockMove.insertedDate,
+          qty: sessionRestockQty,
+        };
+      }
 
       return res.json({
         success: true,
@@ -1270,6 +1270,5 @@ const stockMoves = await Promise.all(
     } catch (err: any) {
       return next(new ErrorHandler(err.message, 500));
     }
-  }
+  },
 );
-
