@@ -199,10 +199,7 @@ const createAttributeLines = async (
   }
 };
 
-
-
 // ─── Landed Cost Utility ─────────────────────────────────────────────────────
-
 
 const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
 
@@ -248,7 +245,13 @@ function calcLandedCost(body: Record<string, any>) {
   const markup = Number(body.markup) || 1;
   const finalPriceXCD = landedCostXCD * markup;
 
-  return { buyPriceXCD, totalCostsXCD, landedCostXCD, finalPriceXCD, exchangeRate };
+  return {
+    buyPriceXCD,
+    totalCostsXCD,
+    landedCostXCD,
+    finalPriceXCD,
+    exchangeRate,
+  };
 }
 
 // ─── Controller ──────────────────────────────────────────────────────────────
@@ -296,8 +299,13 @@ export const createProduct = async (req: Request, res: Response) => {
       internalFees,
     } = req.body;
 
-    const { buyPriceXCD, totalCostsXCD, landedCostXCD, finalPriceXCD, exchangeRate } =
-      calcLandedCost(req.body);
+    const {
+      buyPriceXCD,
+      totalCostsXCD,
+      landedCostXCD,
+      finalPriceXCD,
+      exchangeRate,
+    } = calcLandedCost(req.body);
 
     let base64Image: string | null = null;
     if (image) base64Image = await toBase64(image);
@@ -337,7 +345,7 @@ export const createProduct = async (req: Request, res: Response) => {
             ["ref", "=", supplierId || ""],
           ],
         ],
-        { fields: ["id", "name", "ref"], limit: 1 }
+        { fields: ["id", "name", "ref"], limit: 1 },
       );
 
       if (suppliers.length > 0) {
@@ -377,7 +385,11 @@ export const createProduct = async (req: Request, res: Response) => {
           const id = await createAttributeValue(attributeId, val);
           valueIds.push(id);
         }
-        await createAttributeLines(createdProductTemplateId!, attributeId, valueIds);
+        await createAttributeLines(
+          createdProductTemplateId!,
+          attributeId,
+          valueIds,
+        );
       }
     }
 
@@ -386,7 +398,7 @@ export const createProduct = async (req: Request, res: Response) => {
       "product.product",
       "search_read",
       [[["product_tmpl_id", "=", createdProductTemplateId]]],
-      { fields: ["id"], limit: 1 }
+      { fields: ["id"], limit: 1 },
     );
 
     if (!variant || variant.length === 0)
@@ -403,8 +415,13 @@ export const createProduct = async (req: Request, res: Response) => {
       const warehouseResults = await odooRequest(
         "stock.location",
         "search_read",
-        [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
-        { fields: ["id", "name"], limit: 1 }
+        [
+          [
+            ["name", "=", warehouseName],
+            ["usage", "=", "internal"],
+          ],
+        ],
+        { fields: ["id", "name"], limit: 1 },
       );
 
       let warehouseLocationId: number;
@@ -427,7 +444,7 @@ export const createProduct = async (req: Request, res: Response) => {
             ["usage", "=", "internal"],
           ],
         ],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
 
       if (shelfResults.length) {
@@ -446,8 +463,13 @@ export const createProduct = async (req: Request, res: Response) => {
         const found = await odooRequest(
           "stock.location",
           "search_read",
-          [[["usage", "=", "internal"], ["name", "=", shelfName]]],
-          { fields: ["id"], limit: 1 }
+          [
+            [
+              ["usage", "=", "internal"],
+              ["name", "=", shelfName],
+            ],
+          ],
+          { fields: ["id"], limit: 1 },
         );
         if (found[0]) resolvedLocationId = found[0].id;
       }
@@ -457,7 +479,7 @@ export const createProduct = async (req: Request, res: Response) => {
           "stock.location",
           "search_read",
           [[["usage", "=", "internal"]]],
-          { fields: ["id", "name", "complete_name"], limit: 1 }
+          { fields: ["id", "name", "complete_name"], limit: 1 },
         );
         if (!fallback.length)
           throw new Error("No internal stock location found in Odoo.");
@@ -534,7 +556,6 @@ export const decreaseStock = async (productId: number, qty: number) => {
   ]);
 };
 
-
 // update product
 export const updateProduct = async (req: Request, res: Response) => {
   try {
@@ -607,107 +628,119 @@ export const updateProduct = async (req: Request, res: Response) => {
     // ✅ Track verified stock from Odoo
     let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
 
-// ✅ Update stock via stock.quant
-if (stock !== undefined && stock !== null) {
-
-  // 1. Get the variant(s) for this template
-  const variants = await odooRequest(
-    "product.product",
-    "search_read",
-    [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
-    { fields: ["id", "display_name"] }
-  );
-
-  if (!variants.length) {
-    throw new Error(`No active variant found for template ID ${id}`);
-  }
-
-  if (variants.length > 1) {
-    console.warn(
-      `⚠️ Template ${id} has ${variants.length} variants — updating ALL of them with stock=${stock}. ` +
-      `This is likely wrong if variants should have independent stock.`
-    );
-  }
-
-  // 2. Get the CORRECT stock location — the warehouse's actual stock location,
-  //    not just "any internal location" (which was the bug)
-  const warehouses = await odooRequest(
-    "stock.warehouse",
-    "search_read",
-    [[]],
-    { fields: ["id", "lot_stock_id", "name"], limit: 1 }
-  );
-
-  if (!warehouses.length || !warehouses[0].lot_stock_id) {
-    throw new Error("Could not resolve warehouse stock location in Odoo");
-  }
-
-  const stockLocationId = warehouses[0].lot_stock_id[0];
-  console.log(`📍 Using stock location: ${warehouses[0].lot_stock_id[1]} (id=${stockLocationId})`);
-
-  // 3. Apply stock to each variant at the correct location
-  for (const v of variants) {
-    const existingQuants = await odooRequest(
-      "stock.quant",
-      "search_read",
-      [
+    // ✅ Update stock via stock.quant
+    if (stock !== undefined && stock !== null) {
+      // 1. Get the variant(s) for this template
+      const variants = await odooRequest(
+        "product.product",
+        "search_read",
         [
-          ["product_id", "=", v.id],
-          ["location_id", "=", stockLocationId],
+          [
+            ["product_tmpl_id", "=", Number(id)],
+            ["active", "=", true],
+          ],
         ],
-      ],
-      { fields: ["id", "quantity"], limit: 1 }
-    );
-
-    let quantId: number;
-
-    if (existingQuants.length) {
-      quantId = existingQuants[0].id;
-      await odooRequest("stock.quant", "write", [
-        [quantId],
-        { inventory_quantity: Number(stock),quantity: Number(stock) },
-      ]);
-      console.log(`✅ Quant ${quantId} updated for variant ${v.id} (${v.display_name})`);
-    } else {
-      quantId = await odooRequest("stock.quant", "create", [
-        {
-          product_id: v.id,
-          location_id: stockLocationId,
-          inventory_quantity: Number(stock),
-        },
-      ]);
-      console.log(`✅ Quant ${quantId} created for variant ${v.id} (${v.display_name})`);
-    }
-
-    await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
-
-    // 4. Verify against the SAME id/location we just wrote to
-    const verifiedQuant = await odooRequest(
-      "stock.quant",
-      "search_read",
-      [[["id", "=", quantId]]],
-      { fields: ["quantity", "location_id", "product_id"], limit: 1 }
-    );
-
-    if (!verifiedQuant.length) {
-      throw new Error(`Could not find stock quant ID ${quantId} after apply`);
-    }
-
-    console.log(
-      `🔍 Verified quant ${quantId}: product=${verifiedQuant[0].product_id}, ` +
-      `location=${verifiedQuant[0].location_id}, qty=${verifiedQuant[0].quantity}`
-    );
-
-    const actualQty = verifiedQuant[0].quantity;
-    if (Math.abs(actualQty - Number(stock)) > 0.01) {
-      throw new Error(
-        `Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`
+        { fields: ["id", "display_name"] },
       );
-    }
-  }
 
-  verifiedStock = Number(stock);
-}
+      if (!variants.length) {
+        throw new Error(`No active variant found for template ID ${id}`);
+      }
+
+      if (variants.length > 1) {
+        console.warn(
+          `⚠️ Template ${id} has ${variants.length} variants — updating ALL of them with stock=${stock}. ` +
+            `This is likely wrong if variants should have independent stock.`,
+        );
+      }
+
+      // 2. Get the CORRECT stock location — the warehouse's actual stock location,
+      //    not just "any internal location" (which was the bug)
+      const warehouses = await odooRequest(
+        "stock.warehouse",
+        "search_read",
+        [[]],
+        { fields: ["id", "lot_stock_id", "name"], limit: 1 },
+      );
+
+      if (!warehouses.length || !warehouses[0].lot_stock_id) {
+        throw new Error("Could not resolve warehouse stock location in Odoo");
+      }
+
+      const stockLocationId = warehouses[0].lot_stock_id[0];
+      console.log(
+        `📍 Using stock location: ${warehouses[0].lot_stock_id[1]} (id=${stockLocationId})`,
+      );
+
+      // 3. Apply stock to each variant at the correct location
+      for (const v of variants) {
+        const existingQuants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [
+            [
+              ["product_id", "=", v.id],
+              ["location_id", "=", stockLocationId],
+            ],
+          ],
+          { fields: ["id", "quantity"], limit: 1 },
+        );
+
+        let quantId: number;
+
+        if (existingQuants.length) {
+          quantId = existingQuants[0].id;
+          await odooRequest("stock.quant", "write", [
+            [quantId],
+            { inventory_quantity: Number(stock), quantity: Number(stock) },
+          ]);
+          console.log(
+            `✅ Quant ${quantId} updated for variant ${v.id} (${v.display_name})`,
+          );
+        } else {
+          quantId = await odooRequest("stock.quant", "create", [
+            {
+              product_id: v.id,
+              location_id: stockLocationId,
+              inventory_quantity: Number(stock),
+            },
+          ]);
+          console.log(
+            `✅ Quant ${quantId} created for variant ${v.id} (${v.display_name})`,
+          );
+        }
+
+        await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
+
+        // 4. Verify against the SAME id/location we just wrote to
+        const verifiedQuant = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [[["id", "=", quantId]]],
+          { fields: ["quantity", "location_id", "product_id"], limit: 1 },
+        );
+
+        if (!verifiedQuant.length) {
+          throw new Error(
+            `Could not find stock quant ID ${quantId} after apply`,
+          );
+        }
+
+        console.log(
+          `🔍 Verified quant ${quantId}: product=${verifiedQuant[0].product_id}, ` +
+            `location=${verifiedQuant[0].location_id}, qty=${verifiedQuant[0].quantity}`,
+        );
+
+        const actualQty = verifiedQuant[0].quantity;
+        if (Math.abs(actualQty - Number(stock)) > 0.01) {
+          throw new Error(
+            `Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`,
+          );
+        }
+      }
+
+      verifiedStock = Number(stock);
+    }
 
     // ✅ Update supplier info in Odoo
     if (supplierName || supplierId) {
@@ -721,7 +754,7 @@ if (stock !== undefined && stock !== null) {
             ["ref", "=", supplierId || ""],
           ],
         ],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
 
       let resolvedSupplierId: number;
@@ -746,7 +779,7 @@ if (stock !== undefined && stock !== null) {
             ["partner_id", "=", resolvedSupplierId],
           ],
         ],
-        { fields: ["id"], limit: 1 }
+        { fields: ["id"], limit: 1 },
       );
 
       if (existingSupplierInfo.length) {
@@ -1008,8 +1041,6 @@ export const getProductByBarcode = CatchAsyncError(
   },
 );
 
-
-
 // Product History
 export const getProductHistory = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -1073,8 +1104,10 @@ export const getProductHistory = CatchAsyncError(
           from.includes("inventory adjustment") &&
           (to.includes("stock") || to.includes("warehouse"))
         ) {
+          // FROM inventory adjustment INTO stock/warehouse = real restock
           type = "restock";
         }
+        // stock → inventory adjustment falls through as "adjustment" (Odoo correction move)
 
         return {
           movementDate: m.date,
@@ -1123,26 +1156,25 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — group moves within 5 min window into one session
+      // 4. Last restock — group by reference instead of time window
       const restockMoves = stockMoves
-        .filter((m:any) => m.type === "restock")
+        .filter((m: any) => m.type === "restock")
         .sort(
-          (a:any, b:any) =>
+          (a: any, b: any) =>
             new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime()
         );
 
       let lastRestock: { date: string; qty: number } | null = null;
 
       if (restockMoves.length > 0) {
-        const latestDate = new Date(restockMoves[0].insertedDate).getTime();
-        const SESSION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+        const latestReference = restockMoves[0].reference;
 
-        const sessionMoves = restockMoves.filter((m:any) => {
-          const diff = latestDate - new Date(m.insertedDate).getTime();
-          return diff <= SESSION_WINDOW_MS;
-        });
+        // Group all moves that share the same reference as the most recent restock
+        const sessionMoves = restockMoves.filter(
+          (m: any) => m.reference === latestReference
+        );
 
-        const totalQty = sessionMoves.reduce((sum:any, m:any) => sum + m.qty, 0);
+        const totalQty = sessionMoves.reduce((sum: any, m: any) => sum + m.qty, 0);
 
         lastRestock = {
           date: restockMoves[0].insertedDate,
