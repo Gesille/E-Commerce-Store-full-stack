@@ -1111,19 +1111,23 @@ export const getProductHistory = CatchAsyncError(
         const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
         const from: string = (m.location_id?.[1] ?? "").toLowerCase();
         const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
-
-        if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
-          type = "sale";
-        } else if (ref.includes("return") || ref.includes("ret/")) {
-          type = "return";
-        } else if (ref.includes("wh/in") || ref.includes("receipt")) {
-          type = "restock";
-        } else if (
-          from.includes("inventory adjustment") &&
-          (to.includes("stock") || to.includes("warehouse"))
-        ) {
-          type = "restock";
-        }
+// More precise type detection
+if (ref.includes("quantity confirmed")) {
+  type = "adjustment"; // confirmed = no change, can be hidden in UI
+} else if (ref.includes("quantity updated")) {
+  // Check direction to distinguish restock vs shrinkage
+  if (from.includes("inventory adjustment")) {
+    type = "restock";
+  } else {
+    type = "adjustment"; // stock was reduced via inventory
+  }
+} else if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
+  type = "sale";
+} else if (ref.includes("return") || ref.includes("ret/")) {
+  type = "return";
+} else if (ref.includes("wh/in") || ref.includes("receipt")) {
+  type = "restock";
+}
 
         return {
           movementDate: m.date,
