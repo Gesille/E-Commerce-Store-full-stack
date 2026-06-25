@@ -1156,8 +1156,11 @@ export const getProductHistory = CatchAsyncError(
         total: parseFloat((l.price_subtotal ?? 0).toFixed(2)),
       }));
 
-      // 4. Last restock — group by reference + 2-hour session window
-      // This prevents summing ALL historical restocks that share the same reference text
+      // 4. Last restock — group by reference + same destination + 30-min window
+      // Triple condition prevents lumping separate edit sessions together:
+      // - same reference text (same operation type)
+      // - same destination location (same warehouse target)
+      // - within 30 minutes of the most recent restock move
       const restockMoves = stockMoves
         .filter((m: any) => m.type === "restock")
         .sort(
@@ -1171,14 +1174,15 @@ export const getProductHistory = CatchAsyncError(
         const latestMove = restockMoves[0];
         const latestTime = new Date(latestMove.insertedDate).getTime();
         const latestRef = latestMove.reference;
-        const SESSION_WINDOW_MS = 2 * 60 * 60 * 1000; // 2 hours
+        const latestDest = latestMove.to;
+        const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
-        // Same reference AND within 2 hours of the most recent restock move
         const sessionMoves = restockMoves.filter((m: any) => {
           const sameRef = m.reference === latestRef;
+          const sameDest = m.to === latestDest;
           const withinWindow =
             latestTime - new Date(m.insertedDate).getTime() <= SESSION_WINDOW_MS;
-          return sameRef && withinWindow;
+          return sameRef && sameDest && withinWindow;
         });
 
         const totalQty = sessionMoves.reduce((sum: any, m: any) => sum + m.qty, 0);
