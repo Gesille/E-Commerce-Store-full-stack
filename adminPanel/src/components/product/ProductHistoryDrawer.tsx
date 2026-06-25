@@ -3,7 +3,6 @@
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useLazyGetProductHistoryQuery } from "@/redux/product/productApi";
@@ -26,16 +25,19 @@ interface Props {
   onClose: () => void;
 }
 
-type MovementType = keyof typeof TYPE_CONFIG;
+type MovementType = "restock" | "sale" | "return" | "adjustment";
 
 type StockMove = {
   type: MovementType;
   reference: string;
   qty: number;
-  date: string;
+  movementDate: string;
+  insertedDate: string;
+  lastModified: string;
   from: string;
   to: string;
 };
+
 type SaleHistory = {
   orderId: string;
   total: number;
@@ -43,7 +45,15 @@ type SaleHistory = {
   date: string;
 };
 
-const TYPE_CONFIG = {
+type ProductHistory = {
+  success: boolean;
+  currentStock: number;
+  lastRestock: { date: string; qty: number } | null;
+  stockMoves: StockMove[];
+  salesHistory: SaleHistory[];
+};
+
+const TYPE_CONFIG: Record<MovementType, { label: string; icon: any; bg: string; iconColor: string; badge: string }> = {
   restock:    { label: "Restock",    icon: ArrowDownToLine, bg: "bg-emerald-50", iconColor: "text-emerald-600", badge: "bg-emerald-100 text-emerald-700" },
   sale:       { label: "Sale",       icon: ShoppingCart,    bg: "bg-blue-50",    iconColor: "text-blue-600",    badge: "bg-blue-100 text-blue-700"    },
   return:     { label: "Return",     icon: ArrowUpFromLine, bg: "bg-amber-50",   iconColor: "text-amber-600",   badge: "bg-amber-100 text-amber-700"  },
@@ -67,23 +77,18 @@ const timeAgo = (d: string) => {
 };
 
 export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
-  const [fetchHistory, { data, isLoading, isFetching }] =
+  const [fetchHistory, { data: rawData, isLoading, isFetching }] =
     useLazyGetProductHistoryQuery();
+
+  // Cast to our properly typed interface since RTK Query may have a stale inferred type
+  const data = rawData as ProductHistory | undefined;
 
   useEffect(() => {
     if (open && product?.id) fetchHistory(product.id);
   }, [open, product?.id]);
 
   const loading = isLoading || isFetching;
-
-  // Separate meaningful moves from noise
-  const meaningfulMoves = data?.stockMoves?.filter(
-    (m: StockMove) => !(m.type === "adjustment" && m.qty === 0)
-  ) ?? [];
-
-  const adjustmentMoves = data?.stockMoves?.filter(
-    (m: StockMove) => m.type === "adjustment" && m.qty === 0
-  ) ?? [];
+  const stockMoves: StockMove[] = data?.stockMoves ?? [];
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
@@ -113,6 +118,20 @@ export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
 
           {!loading && data && (
             <>
+              {/* ── Stats Row ─────────────────────────────────── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Current Stock</p>
+                  <p className="text-2xl font-bold text-foreground">{data.currentStock}</p>
+                  <p className="text-[10px] text-muted-foreground">units on hand</p>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/30 p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Total Moves</p>
+                  <p className="text-2xl font-bold text-foreground">{stockMoves.length}</p>
+                  <p className="text-[10px] text-muted-foreground">recorded entries</p>
+                </div>
+              </div>
+
               {/* ── Last Restock Card ─────────────────────────── */}
               {data.lastRestock ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-start gap-3">
@@ -150,59 +169,78 @@ export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
                     Stock Movements
                   </h3>
                   <span className="ml-auto text-[11px] text-muted-foreground">
-                    {meaningfulMoves.length} records
+                    {stockMoves.length} records
                   </span>
                 </div>
 
-                {meaningfulMoves.length === 0 ? (
+                {stockMoves.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-6 text-center">
                     No stock movements found.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {meaningfulMoves.map((m: StockMove, i: number) => {
-                      const cfg = TYPE_CONFIG[m.type];
+                    {stockMoves.map((m, i) => {
+                      const cfg = TYPE_CONFIG[m.type] ?? TYPE_CONFIG.adjustment;
                       const Icon = cfg.icon;
                       const isSale = m.type === "sale";
                       return (
                         <div
                           key={i}
-                          className="flex items-start gap-3 p-3 rounded-xl border border-border bg-background hover:bg-muted/30 transition-colors"
+                          className="p-3 rounded-xl border border-border bg-background hover:bg-muted/30 transition-colors"
                         >
-                          <span className={`p-2 rounded-lg ${cfg.bg} ${cfg.iconColor} shrink-0`}>
-                            <Icon size={13} />
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[11px] text-muted-foreground truncate">
+                          <div className="flex items-start gap-3">
+                            <span className={`p-2 rounded-lg ${cfg.bg} ${cfg.iconColor} shrink-0 mt-0.5`}>
+                              <Icon size={13} />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              {/* Badge + qty */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded-full ${cfg.badge}`}>
+                                  {cfg.label}
+                                </span>
+                                <span className={`text-sm font-bold tabular-nums shrink-0 ${isSale ? "text-red-500" : "text-emerald-600"}`}>
+                                  {isSale ? "−" : "+"}{m.qty} units
+                                </span>
+                              </div>
+
+                              {/* Reference */}
+                              <p className="text-[11px] text-foreground font-medium mt-1 truncate">
                                 {m.reference}
-                              </span>
-                              <span
-                                className={`text-xs font-bold tabular-nums shrink-0 ${
-                                  isSale ? "text-red-500" : "text-emerald-600"
-                                }`}
-                              >
-                                {isSale ? "−" : "+"}{m.qty}
-                              </span>
+                              </p>
+
+                              {/* Route */}
+                              <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                                {m.from} → {m.to}
+                              </p>
+
+                              {/* All three dates */}
+                              <div className="mt-2 pt-2 border-t border-border/60 space-y-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] text-muted-foreground shrink-0">Movement date</span>
+                                  <span className="text-[10px] text-foreground font-medium tabular-nums text-right">
+                                    {fmt(m.movementDate)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] text-muted-foreground shrink-0">Inserted date</span>
+                                  <span className="text-[10px] text-foreground font-medium tabular-nums text-right">
+                                    {fmt(m.insertedDate)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] text-muted-foreground shrink-0">Last modified</span>
+                                  <span className="text-[10px] text-foreground font-medium tabular-nums text-right">
+                                    {fmt(m.lastModified)}
+                                    <span className="ml-1 text-muted-foreground">({timeAgo(m.lastModified)})</span>
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                             {fmt(m.date)}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              {m.from} → {m.to}
-                            </p>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-
-                {/* Collapsed audit moves */}
-                {adjustmentMoves.length > 0 && (
-                  <p className="text-[10px] text-muted-foreground mt-2 pl-1">
-                    + {adjustmentMoves.length} confirmed-quantity audit entries (no stock change)
-                  </p>
                 )}
               </section>
 
@@ -224,7 +262,7 @@ export const ProductHistoryDrawer = ({ product, open, onClose }: Props) => {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {data.salesHistory.map((s: SaleHistory, i: number) => (
+                    {data.salesHistory.map((s, i) => (
                       <div
                         key={i}
                         className="flex items-center gap-3 p-3 rounded-xl border border-border bg-background hover:bg-muted/30 transition-colors"
