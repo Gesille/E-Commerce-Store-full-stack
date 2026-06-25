@@ -1121,108 +1121,74 @@ export const getProductHistory = CatchAsyncError(
     limit: 100,
   }
 );
-  const stockMoves: any[] = [];
+      const stockMoves: any[] = [];
 
-for (const m of moves) {
-  let qty = 0;
+      for (const m of moves) {
+        let qty = 0;
 
-  const from = String(m.location_id?.[1] || "").toLowerCase();
-  const to = String(m.location_dest_id?.[1] || "").toLowerCase();
-  const reference = String(m.reference || m.origin || "").toLowerCase();
+        const from = String(m.location_id?.[1] || "").toLowerCase();
+        const to = String(m.location_dest_id?.[1] || "").toLowerCase();
 
-  const isInventoryAdjustment =
-    from.includes("inventory") || to.includes("inventory");
+        const isInventoryAdjustment =
+          from.includes("inventory") || to.includes("inventory");
 
-  if (isInventoryAdjustment) {
-    qty = Number(m.product_uom_qty || 0);
+        if (isInventoryAdjustment) {
+          // For inventory adjustments, qty_done on move lines is often 0.
+          // Use product_uom_qty from the move itself — it holds the adjusted quantity.
+          qty = Number(m.product_uom_qty || 0);
+        } else {
+          // For real moves (sales, transfers), use move lines
+          try {
+            const lines = await odooRequest(
+              "stock.move.line",
+              "search_read",
+              [[["move_id", "=", m.id]]],
+              { fields: ["qty_done"] }
+            );
 
-    // ─── KEY FIX ───────────────────────────────────────────────────────
-    // "Product Quantity Confirmed" moves are Odoo's internal bookkeeping
-    // when action_apply_inventory finds no difference (or a decrease).
-    // They always have qty = 0 and carry no useful info — skip them.
-    if (
-      qty === 0 &&
-      (reference.includes("confirmed") || reference.includes("quantity confirmed"))
-    ) {
-      continue;
-    }
+            qty = lines.reduce(
+              (sum: number, l: any) => sum + Number(l.qty_done || 0),
+              0
+            );
+          } catch (e: any) {
+            console.log("move line error:", e.message);
+          }
 
-    // If qty is still 0 after reading product_uom_qty, try reading
-    // the quant directly to get the absolute stock at that moment.
-    if (qty === 0) {
-      try {
-        const quantSnapshot = await odooRequest(
-          "stock.quant",
-          "search_read",
-          [
-            [
-              ["product_id", "in", variantIds],
-              ["location_id.usage", "=", "internal"],
-            ],
-          ],
-          { fields: ["quantity"], limit: 1 }
-        );
-        qty = quantSnapshot.reduce(
-          (sum: number, q: any) => sum + Number(q.quantity || 0),
-          0
-        );
-      } catch (e: any) {
-        console.log("quant snapshot error:", e.message);
+          // fallback
+          if (!qty) {
+            qty = Number(m.product_uom_qty || 0);
+          }
+        }
+
+        const reference = String(m.reference || m.origin || "").toLowerCase();
+
+        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+
+        if (
+          reference.includes("inventory") ||
+          reference.includes("quantity") ||
+          from.includes("inventory") ||
+          to.includes("inventory")
+        ) {
+          type = "restock";
+        } else if (reference.includes("pos") || reference.includes("sale")) {
+          type = "sale";
+        } else if (reference.includes("return")) {
+          type = "return";
+        }
+
+        stockMoves.push({
+          movementDate: m.date,
+          insertedDate: m.create_date,
+          lastModified: m.write_date,
+          qty,
+          type,
+          reference: m.reference || m.origin || "—",
+          from: m.location_id?.[1] || "—",
+          to: m.location_dest_id?.[1] || "—",
+        });
       }
-    }
-  } else {
-    // For real moves (sales, transfers), use move lines
-    try {
-      const lines = await odooRequest(
-        "stock.move.line",
-        "search_read",
-        [[["move_id", "=", m.id]]],
-        { fields: ["qty_done"] }
-      );
 
-      qty = lines.reduce(
-        (sum: number, l: any) => sum + Number(l.qty_done || 0),
-        0
-      );
-    } catch (e: any) {
-      console.log("move line error:", e.message);
-    }
-
-    // fallback
-    if (!qty) {
-      qty = Number(m.product_uom_qty || 0);
-    }
-  }
-
-  // Skip entirely if qty is still 0 — nothing useful to show
-  if (qty === 0) continue;
-
-  let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-
-  if (
-    reference.includes("inventory") ||
-    reference.includes("quantity") ||
-    from.includes("inventory") ||
-    to.includes("inventory")
-  ) {
-    type = "restock";
-  } else if (reference.includes("pos") || reference.includes("sale")) {
-    type = "sale";
-  } else if (reference.includes("return")) {
-    type = "return";
-  }
-
-  stockMoves.push({
-    movementDate: m.date,
-    insertedDate: m.create_date,
-    lastModified: m.write_date,
-    qty,
-    type,
-    reference: m.reference || m.origin || "—",
-    from: m.location_id?.[1] || "—",
-    to: m.location_dest_id?.[1] || "—",
-  });
-}
       // ==========================
       // 4. POS Sales
       // ==========================
