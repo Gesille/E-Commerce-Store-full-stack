@@ -182,7 +182,7 @@ getProductHistory: builder.query<
   string | number
 >({
   query: (id) => ({
-    url: `product/${id}/history`,
+    url: `product-history/${id}`,
     method: "GET",
     credentials: "include" as const,
   }),
