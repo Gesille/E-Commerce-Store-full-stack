@@ -13,8 +13,7 @@ const ProductsPage = () => {
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
 
   const { data: products = [], isLoading, isError, refetch } = useGetAllProductsQuery();
-  // ✅ data is already Product[] because transformResponse maps it
-
+ 
   const columns = getColumns(
     (p) => setEditProduct(p),
     (p) => setDeleteProduct(p)
