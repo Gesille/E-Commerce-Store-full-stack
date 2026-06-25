@@ -1057,36 +1057,52 @@ export const getProductHistory = CatchAsyncError(
         }
       );
 
-      const stockMoves = moves.map((m: any) => {
-        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
-        const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
-        const from: string = (m.location_id?.[1] ?? "").toLowerCase();
-        const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
+   const stockMoves = moves
+  .filter((m: any) => {
+    const from: string = (m.location_id?.[1] ?? "").toLowerCase();
+    const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
 
-        if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
-          type = "sale";
-        } else if (ref.includes("return") || ref.includes("ret/")) {
-          type = "return";
-        } else if (ref.includes("wh/in") || ref.includes("receipt")) {
-          type = "restock";
-        } else if (
-          from.includes("inventory adjustment") &&
-          (to.includes("stock") || to.includes("warehouse"))
-        ) {
-          type = "restock";
-        }
+    // Remove zero-qty confirmation moves (WH/Stock → Inventory adjustment)
+    if (
+      from.includes("stock") &&
+      to.includes("inventory adjustment") &&
+      m.product_qty === 0
+    ) {
+      return false;
+    }
 
-        return {
-          movementDate: m.date,
-          insertedDate: m.create_date,
-          lastModified: m.write_date,
-          qty: m.product_qty,
-          type,
-          reference: m.reference || m.origin || "—",
-          from: m.location_id?.[1] ?? "—",
-          to: m.location_dest_id?.[1] ?? "—",
-        };
-      });
+    return true;
+  })
+  .map((m: any) => {
+    let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+    const ref: string = (m.reference ?? m.origin ?? "").toLowerCase();
+    const from: string = (m.location_id?.[1] ?? "").toLowerCase();
+    const to: string = (m.location_dest_id?.[1] ?? "").toLowerCase();
+
+    if (ref.includes("pos/") || ref.includes("wh/pos") || ref.includes("sale")) {
+      type = "sale";
+    } else if (ref.includes("return") || ref.includes("ret/")) {
+      type = "return";
+    } else if (ref.includes("wh/in") || ref.includes("receipt")) {
+      type = "restock";
+    } else if (
+      from.includes("inventory adjustment") &&
+      (to.includes("stock") || to.includes("warehouse"))
+    ) {
+      type = "restock";
+    }
+
+    return {
+      movementDate: m.date,
+      insertedDate: m.create_date,
+      lastModified: m.write_date,
+      qty: m.product_qty,
+      type,
+      reference: m.reference || m.origin || "—",
+      from: m.location_id?.[1] ?? "—",
+      to: m.location_dest_id?.[1] ?? "—",
+    };
+  });
 
       // 3. POS sales history
       const posLines = await odooRequest(
