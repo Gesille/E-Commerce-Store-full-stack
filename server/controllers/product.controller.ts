@@ -1074,7 +1074,7 @@ export const getProductHistory = CatchAsyncError(
       }
 
       // ==========================
-      // 2. Current stock
+      // 2. Current Stock
       // ==========================
       const quants = await odooRequest(
         "stock.quant",
@@ -1085,7 +1085,7 @@ export const getProductHistory = CatchAsyncError(
             ["location_id.usage", "=", "internal"],
           ],
         ],
-        { fields: ["quantity", "location_id"] }
+        { fields: ["quantity"] }
       );
 
       const currentStock = quants.reduce(
@@ -1115,7 +1115,6 @@ export const getProductHistory = CatchAsyncError(
             "location_dest_id",
             "origin",
             "reference",
-            "move_line_ids",
             "product_uom_qty",
           ],
           order: "create_date desc",
@@ -1129,21 +1128,18 @@ export const getProductHistory = CatchAsyncError(
         let qty = 0;
 
         try {
-          if (Array.isArray(m.move_line_ids) && m.move_line_ids.length) {
-            const lines = await odooRequest(
-              "stock.move.line",
-              "search_read",
-              [[["id", "in", m.move_line_ids]]],
-              {
-                fields: ["qty_done"],
-              }
-            );
+          // ✅ IMPORTANT FIX: query by move_id (NOT move_line_ids)
+          const lines = await odooRequest(
+            "stock.move.line",
+            "search_read",
+            [[["move_id", "=", m.id]]],
+            { fields: ["qty_done"] }
+          );
 
-            qty = lines.reduce(
-              (sum: number, l: any) => sum + Number(l.qty_done || 0),
-              0
-            );
-          }
+          qty = lines.reduce(
+            (sum: number, l: any) => sum + Number(l.qty_done || 0),
+            0
+          );
         } catch (e: any) {
           console.log("move line error:", e.message);
         }
@@ -1156,7 +1152,8 @@ export const getProductHistory = CatchAsyncError(
         const reference = String(m.reference || m.origin || "").toLowerCase();
         const to = String(m.location_dest_id?.[1] || "").toLowerCase();
 
-        let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
+        let type: "restock" | "sale" | "return" | "adjustment" =
+          "adjustment";
 
         if (
           reference.includes("inventory") ||
