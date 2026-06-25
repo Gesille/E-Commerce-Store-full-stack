@@ -1189,28 +1189,24 @@ export const getProductHistory = CatchAsyncError(
 
       let lastRestock: { date: string; qty: number } | null = null;
 
-      if (restockMoves.length > 0) {
-        const latestRestockMove = restockMoves[0];
-        const latestRestockTime = new Date(latestRestockMove.insertedDate).getTime();
+     if (restockMoves.length > 0) {
+  const latestRestockMove = restockMoves[0];
+  const latestRestockTime = new Date(latestRestockMove.insertedDate).getTime();
 
-        // Only count sales that appear in our stockMoves window AND after the restock
-        const salesAfterRestock = stockMoves
-          .filter(
-            (m: any) =>
-              m.type === "sale" &&
-              new Date(m.insertedDate).getTime() > latestRestockTime
-          )
-          .reduce((sum: number, m: any) => sum + m.qty, 0);
+  // Sum ALL restock moves within 60 seconds of the latest one (same session)
+  const SESSION_WINDOW_MS = 60 * 1000;
+  const sessionRestockQty = restockMoves
+    .filter(
+      (m: any) =>
+        Math.abs(new Date(m.insertedDate).getTime() - latestRestockTime) <= SESSION_WINDOW_MS
+    )
+    .reduce((sum: number, m: any) => sum + m.qty, 0);
 
-        console.log(`📊 salesAfterRestock: ${salesAfterRestock}, currentStock: ${currentStock}`);
-
-        const restockedQty = currentStock + salesAfterRestock;
-
-        lastRestock = {
-          date: latestRestockMove.insertedDate,
-          qty: restockedQty > 0 ? restockedQty : latestRestockMove.qty,
-        };
-      }
+  lastRestock = {
+    date: latestRestockMove.insertedDate,
+    qty: sessionRestockQty,
+  };
+}
 
       return res.json({
         success: true,
