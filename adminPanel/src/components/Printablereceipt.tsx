@@ -6,7 +6,7 @@ const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "Epicurean Drive ,Saint John ";
 const shopPhone   = "560-2433";
 const shopABST = "0161466";
-
+const POLICY_URL = process.env.NEXT_PUBLIC_POLICY_URL;
 const fmt = (n: number) => n.toFixed(2);
 
 function calcLineTotal(item: CartItem) {
@@ -142,7 +142,12 @@ function buildReceiptHTML(
       padding-top: 6px;
       border-top: 1px solid #000000;
     }
-
+.policy-text {
+  text-align: justify;
+  text-justify: inter-word;
+  line-height: 1.5;
+  font-size: 10pt;
+}
     .footer {
       font-size: 11pt;
       margin-top: 15px;
@@ -215,7 +220,18 @@ function buildReceiptHTML(
   <div class="text-left footer">
     <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
     <div style="color: #222;">Please keep this receipt for your records.</div>
-    <div class="font-bold">Returns accepted within 7 days with proof of purchase. Items must be unused & in original packaging. Refunds issued in original payment form.</div>
+    <div class="font-bold policy-text">
+  Returns accepted within 7 days with proof of purchase.
+  Items must be unused & in original packaging.
+  Refunds issued in original payment form.
+</div>
+
+<div style="margin-top:8px; text-align:center;">
+  Full return policy:
+  <a href="${POLICY_URL}" target="_blank">
+    Click here
+  </a>
+</div>
     <div style="margin-top: 10px; font-size: 9pt; color: #555;">* ${receiptNo} *</div>
   </div>
 
