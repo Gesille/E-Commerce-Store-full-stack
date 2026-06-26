@@ -22,27 +22,26 @@ export const toCleanProduct = (
     return match?.name || null;
   };
 
-  // ── Suppliers: array because many suppliers can supply this product ──
+  // ── Suppliers: handles both pre-mapped shape {id, name, price, productCode}
+  //              and raw Odoo shape {partner_id, price, product_code} ──────────
   const suppliers = (product.suppliers ?? []).map((s: any) => ({
-    id: s.partner_id?.[0] || null,
-    name: s.partner_id?.[1] || null,
+    id: s.id ?? s.partner_id?.[0] ?? null,
+    name: s.name ?? s.partner_id?.[1] ?? null,
     price: s.price || 0,
-    productCode: s.product_code || null,  // supplier's own ref for this product
+    productCode: s.productCode ?? s.product_code ?? null,
   }));
 
-  // ── POs: array because this product can appear in many POs ──────────
-  // Each PO is linked by product.name + invoiceNumber
+  // ── POs: handles both pre-mapped and raw Odoo shapes ─────────────────────
   const purchaseOrders = (product.purchaseOrders ?? []).map((po: any) => ({
     id: po.id || null,
-    poNumber: po.name || null,        
-    invoiceNumber: po.invoiceNumber || product.x_supplier_invoice_number || null,
-    supplierId: po.partner_id?.[0] || null,
-    supplierName: po.partner_id?.[1] || null,
-    date: po.date_order || null,
-    status: po.state || null,             // draft | confirmed | received
-    // connection key: product name + invoice number
-    productName: product.display_name,    
-    totalAmount: po.amount_total || 0,
+    poNumber: po.poNumber ?? po.name ?? null,
+    invoiceNumber: po.invoiceNumber ?? product.x_supplier_invoice_number ?? null,
+    supplierId: po.supplierId ?? po.partner_id?.[0] ?? null,
+    supplierName: po.supplierName ?? po.partner_id?.[1] ?? null,
+    date: po.date ?? po.date_order ?? null,
+    status: po.status ?? po.state ?? null,
+    productName: product.display_name,
+    totalAmount: po.totalAmount ?? po.amount_total ?? 0,
   }));
 
   return {
@@ -52,26 +51,22 @@ export const toCleanProduct = (
     barcode: product.barcode || null,
     name: product.display_name,
 
-
     price: product.lst_price || product.list_price || 0,
     supplierPrice: product.standard_price || 0,
     shippingCost: product.x_shipping_cost || 0,
     markup: product.x_markup || 1,
     finalPrice: product.x_final_price || 0,
 
- 
     stock: product.qty_available || 0,
 
-    // ── Supplier (MANY — multiple suppliers can supply this product) ───
-    suppliers,                           
-    supplier: suppliers[0]?.name || null, 
+    // ── Suppliers (array — multiple suppliers can supply one product) ─────
+    suppliers,
+    supplier: suppliers[0]?.name || null,
 
-
-    purchaseOrders,                      
+    purchaseOrders,
 
     invoiceNumber: product.x_supplier_invoice_number || null,
 
- 
     image: product.image_1920 || false,
     category: product.categ_id?.[1] || null,
     currency: product.currency_id?.[1] || "XCD",
