@@ -17,7 +17,7 @@ export const toCleanProduct = (product, attributeValues) => {
     );
     return match?.name || null;
   };
-  const XCD_RATES = { USD: 2.7, EUR: 2.9 };
+  const XCD_RATES = { USD: 2.67, EUR: 3.15 };
   const currencyName = product.currency_id?.[1] || "USD";
   const detectedCurrency =
     Object.keys(XCD_RATES).find((k) =>

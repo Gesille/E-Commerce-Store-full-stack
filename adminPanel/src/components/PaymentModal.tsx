@@ -12,7 +12,7 @@ export type PaymentLine =
 
 // ── Currency ────────────────────────────────────────────────────────────────
 type Currency = "XCD" | "USD";
-const USD_TO_XCD = 2.70;
+const USD_TO_XCD = 2.67;
 
 function toXCD(amount: number, currency: Currency): number {
   return round2(currency === "USD" ? amount * USD_TO_XCD : amount);

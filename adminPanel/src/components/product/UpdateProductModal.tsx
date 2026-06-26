@@ -54,7 +54,7 @@ const MATERIAL_OPTIONS = ["cotton", "wool", "polyester", "leather", "wood", "met
 
 const CURRENCIES = ["USD", "EUR"] as const;
 
-const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -215,7 +215,7 @@ export const UpdateProductModal = ({ product, open, onClose, onSuccess }: Props)
   const [updateProduct, { isLoading }] = useUpdateProductMutation();
 
   // XCD preview
-  const calculatedXCD = ((supplierPrice + shippingCost) * (XCD_RATES[currency] ?? 2.7)).toFixed(2);
+  const calculatedXCD = ((supplierPrice + shippingCost) * (XCD_RATES[currency] ?? 2.67)).toFixed(2);
   const [useFinalAsPrice, setUseFinalAsPrice] = useState(false);
 
   useEffect(() => {

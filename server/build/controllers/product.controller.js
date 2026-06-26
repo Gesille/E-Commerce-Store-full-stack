@@ -107,8 +107,8 @@ export const createProduct = async (req, res) => {
     let createdProductTemplateId = null;
     try {
         const { name, price, stock, categoryId, image, attributes, reference, barcode, itemNumber, warehouseName, shelfName, supplierPrice, shippingCost, currency, supplierId, supplierName, } = req.body;
-        const XCD_RATES = { USD: 2.7, EUR: 2.9 };
-        const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
+        const XCD_RATES = { USD: 2.67, EUR: 3.15 };
+        const rate = XCD_RATES[currency ?? "USD"] ?? 2.67;
         const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
         let base64Image = null;
         if (image) {

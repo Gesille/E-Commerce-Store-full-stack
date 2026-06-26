@@ -315,7 +315,7 @@ export const submitCashCount = CatchAsyncError(
     }
 
     // ── Recompute totals server-side for integrity ────────────────────────────
-    const USD_TO_XCD = exchangeRate ?? 2.70;
+    const USD_TO_XCD = exchangeRate ?? 2.67;
 
     const computedXCDTotal = Math.round(
       (denominations ?? []).reduce((s: number, d: DenominationEntry) => s + d.value * d.count, 0) * 100

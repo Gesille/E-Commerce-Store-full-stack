@@ -29,30 +29,9 @@ export interface IProduct extends Document {
   shippingCost: number;
   markup: number;
 
-  // International Costs (XCD)
-  freightInternational: number;
-  transportationStorageInternational: number;
-  portFeesInternational: number;
-  brokerageHandlingInternational: number;
-  customsDutiesInternational: number;
-  tariffsInternational: number;
-  insurancesInternational: number;
-  vatTaxesInternational: number;
-  currencyConversion: number;
-  paymentProcessing: number;
-  bankCharges: number;
 
-  // Local Costs (XCD)
-  freightLocal: number;
-  transportationStorageLocal: number;
-  portFeesLocal: number;
-  brokerageHandlingLocal: number;
-  customsDutiesLocal: number;
-  tariffsLocal: number;
-  insurancesLocal: number;
-  vatTaxesLocal: number;
-  documentationCosts: number;
-  internalFees: number;
+
+ 
 
   // Calculated (auto by backend)
   buyPriceXCD: number;
@@ -102,31 +81,7 @@ const ProductSchema = new Schema<IProduct>(
     shippingCost:  { type: Number, default: 0 },
     markup:        { type: Number, default: 1 },
 
-    // ── International Costs (XCD) ───────────────────────────────────────────
-    freightInternational:               { type: Number, default: 0 },
-    transportationStorageInternational: { type: Number, default: 0 },
-    portFeesInternational:              { type: Number, default: 0 },
-    brokerageHandlingInternational:     { type: Number, default: 0 },
-    customsDutiesInternational:         { type: Number, default: 0 },
-    tariffsInternational:               { type: Number, default: 0 },
-    insurancesInternational:            { type: Number, default: 0 },
-    vatTaxesInternational:              { type: Number, default: 0 },
-    currencyConversion:                 { type: Number, default: 0 },
-    paymentProcessing:                  { type: Number, default: 0 },
-    bankCharges:                        { type: Number, default: 0 },
-
-    // ── Local Costs (XCD) ───────────────────────────────────────────────────
-    freightLocal:               { type: Number, default: 0 },
-    transportationStorageLocal: { type: Number, default: 0 },
-    portFeesLocal:              { type: Number, default: 0 },
-    brokerageHandlingLocal:     { type: Number, default: 0 },
-    customsDutiesLocal:         { type: Number, default: 0 },
-    tariffsLocal:               { type: Number, default: 0 },
-    insurancesLocal:            { type: Number, default: 0 },
-    vatTaxesLocal:              { type: Number, default: 0 },
-    documentationCosts:         { type: Number, default: 0 },
-    internalFees:               { type: Number, default: 0 },
-
+   
     // ── Calculated (never sent from client, always computed by backend) ──────
     buyPriceXCD:   { type: Number, default: 0 },
     totalCostsXCD: { type: Number, default: 0 },

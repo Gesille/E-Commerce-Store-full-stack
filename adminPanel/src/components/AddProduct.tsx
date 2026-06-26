@@ -205,10 +205,10 @@ const AddProduct = () => {
   const supplierPrice = form.watch("supplierPrice") ?? 0;
   const shippingCost = form.watch("shippingCost") ?? 0;
   const currency = form.watch("currency") ?? "USD";
-  const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+  const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
   const calculatedFinalPrice =
     (Number(supplierPrice) + Number(shippingCost)) *
-    (XCD_RATES[currency] ?? 2.7);
+    (XCD_RATES[currency] ?? 2.67);
 
   const xcdPreview = calculatedFinalPrice.toFixed(2);
   const [useFinalPriceAsSale, setUseFinalPriceAsSale] = useState(false);
