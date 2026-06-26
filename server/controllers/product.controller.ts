@@ -669,29 +669,22 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
 
       for (const v of variants) {
-       // product.controller.ts — inside updateProduct, replace the existingQuants search
-
-const existingQuants = await odooRequest(
-  "stock.quant",
-  "search_read",
-  [[
-    ["product_id", "=", v.id],
-    ["location_id.usage", "=", "internal"],
-    ["location_id.complete_name", "not ilike", "Virtual"],      
-    ["location_id.complete_name", "not ilike", "Inventory"],   
-  ]],
-  { fields: ["id", "quantity", "location_id"], limit: 1 },
-);
+        // Search for ANY existing quant for this variant at ANY internal location
+        const existingQuants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [[
+            ["product_id", "=", v.id],
+            ["location_id.usage", "=", "internal"],
+          ]],
+          { fields: ["id", "quantity", "location_id"], limit: 1 },
+        );
 
         let quantId: number;
 
         if (existingQuants.length) {
-      
+          // ✅ Update the existing quant — only set inventory_quantity, never write quantity directly
           quantId = existingQuants[0].id;
-            console.log(
-    `📦 Found quant ${quantId} at "${existingQuants[0].location_id[1]}" ` +
-    `with current qty=${existingQuants[0].quantity} → setting to ${stock}`
-  );
           await odooRequest("stock.quant", "write", [
             [quantId],
             { inventory_quantity: Number(stock) },
