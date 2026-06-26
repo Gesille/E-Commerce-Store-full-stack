@@ -640,63 +640,35 @@ export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, price, stock, reference, barcode, itemNumber, attributes,
-      warehouseName, shelfName, supplierId, supplierName, supplierPrice,
-      shippingCost, currency, purchaseOrderNumber,
+      name,
+      price,
+      stock,
+      reference,
+      barcode,
+      itemNumber,
+      attributes,
+      warehouseName,
+      shelfName,
+      supplierId,
+      supplierName,
+      supplierPrice,
+      shippingCost,
+      currency,
+      purchaseOrderNumber,
     } = req.body;
 
-    // ✅ Hoisted here so PO block can access it
+    // ✅ Hoisted so both supplier and PO blocks can access them
     let resolvedSupplierId: number | null = null;
+    let resolvedLocationId: number | null = null;
 
-    let imageUrl: string | null = null;
     let base64Image: string | null = null;
-
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
-      imageUrl = uploaded.url;
-      const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const response = await axios.get(uploaded.url, { responseType: "arraybuffer" });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
 
-    await odooRequest("product.template", "write", [
-      [Number(id)],
-      {
-        name,
-        list_price: Number(price) || 0,
-        standard_price: Number(supplierPrice) || 0,
-        default_code: itemNumber || reference || false,
-        barcode: barcode || false,
-        x_item_number: itemNumber || false,
-        x_shipping_cost: Number(shippingCost) || 0,
-        x_currency: currency || "USD",
-        x_supplier_invoice_number: supplierId || false,
-        ...(base64Image && { image_1920: base64Image }),
-      },
-    ]);
-
-    // Attributes
-    const finalColors: string[] = [...new Set<string>(attributes?.colors ?? [])];
-    const finalSizes: string[] = [...new Set<string>(attributes?.sizes ?? [])];
-    const finalMaterials: string[] = [...new Set<string>(attributes?.materials ?? [])];
-
-    for (const [key, values] of [
-      ["colors", finalColors],
-      ["sizes", finalSizes],
-      ["materials", finalMaterials],
-    ] as [string, string[]][]) {
-      const odooAttributeName = ATTRIBUTE_NAME_MAP[key];
-      const attributeId = await createOrGetAttribute(odooAttributeName);
-      const valueIds: number[] = [];
-      for (const val of values) {
-        const valId = await createAttributeValue(attributeId, val);
-        valueIds.push(valId);
-      }
-      await syncAttributeLine(Number(id), attributeId, valueIds);
-    }
-
-    // Location
-    let resolvedLocationId: number | null = null;
-
+    // ── STEP 1: Resolve location first (needed before template write) ────────
     if (warehouseName && shelfName) {
       const warehouseResults = await odooRequest(
         "stock.location", "search_read",
@@ -713,7 +685,13 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
       const shelfResults = await odooRequest(
         "stock.location", "search_read",
-        [[["name", "=", shelfName], ["location_id", "=", warehouseLocationId], ["usage", "=", "internal"]]],
+        [
+          [
+            ["name", "=", shelfName],
+            ["location_id", "=", warehouseLocationId],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
       if (shelfResults.length) {
@@ -732,7 +710,43 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (found[0]) resolvedLocationId = found[0].id;
     }
 
-    // Stock update
+    // ── STEP 2: Write product template (location now known) ──────────────────
+    await odooRequest("product.template", "write", [
+      [Number(id)],
+      {
+        name,
+        list_price: Number(price) || 0,
+        standard_price: Number(supplierPrice) || 0,
+        default_code: itemNumber || reference || false,
+        barcode: barcode || false,
+        x_item_number: itemNumber || false,
+        x_shipping_cost: Number(shippingCost) || 0,
+        x_currency: currency || "USD",
+        x_supplier_invoice_number: supplierId || false,
+        ...(base64Image && { image_1920: base64Image }),
+        ...(resolvedLocationId && { location_id: resolvedLocationId }),
+      },
+    ]);
+
+    // ── STEP 3: Sync attributes ──────────────────────────────────────────────
+    const finalColors = [...new Set<string>(attributes?.colors ?? [])];
+    const finalSizes = [...new Set<string>(attributes?.sizes ?? [])];
+    const finalMaterials = [...new Set<string>(attributes?.materials ?? [])];
+
+    for (const [key, values] of [
+      ["colors", finalColors],
+      ["sizes", finalSizes],
+      ["materials", finalMaterials],
+    ] as [string, string[]][]) {
+      const attributeId = await createOrGetAttribute(ATTRIBUTE_NAME_MAP[key]);
+      const valueIds: number[] = [];
+      for (const val of values) {
+        valueIds.push(await createAttributeValue(attributeId, val));
+      }
+      await syncAttributeLine(Number(id), attributeId, valueIds);
+    }
+
+    // ── STEP 4: Stock update (move to new location if provided) ─────────────
     if (stock !== undefined && stock !== null) {
       const variants = await odooRequest(
         "product.product", "search_read",
@@ -752,8 +766,13 @@ export const updateProduct = async (req: Request, res: Response) => {
         let quantId: number;
         if (existingQuants.length) {
           quantId = existingQuants[0].id;
+          // ✅ Also update location_id if a new shelf/warehouse was provided
           await odooRequest("stock.quant", "write", [
-            [quantId], { inventory_quantity: Number(stock) },
+            [quantId],
+            {
+              inventory_quantity: Number(stock),
+              ...(resolvedLocationId && { location_id: resolvedLocationId }),
+            },
           ]);
         } else {
           let targetLocationId: number;
@@ -769,7 +788,11 @@ export const updateProduct = async (req: Request, res: Response) => {
             targetLocationId = warehouses[0].lot_stock_id[0];
           }
           quantId = await odooRequest("stock.quant", "create", [
-            { product_id: v.id, location_id: targetLocationId, inventory_quantity: Number(stock) },
+            {
+              product_id: v.id,
+              location_id: targetLocationId,
+              inventory_quantity: Number(stock),
+            },
           ]);
         }
 
@@ -784,13 +807,14 @@ export const updateProduct = async (req: Request, res: Response) => {
           throw new Error(`Could not find quant ${quantId} after apply`);
         const actualQty = verifiedQuant[0].quantity;
         if (Math.abs(actualQty - Number(stock)) > 0.01)
-          throw new Error(`Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`);
+          throw new Error(
+            `Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`,
+          );
       }
     }
 
-    // Supplier sync
+    // ── STEP 5: Supplier sync ────────────────────────────────────────────────
     if (supplierName || supplierId) {
-      // ✅ No re-declaration — assigns to the hoisted variable above
       if (supplierName) {
         const byName = await odooRequest(
           "res.partner", "search_read",
@@ -811,7 +835,11 @@ export const updateProduct = async (req: Request, res: Response) => {
 
       if (!resolvedSupplierId) {
         resolvedSupplierId = await odooRequest("res.partner", "create", [
-          { name: supplierName || "Unknown Supplier", ref: supplierId || false, supplier_rank: 1 },
+          {
+            name: supplierName || "Unknown Supplier",
+            ref: supplierId || false,
+            supplier_rank: 1,
+          },
         ]);
       }
 
@@ -828,7 +856,10 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (matchingInfo) {
         await odooRequest("product.supplierinfo", "write", [
           [matchingInfo.id],
-          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
+          {
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
         ]);
       } else {
         if (existingSupplierInfo.length) {
@@ -847,7 +878,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ PO block — resolvedSupplierId is now in scope
+    // ── STEP 6: Purchase Order ───────────────────────────────────────────────
     if (purchaseOrderNumber && resolvedSupplierId) {
       await createOrLinkPurchaseOrder(
         Number(id),
@@ -876,9 +907,15 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
+    // ── STEP 7: Re-fetch and return ──────────────────────────────────────────
     const updated = await getProductByIdService(Number(id));
 
-    res.json({ success: true, message: "Product updated successfully", product: updated });
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      product: updated,
+    });
+
   } catch (err: any) {
     console.error("❌ updateProduct error:", err.message);
     res.status(500).json({ message: err.message });
