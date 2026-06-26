@@ -24,19 +24,76 @@ export type Product = {
   description: string;
   price: number;
   qty_available: number;
-  image_1920: string | false; 
- category: string; 
+  image_1920: string | false;
+  category: string;
   sizes: string[];
   colors: string[];
   materials: string[];
   barcode?: string;
+
+  // Pricing
+  supplierPrice?: number;
+  shippingCost?: number;
+  currency?: string;
+  finalPriceXCD?: number;
+  markup?: number;
+  finalPrice?: number;
+
+  // Identity
+  itemNumber?: string | null;
+  invoiceNumber?: string;
   supplierInvoiceNumber?: string;
+
+  // Location
+  location?: {
+    shelfId: number | null;
+    shelfName: string | null;
+    fullPath: string | null;
+    warehouseId: number | null;
+    warehouseName: string | null;
+  } | null;
+
+  // Suppliers
+  suppliers?: {
+    id: number | null;
+    name: string | null;
+    price: number;
+    productCode: string | null;
+  }[];
+  supplier?: string;
+
+  // Purchase orders
+  purchaseOrders?: {
+    id: number | null;
+    poNumber: string | null;
+    invoiceNumber: string | null;
+    supplierId: number | null;
+    supplierName: string | null;
+    date: string | null;
+    status: string | null;
+    totalAmount: number;
+  }[];
+
+  // Taxes
+  taxes?: {
+    sales: number[];
+    purchase: number[];
+  };
+
+  // Attributes (also accessible flat for table columns)
+  attributes?: {
+    brand: string | null;
+    colors: string[];
+    sizes: string[];
+    materials: string[];
+  };
 };
 
 export const getColumns = (
   onEdit: (product: Product) => void,
   onDelete: (product: Product) => void,
-  onHistory: (product: Product) => void
+  onHistory: (product: Product) => void,
+   onDetails: (product: Product) => void,
 ): ColumnDef<Product>[] => [
   {
     id: "select",
@@ -147,6 +204,9 @@ export const getColumns = (
             <DropdownMenuItem onClick={() => onHistory(product)}>
   View History
 </DropdownMenuItem>
+<DropdownMenuItem onClick={() => onDetails(product)}>
+              View details
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       );
