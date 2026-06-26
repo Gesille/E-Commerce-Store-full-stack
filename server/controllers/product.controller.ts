@@ -565,17 +565,17 @@ export const updateProduct = async (req: Request, res: Response) => {
       warehouseName, shelfName, supplierId, supplierName, supplierPrice,
       shippingCost, currency,
     } = req.body;
-
+ 
     let imageUrl: string | null = null;
     let base64Image: string | null = null;
-
+ 
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
       imageUrl = uploaded.url;
       const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
-
+ 
     await odooRequest("product.template", "write", [
       [Number(id)],
       {
@@ -591,12 +591,12 @@ export const updateProduct = async (req: Request, res: Response) => {
         ...(base64Image && { image_1920: base64Image }),
       },
     ]);
-
-    // ✅ Sync attributes
+ 
+    // ✅ Sync attributes — deduplicate before writing to prevent "WHITE, WHITE" bug
     const finalColors: string[] = [...new Set<string>(attributes?.colors ?? [])];
     const finalSizes: string[] = [...new Set<string>(attributes?.sizes ?? [])];
     const finalMaterials: string[] = [...new Set<string>(attributes?.materials ?? [])];
-
+ 
     for (const [key, values] of [
       ["colors", finalColors],
       ["sizes", finalSizes],
@@ -611,16 +611,18 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
-
-    // ✅ Resolve location
+ 
+    // ✅ Resolve location in Odoo and SAVE it (old code only put it in the response, never wrote to Odoo)
     let resolvedLocationId: number | null = null;
-
+ 
     if (warehouseName && shelfName) {
       const warehouseResults = await odooRequest(
-        "stock.location", "search_read",
+        "stock.location",
+        "search_read",
         [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
         { fields: ["id"], limit: 1 },
       );
+ 
       let warehouseLocationId: number;
       if (warehouseResults.length) {
         warehouseLocationId = warehouseResults[0].id;
@@ -629,11 +631,14 @@ export const updateProduct = async (req: Request, res: Response) => {
           { name: warehouseName, usage: "internal" },
         ]);
       }
+ 
       const shelfResults = await odooRequest(
-        "stock.location", "search_read",
+        "stock.location",
+        "search_read",
         [[["name", "=", shelfName], ["location_id", "=", warehouseLocationId], ["usage", "=", "internal"]]],
         { fields: ["id"], limit: 1 },
       );
+ 
       if (shelfResults.length) {
         resolvedLocationId = shelfResults[0].id;
       } else {
@@ -643,42 +648,59 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     } else if (shelfName) {
       const found = await odooRequest(
-        "stock.location", "search_read",
+        "stock.location",
+        "search_read",
         [[["usage", "=", "internal"], ["name", "=", shelfName]]],
         { fields: ["id"], limit: 1 },
       );
       if (found[0]) resolvedLocationId = found[0].id;
     }
+ 
+    let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
 
-    // ✅ Stock update
     if (stock !== undefined && stock !== null) {
       const variants = await odooRequest(
-        "product.product", "search_read",
+        "product.product",
+        "search_read",
         [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
         { fields: ["id", "display_name"] },
       );
+
       if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
 
       for (const v of variants) {
+        // Search for ANY existing quant for this variant at ANY internal location
         const existingQuants = await odooRequest(
-          "stock.quant", "search_read",
-          [[["product_id", "=", v.id], ["location_id.usage", "=", "internal"]]],
+          "stock.quant",
+          "search_read",
+          [[
+            ["product_id", "=", v.id],
+            ["location_id.usage", "=", "internal"],
+          ]],
           { fields: ["id", "quantity", "location_id"], limit: 1 },
         );
 
         let quantId: number;
+
         if (existingQuants.length) {
+          // ✅ Update the existing quant — only set inventory_quantity, never write quantity directly
           quantId = existingQuants[0].id;
           await odooRequest("stock.quant", "write", [
-            [quantId], { inventory_quantity: Number(stock) },
+            [quantId],
+            { inventory_quantity: Number(stock) },
           ]);
+          console.log(`✅ Quant ${quantId} inventory_quantity set to ${stock} for variant ${v.id}`);
         } else {
+          // No quant exists yet — use resolved location or warehouse default
           let targetLocationId: number;
+
           if (resolvedLocationId) {
             targetLocationId = resolvedLocationId;
           } else {
             const warehouses = await odooRequest(
-              "stock.warehouse", "search_read", [[]],
+              "stock.warehouse",
+              "search_read",
+              [[]],
               { fields: ["lot_stock_id"], limit: 1 },
             );
             if (!warehouses.length || !warehouses[0].lot_stock_id) {
@@ -686,83 +708,72 @@ export const updateProduct = async (req: Request, res: Response) => {
             }
             targetLocationId = warehouses[0].lot_stock_id[0];
           }
+
           quantId = await odooRequest("stock.quant", "create", [
-            { product_id: v.id, location_id: targetLocationId, inventory_quantity: Number(stock) },
+            {
+              product_id: v.id,
+              location_id: targetLocationId,
+              inventory_quantity: Number(stock),
+            },
           ]);
+          console.log(`✅ Quant ${quantId} created at location ${targetLocationId} for variant ${v.id}`);
         }
 
+        // Apply the inventory adjustment — this is what actually commits the change in Odoo
         await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
+        // Verify
         const verifiedQuant = await odooRequest(
-          "stock.quant", "search_read",
+          "stock.quant",
+          "search_read",
           [[["id", "=", quantId]]],
           { fields: ["quantity"] },
         );
+
         if (!verifiedQuant.length) throw new Error(`Could not find quant ${quantId} after apply`);
+
         const actualQty = verifiedQuant[0].quantity;
+        console.log(`🔍 Verified quant ${quantId}: qty=${actualQty}`);
+
         if (Math.abs(actualQty - Number(stock)) > 0.01) {
           throw new Error(`Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`);
         }
       }
+
+      verifiedStock = Number(stock);
     }
-
-    // ✅ Supplier sync — always removes old supplierinfo and replaces it
-    //    so the GET response suppliers[] array stays in sync with what was saved
+ 
+    // ✅ Update supplier info
     if (supplierName || supplierId) {
-      let resolvedSupplierId: number | null = null;
-
-      if (supplierName) {
-        const byName = await odooRequest(
-          "res.partner", "search_read",
-          [[["name", "=", supplierName]]],
-          { fields: ["id"], limit: 1 },
-        );
-        if (byName.length) resolvedSupplierId = byName[0].id;
-      }
-
-      if (!resolvedSupplierId && supplierId) {
-        const byRef = await odooRequest(
-          "res.partner", "search_read",
-          [[["ref", "=", supplierId]]],
-          { fields: ["id"], limit: 1 },
-        );
-        if (byRef.length) resolvedSupplierId = byRef[0].id;
-      }
-
-      if (!resolvedSupplierId) {
+      const suppliers = await odooRequest(
+        "res.partner",
+        "search_read",
+        [[[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]]],
+        { fields: ["id"], limit: 1 },
+      );
+ 
+      let resolvedSupplierId: number;
+      if (suppliers.length) {
+        resolvedSupplierId = suppliers[0].id;
+      } else {
         resolvedSupplierId = await odooRequest("res.partner", "create", [
           { name: supplierName || "Unknown Supplier", ref: supplierId || false, supplier_rank: 1 },
         ]);
       }
-
-      // Find existing supplierinfo for this template
+ 
       const existingSupplierInfo = await odooRequest(
-        "product.supplierinfo", "search_read",
-        [[["product_tmpl_id", "=", Number(id)]]],
-        { fields: ["id", "partner_id"], limit: 10 },
+        "product.supplierinfo",
+        "search_read",
+        [[["product_tmpl_id", "=", Number(id)], ["partner_id", "=", resolvedSupplierId]]],
+        { fields: ["id"], limit: 1 },
       );
-
-      const matchingInfo = existingSupplierInfo.find(
-        (s: any) => s.partner_id?.[0] === resolvedSupplierId
-      );
-
-      if (matchingInfo) {
-        // Update existing supplierinfo for this partner
+ 
+      if (existingSupplierInfo.length) {
         await odooRequest("product.supplierinfo", "write", [
-          [matchingInfo.id],
-          {
-            price: Number(supplierPrice) || 0,
-            product_code: supplierId || false,
-          },
+          [existingSupplierInfo[0].id],
+          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
         ]);
       } else {
-        // Remove all old supplierinfos and create a fresh one
-        // (keeps Odoo clean — one active supplier per update)
-        if (existingSupplierInfo.length) {
-          await odooRequest("product.supplierinfo", "unlink", [
-            existingSupplierInfo.map((s: any) => s.id),
-          ]);
-        }
         await odooRequest("product.supplierinfo", "create", [
           {
             product_tmpl_id: Number(id),
@@ -773,15 +784,40 @@ export const updateProduct = async (req: Request, res: Response) => {
         ]);
       }
     }
-
-    // ✅ Re-fetch using the same service as GET — guarantees identical shape
-    //    including suppliers[], purchaseOrders[], location, attributes, invoiceNumber
-    const updated = await getProductByIdService(Number(id));
-
+ 
+    const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
+    const rate = XCD_RATES[currency ?? "USD"] ?? 2.67;
+    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+ 
     res.json({
       success: true,
       message: "Product updated successfully",
-      product: updated,
+      product: {
+        odooProductId: Number(id),
+        name,
+        reference: reference || "",
+        itemNumber: itemNumber || "",
+        barcode: barcode || "",
+        price: Number(price) || 0,
+        stock: verifiedStock,
+        supplierId: supplierId || "",
+        supplierName: supplierName || "",
+        supplierPrice: Number(supplierPrice) || 0,
+        shippingCost: Number(shippingCost) || 0,
+        currency: currency || "USD",
+        finalPriceXCD,
+        location: {
+          warehouseName: warehouseName || "",
+          shelfName: shelfName || "",
+          locationId: resolvedLocationId,
+        },
+        attributes: {
+          colors: finalColors,
+          sizes: finalSizes,
+          materials: finalMaterials,
+        },
+        image: imageUrl || undefined,
+      },
     });
   } catch (err: any) {
     console.error("❌ updateProduct error:", err.message);
