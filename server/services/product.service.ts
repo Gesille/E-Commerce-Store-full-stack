@@ -36,6 +36,8 @@ const modelExists = async (modelName: string): Promise<boolean> => {
 };
 
 // ─── mapProductInput ──────────────────────────────────────────────────────────
+// suppliers and purchaseOrders are already pre-mapped before arriving here.
+// toCleanProduct handles both pre-mapped and raw Odoo shapes via ?? fallbacks.
 
 const mapProductInput = (
   p: any,
@@ -60,6 +62,7 @@ const mapProductInput = (
   taxes_id: p.taxes_id,
   supplier_taxes_id: p.supplier_taxes_id,
   product_tmpl_id: [p.id],
+  // Pre-mapped arrays passed straight through to toCleanProduct
   suppliers,
   purchaseOrders,
   location,
@@ -98,7 +101,7 @@ const getProductLocation = async (productVariantId: number) => {
   };
 };
 
-// ─── Safe PO fetch — returns [] if purchase.order doesn't exist ───────────────
+// ─── Safe PO fetch — returns {} if purchase.order doesn't exist ───────────────
 
 const safeFetchPurchaseOrders = async (
   templateIds: number[],
@@ -233,7 +236,7 @@ const safeFetchPurchaseOrdersForProduct = async (
 // ─── getAllProductsService ─────────────────────────────────────────────────────
 
 export const getAllProductsService = async (category?: number) => {
-  const domain: any[] = [];
+  const domain: any[] = [["active", "=", true]];
   if (category) domain.push(["categ_id", "=", Number(category)]);
 
   const products = await odooRequest(
@@ -252,11 +255,11 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ATTR_FIELDS }
   );
 
-  // many suppliers per product
+  // ── Fetch all supplier infos in one call ──────────────────────────────────
   const supplierInfos = await odooRequest(
     "product.supplierinfo",
     "search_read",
-    [[]],
+    [[["product_tmpl_id", "in", templateIds]]],
     { fields: ["product_tmpl_id", "partner_id", "price", "product_code"] }
   );
 
@@ -306,7 +309,7 @@ export const getAllProductsService = async (category?: number) => {
     locationById[l.id] = l;
   });
 
-  // templateId → [suppliers]  (many suppliers per product)
+  // ── templateId → [suppliers] (pre-mapped so toCleanProduct gets {id, name}) ─
   const suppliersByTemplate: Record<number, any[]> = {};
   supplierInfos.forEach((s: any) => {
     const tmplId = s.product_tmpl_id?.[0];
@@ -320,7 +323,7 @@ export const getAllProductsService = async (category?: number) => {
     });
   });
 
-  // templateId → [POs]  (many POs per product, safe — returns {} if not installed)
+  // ── templateId → [POs] (pre-mapped, safe — returns {} if not installed) ──
   const posByTemplate = await safeFetchPurchaseOrders(templateIds, allVariants);
 
   // ─── Map ─────────────────────────────────────────────────────────────────
@@ -371,7 +374,7 @@ export const getProductByIdService = async (id: number) => {
     { fields: ATTR_FIELDS }
   );
 
-  // many suppliers for this product
+  // ── Suppliers for this product (pre-mapped) ───────────────────────────────
   const supplierInfos = await odooRequest(
     "product.supplierinfo",
     "search_read",
@@ -398,7 +401,7 @@ export const getProductByIdService = async (id: number) => {
     location = await getProductLocation(variants[0].id);
   }
 
-  // many POs for this product (safe — returns [] if not installed)
+  // ── POs for this product (pre-mapped, safe) ───────────────────────────────
   const purchaseOrders = variants.length
     ? await safeFetchPurchaseOrdersForProduct(variants[0].id)
     : [];
