@@ -8,6 +8,9 @@ const PRODUCT_FIELDS = [
   "name",
   "list_price",
   "standard_price",
+  "x_shipping_cost",  
+  "x_markup",          
+  "x_final_price",  
   "currency_id",
   "qty_available",
   "image_1920",
@@ -15,7 +18,6 @@ const PRODUCT_FIELDS = [
   "taxes_id",
   "supplier_taxes_id",
 ];
-
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
 
 const mapProductInput = (p: any, supplierName: string | null, location: any) => ({
