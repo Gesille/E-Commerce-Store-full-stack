@@ -6,7 +6,7 @@ const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "Epicurean Drive ,Saint John ";
 const shopPhone   = "560-2433";
 const shopABST = "0161466";
-const POLICY_URL = process.env.NEXT_PUBLIC_POLICY_URL;
+
 const fmt = (n: number) => n.toFixed(2);
 
 function calcLineTotal(item: CartItem) {
@@ -228,8 +228,8 @@ function buildReceiptHTML(
 
 <div style="margin-top:8px; text-align:center;">
   Full return policy:
-  <a href="${POLICY_URL}" target="_blank">
-    Click here
+  <a href="https://e-commerce-store-full-stack-oear.vercel.app/policy" target="_blank">
+   Return Policy
   </a>
 </div>
     <div style="margin-top: 10px; font-size: 9pt; color: #555;">* ${receiptNo} *</div>
