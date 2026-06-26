@@ -32,12 +32,14 @@ export type Product = {
   barcode?: string;
 
   // Pricing
-  supplierPrice?: number;
-  shippingCost?: number;
-  currency?: string;
-  finalPriceXCD?: number;
-  markup?: number;
-  finalPrice?: number;
+ // Pricing (managed by Odoo)
+supplierPrice?: number;
+shippingCost?: number;
+markup?: number;
+currency?: string;
+
+// Final price from Odoo list_price
+finalPrice?: number;
 
   // Identity
   itemNumber?: string | null;
