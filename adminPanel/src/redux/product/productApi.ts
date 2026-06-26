@@ -13,35 +13,49 @@ export const productApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
       }),
       providesTags: ["Products"],
-      transformResponse: (response: { success: boolean; products: any[] }) =>
-        response.products.map((p) => ({
-          id: p.id,
-          name: p.name,
-          shortDescription: p.reference ?? "",
-          description: p.name ?? "",
-          price: p.price ?? 0,
-          qty_available: p.stock ?? 0,
-          image_1920: p.image ?? false,
-          category: p.category ?? "",
-          sizes: p.attributes?.sizes ?? [],
-          colors: p.attributes?.colors ?? [],
-          materials: p.attributes?.materials ?? [],
-          barcode: p.barcode ?? "",
-          supplierPrice: p.supplierPrice ?? 0,
-          shippingCost: p.shippingCost ?? 0,
-          currency: p.currency ?? "USD",
-          finalPriceXCD: p.finalPriceXCD ?? 0,
-          location: p.location ?? null,
+     transformResponse: (response: { success: boolean; products: any[] }) =>
+  response.products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    shortDescription: p.reference ?? "",
+    description: p.name ?? "",
+    price: p.price ?? 0,
+    qty_available: p.stock ?? 0,
+    image_1920: p.image ?? false,
+    category: p.category ?? "",
+    sizes: p.attributes?.sizes ?? [],
+    colors: p.attributes?.colors ?? [],
+    materials: p.attributes?.materials ?? [],
+    barcode: p.barcode ?? "",
+    supplierPrice: p.supplierPrice ?? 0,
+    shippingCost: p.shippingCost ?? 0,
+    currency: p.currency ?? "USD",
 
-          //  Suppliers (many)
-          suppliers: p.suppliers ?? [],
-          supplier: p.supplier ?? "", // backward compat
+  
+    finalPrice: p.finalPrice ?? 0,
 
-          // Purchase Orders (many, linked by name + invoiceNumber)
-          purchaseOrders: p.purchaseOrders ?? [],
-          invoiceNumber: p.invoiceNumber ?? "",
-          supplierInvoiceNumber: p.invoiceNumber ?? "", // backward compat
-        })),
+   
+    markup: p.markup ?? null,
+    itemNumber: p.itemNumber ?? null,
+
+    location: p.location ?? null,
+    suppliers: p.suppliers ?? [],
+    supplier: p.supplier ?? "",
+    purchaseOrders: p.purchaseOrders ?? [],
+    invoiceNumber: p.invoiceNumber ?? "",
+    supplierInvoiceNumber: p.invoiceNumber ?? "",
+
+    attributes: {
+      
+      brand: p.attributes?.brand ?? null,
+      colors: p.attributes?.colors ?? [],
+      sizes: p.attributes?.sizes ?? [],
+      materials: p.attributes?.materials ?? [],
+  
+    },
+
+    taxes: p.taxes ?? null,
+  })),
     }),
 
     updateProduct: builder.mutation({
@@ -118,6 +132,7 @@ export const productApi = apiSlice.injectEndpoints({
         // Media & attributes
         image?: string;
         attributes: {
+          
           colors: string[];
           sizes: string[];
           materials: string[];
