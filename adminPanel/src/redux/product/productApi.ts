@@ -31,46 +31,52 @@ export const productApi = apiSlice.injectEndpoints({
           shippingCost: p.shippingCost ?? 0,
           currency: p.currency ?? "USD",
           finalPriceXCD: p.finalPriceXCD ?? 0,
-         supplier: p.supplierName ?? "",
-         supplierInvoiceNumber: p.supplierInvoiceNumber ?? "", 
-supplierId: p.supplierId ?? "",
           location: p.location ?? null,
+
+          //  Suppliers (many)
+          suppliers: p.suppliers ?? [],
+          supplier: p.supplier ?? "", // backward compat
+
+          // Purchase Orders (many, linked by name + invoiceNumber)
+          purchaseOrders: p.purchaseOrders ?? [],
+          invoiceNumber: p.invoiceNumber ?? "",
+          supplierInvoiceNumber: p.invoiceNumber ?? "", // backward compat
         })),
     }),
 
-   updateProduct: builder.mutation({
-  query: ({
-    id,
-    ...body
-  }: {
-    id: string | number;
-    name: string;
-    price: number;
-    stock: number;
-    reference?: string;
-    barcode?: string;
-    itemNumber?: string;          
-    supplierPrice?: number;      
-    shippingCost?: number;        
-    currency?: string;            
-    supplierId?: string;         
-    supplierName?: string;         
-    warehouseName?: string;      
-    shelfName?: string;           
-    image?: string | null;
-    attributes: {
-      colors: string[];
-      sizes: string[];
-      materials: string[];
-    };
-  }) => ({
-    url: `update-product/${id}`,
-    method: "POST",
-    credentials: "include" as const,
-    body,
-  }),
-  invalidatesTags: ["Products"],
-}),
+    updateProduct: builder.mutation({
+      query: ({
+        id,
+        ...body
+      }: {
+        id: string | number;
+        name: string;
+        price: number;
+        stock: number;
+        reference?: string;
+        barcode?: string;
+        itemNumber?: string;
+        supplierPrice?: number;
+        shippingCost?: number;
+        currency?: string;
+        supplierId?: string;
+        supplierName?: string;
+        warehouseName?: string;
+        shelfName?: string;
+        image?: string | null;
+        attributes: {
+          colors: string[];
+          sizes: string[];
+          materials: string[];
+        };
+      }) => ({
+        url: `update-product/${id}`,
+        method: "POST",
+        credentials: "include" as const,
+        body,
+      }),
+      invalidatesTags: ["Products"],
+    }),
 
     deleteProduct: builder.mutation({
       query: (id: string | number) => ({
@@ -108,7 +114,7 @@ supplierId: p.supplierId ?? "",
         // Supplier
         supplierId?: string;
         supplierName?: string;
-supplier?: string;
+        supplier?: string;
         // Media & attributes
         image?: string;
         attributes: {
@@ -152,52 +158,55 @@ supplier?: string;
       transformResponse: (response: { success: boolean; product: any }) =>
         response.product,
     }),
-    
-getOdooLocations: builder.query<{ id: number; name: string; complete_name: string }[], void>({
-  query: () => ({
-    url: "location",
-    method: "GET",
-    credentials: "include" as const,
-  }),
-  transformResponse: (res: any) => res.locations,
-}),
-getProductHistory: builder.query<
-  {
-    lastRestock: { date: string; qty: number } | null;
-    stockMoves: {
-      date: string;
-      qty: number;
-      type: "restock" | "sale" | "return" | "adjustment";
-      reference: string;
-      from: string;
-      to: string;
-    }[];
-    salesHistory: {
-      date: string;
-      orderId: string;
-      qty: number;
-      total: number;
-    }[];
-  },
-  string | number
->({
-  query: (id) => ({
-    url: `product-history/${id}`,
-    method: "GET",
-    credentials: "include" as const,
-  }),
-}),
-getLastRestockBatch: builder.query<
-  Record<string, {date:string; qty:number}>,
-  void
->({
-  query: () => ({
-    url: "last-restock-batch",
-    method: "GET",
-    credentials: "include" as const,
-  }),
-  transformResponse: (res:any) => res.data,
-}),
+
+    getOdooLocations: builder.query<
+      { id: number; name: string; complete_name: string }[],
+      void
+    >({
+      query: () => ({
+        url: "location",
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (res: any) => res.locations,
+    }),
+    getProductHistory: builder.query<
+      {
+        lastRestock: { date: string; qty: number } | null;
+        stockMoves: {
+          date: string;
+          qty: number;
+          type: "restock" | "sale" | "return" | "adjustment";
+          reference: string;
+          from: string;
+          to: string;
+        }[];
+        salesHistory: {
+          date: string;
+          orderId: string;
+          qty: number;
+          total: number;
+        }[];
+      },
+      string | number
+    >({
+      query: (id) => ({
+        url: `product-history/${id}`,
+        method: "GET",
+        credentials: "include" as const,
+      }),
+    }),
+    getLastRestockBatch: builder.query<
+      Record<string, { date: string; qty: number }>,
+      void
+    >({
+      query: () => ({
+        url: "last-restock-batch",
+        method: "GET",
+        credentials: "include" as const,
+      }),
+      transformResponse: (res: any) => res.data,
+    }),
   }),
 });
 
@@ -210,5 +219,5 @@ export const {
   useGetTopSellingProductsQuery,
   useLazyGetProductByBarcodeQuery,
   useGetOdooLocationsQuery,
-  useLazyGetProductHistoryQuery
+  useLazyGetProductHistoryQuery,
 } = productApi;

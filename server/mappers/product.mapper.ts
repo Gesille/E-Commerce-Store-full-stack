@@ -22,6 +22,29 @@ export const toCleanProduct = (
     return match?.name || null;
   };
 
+  // ── Suppliers: array because many suppliers can supply this product ──
+  const suppliers = (product.suppliers ?? []).map((s: any) => ({
+    id: s.partner_id?.[0] || null,
+    name: s.partner_id?.[1] || null,
+    price: s.price || 0,
+    productCode: s.product_code || null,  // supplier's own ref for this product
+  }));
+
+  // ── POs: array because this product can appear in many POs ──────────
+  // Each PO is linked by product.name + invoiceNumber
+  const purchaseOrders = (product.purchaseOrders ?? []).map((po: any) => ({
+    id: po.id || null,
+    poNumber: po.name || null,        
+    invoiceNumber: po.invoiceNumber || product.x_supplier_invoice_number || null,
+    supplierId: po.partner_id?.[0] || null,
+    supplierName: po.partner_id?.[1] || null,
+    date: po.date_order || null,
+    status: po.state || null,             // draft | confirmed | received
+    // connection key: product name + invoice number
+    productName: product.display_name,    
+    totalAmount: po.amount_total || 0,
+  }));
+
   return {
     id: product.id,
     itemNumber: product.item_number || null,
@@ -29,22 +52,29 @@ export const toCleanProduct = (
     barcode: product.barcode || null,
     name: product.display_name,
 
-    // ── Pricing: all values come from Odoo, no calculation here ──
-    price: product.lst_price || product.list_price || 0,   // final selling price from Odoo
-    supplierPrice: product.standard_price || 0,            // raw cost
-    shippingCost: product.x_shipping_cost || 0,            // custom Odoo field
-    markup: product.x_markup || 1,                         // custom Odoo field
-    finalPrice: product.x_final_price || 0,                // computed in Odoo
 
-    // ── Stock: comes from Odoo stock.quant ───────────────────────
+    price: product.lst_price || product.list_price || 0,
+    supplierPrice: product.standard_price || 0,
+    shippingCost: product.x_shipping_cost || 0,
+    markup: product.x_markup || 1,
+    finalPrice: product.x_final_price || 0,
+
+ 
     stock: product.qty_available || 0,
 
-    // ── Meta ─────────────────────────────────────────────────────
+    // ── Supplier (MANY — multiple suppliers can supply this product) ───
+    suppliers,                           
+    supplier: suppliers[0]?.name || null, 
+
+
+    purchaseOrders,                      
+
+    invoiceNumber: product.x_supplier_invoice_number || null,
+
+ 
     image: product.image_1920 || false,
-    supplierInvoiceNumber: product.x_supplier_invoice_number || "",
     category: product.categ_id?.[1] || null,
     currency: product.currency_id?.[1] || "XCD",
-    supplier: product.supplier_name || null,
     location: product.location || null,
 
     taxes: {
