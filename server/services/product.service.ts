@@ -39,7 +39,6 @@ const mapProductInput = (p: any, supplierName: string | null, location: any) => 
   location,
 });
 
-// ✅ helper - جلب الـ quants مع location لمنتج معين
 const getProductLocation = async (productVariantId: number) => {
   const quants = await odooRequest(
     "stock.quant",
