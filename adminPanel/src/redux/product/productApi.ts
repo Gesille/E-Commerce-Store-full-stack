@@ -51,7 +51,7 @@ export const productApi = apiSlice.injectEndpoints({
       colors: p.attributes?.colors ?? [],
       sizes: p.attributes?.sizes ?? [],
       materials: p.attributes?.materials ?? [],
-  
+      finalPrice: p.finalPrice ?? 0,
     },
 
     taxes: p.taxes ?? null,
