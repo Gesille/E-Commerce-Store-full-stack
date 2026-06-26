@@ -24,6 +24,17 @@ const PRODUCT_FIELDS = [
 
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
 
+// ─── Check if Odoo model exists ───────────────────────────────────────────────
+
+const modelExists = async (modelName: string): Promise<boolean> => {
+  try {
+    await odooRequest(modelName, "search_read", [[]], { fields: ["id"], limit: 1 });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // ─── mapProductInput ──────────────────────────────────────────────────────────
 
 const mapProductInput = (
@@ -49,9 +60,8 @@ const mapProductInput = (
   taxes_id: p.taxes_id,
   supplier_taxes_id: p.supplier_taxes_id,
   product_tmpl_id: [p.id],
-  // ── Relationships ──────────────────────────────────────────────────────────
-  suppliers,       // many suppliers → one product
-  purchaseOrders,  // many POs → one product (linked by name + invoiceNumber)
+  suppliers,
+  purchaseOrders,
   location,
 });
 
@@ -88,13 +98,144 @@ const getProductLocation = async (productVariantId: number) => {
   };
 };
 
+// ─── Safe PO fetch — returns [] if purchase.order doesn't exist ───────────────
+
+const safeFetchPurchaseOrders = async (
+  templateIds: number[],
+  allVariants: any[]
+): Promise<Record<number, any[]>> => {
+  try {
+    const hasPurchaseModule = await modelExists("purchase.order");
+    if (!hasPurchaseModule) {
+      console.warn("⚠ purchase.order model not found — skipping PO fetch");
+      return {};
+    }
+
+    const allPurchaseOrders = await odooRequest(
+      "purchase.order",
+      "search_read",
+      [[["order_line.product_id.product_tmpl_id", "in", templateIds]]],
+      {
+        fields: [
+          "id",
+          "name",
+          "partner_id",
+          "date_order",
+          "state",
+          "amount_total",
+          "x_supplier_invoice_number",
+        ],
+      }
+    );
+
+    if (!allPurchaseOrders.length) return {};
+
+    const allPOLines = await odooRequest(
+      "purchase.order.line",
+      "search_read",
+      [[["order_id", "in", allPurchaseOrders.map((po: any) => po.id)]]],
+      { fields: ["order_id", "product_id"] }
+    );
+
+    const poById: Record<number, any> = {};
+    allPurchaseOrders.forEach((po: any) => { poById[po.id] = po; });
+
+    const posByTemplate: Record<number, any[]> = {};
+
+    allPOLines.forEach((line: any) => {
+      const variantId = line.product_id?.[0];
+      const variant = allVariants.find((v: any) => v.id === variantId);
+      if (!variant) return;
+
+      const tmplId = variant.product_tmpl_id?.[0];
+      const po = poById[line.order_id?.[0]];
+      if (!po) return;
+
+      if (!posByTemplate[tmplId]) posByTemplate[tmplId] = [];
+
+      const alreadyAdded = posByTemplate[tmplId].find((x) => x.id === po.id);
+      if (!alreadyAdded) {
+        posByTemplate[tmplId].push({
+          id: po.id,
+          poNumber: po.name || null,
+          invoiceNumber: po.x_supplier_invoice_number || null,
+          supplierId: po.partner_id?.[0] || null,
+          supplierName: po.partner_id?.[1] || null,
+          date: po.date_order || null,
+          status: po.state || null,
+          totalAmount: po.amount_total || 0,
+        });
+      }
+    });
+
+    return posByTemplate;
+  } catch (err: any) {
+    console.warn("⚠ PO fetch failed, skipping:", err.message);
+    return {};
+  }
+};
+
+// ─── Safe PO fetch for single product ────────────────────────────────────────
+
+const safeFetchPurchaseOrdersForProduct = async (
+  variantId: number
+): Promise<any[]> => {
+  try {
+    const hasPurchaseModule = await modelExists("purchase.order");
+    if (!hasPurchaseModule) {
+      console.warn("⚠ purchase.order model not found — skipping PO fetch");
+      return [];
+    }
+
+    const poLines = await odooRequest(
+      "purchase.order.line",
+      "search_read",
+      [[["product_id", "=", variantId]]],
+      { fields: ["order_id"] }
+    );
+
+    const poIds = [...new Set(poLines.map((l: any) => l.order_id?.[0]).filter(Boolean))];
+    if (!poIds.length) return [];
+
+    const pos = await odooRequest(
+      "purchase.order",
+      "search_read",
+      [[["id", "in", poIds]]],
+      {
+        fields: [
+          "id",
+          "name",
+          "partner_id",
+          "date_order",
+          "state",
+          "amount_total",
+          "x_supplier_invoice_number",
+        ],
+      }
+    );
+
+    return pos.map((po: any) => ({
+      id: po.id,
+      poNumber: po.name || null,
+      invoiceNumber: po.x_supplier_invoice_number || null,
+      supplierId: po.partner_id?.[0] || null,
+      supplierName: po.partner_id?.[1] || null,
+      date: po.date_order || null,
+      status: po.state || null,
+      totalAmount: po.amount_total || 0,
+    }));
+  } catch (err: any) {
+    console.warn("⚠ PO fetch failed, skipping:", err.message);
+    return [];
+  }
+};
+
 // ─── getAllProductsService ─────────────────────────────────────────────────────
 
 export const getAllProductsService = async (category?: number) => {
   const domain: any[] = [];
   if (category) domain.push(["categ_id", "=", Number(category)]);
 
-  // 1. Products
   const products = await odooRequest(
     "product.template",
     "search_read",
@@ -104,7 +245,6 @@ export const getAllProductsService = async (category?: number) => {
 
   const templateIds = products.map((p: any) => p.id);
 
-  // 2. Attributes
   const attrs = await odooRequest(
     "product.template.attribute.value",
     "search_read",
@@ -112,7 +252,7 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ATTR_FIELDS }
   );
 
-  // 3. Suppliers — many suppliers per product
+  // many suppliers per product
   const supplierInfos = await odooRequest(
     "product.supplierinfo",
     "search_read",
@@ -120,7 +260,6 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["product_tmpl_id", "partner_id", "price", "product_code"] }
   );
 
-  // 4. Variants
   const allVariants = await odooRequest(
     "product.product",
     "search_read",
@@ -130,36 +269,6 @@ export const getAllProductsService = async (category?: number) => {
 
   const variantIds = allVariants.map((v: any) => v.id);
 
-  // 5. Purchase Orders — many POs per product, one supplier per PO
-  //    linked by product.name + invoiceNumber (x_supplier_invoice_number)
-  const allPurchaseOrders = await odooRequest(
-    "purchase.order",
-    "search_read",
-    [[["order_line.product_id.product_tmpl_id", "in", templateIds]]],
-    {
-      fields: [
-        "id",
-        "name",
-        "partner_id",       // supplier (1 per PO)
-        "date_order",
-        "state",
-        "amount_total",
-        "x_supplier_invoice_number",
-      ],
-    }
-  );
-
-  // 6. PO lines — to map which PO contains which product variant
-  const allPOLines = allPurchaseOrders.length
-    ? await odooRequest(
-        "purchase.order.line",
-        "search_read",
-        [[["order_id", "in", allPurchaseOrders.map((po: any) => po.id)]]],
-        { fields: ["order_id", "product_id"] }
-      )
-    : [];
-
-  // 7. Quants
   const allQuants = await odooRequest(
     "stock.quant",
     "search_read",
@@ -167,7 +276,6 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["product_id", "location_id", "quantity"] }
   );
 
-  // 8. Locations
   const locationIds = [
     ...new Set(allQuants.map((q: any) => q.location_id?.[0]).filter(Boolean)),
   ];
@@ -181,34 +289,24 @@ export const getAllProductsService = async (category?: number) => {
       )
     : [];
 
-  // ─── Build lookup maps ────────────────────────────────────────────────────
+  // ─── Lookup maps ──────────────────────────────────────────────────────────
 
-  // variantId → templateId
   const variantByTemplate: Record<number, number> = {};
   allVariants.forEach((v: any) => {
     variantByTemplate[v.product_tmpl_id?.[0]] = v.id;
   });
 
-  // variantId → quant
   const quantByVariant: Record<number, any> = {};
   allQuants.forEach((q: any) => {
     quantByVariant[q.product_id?.[0]] = q;
   });
 
-  // locationId → location
   const locationById: Record<number, any> = {};
   allLocations.forEach((l: any) => {
     locationById[l.id] = l;
   });
 
-  // poId → PO
-  const poById: Record<number, any> = {};
-  allPurchaseOrders.forEach((po: any) => {
-    poById[po.id] = po;
-  });
-
-  // templateId → [suppliers]
-  // one product can have MANY suppliers
+  // templateId → [suppliers]  (many suppliers per product)
   const suppliersByTemplate: Record<number, any[]> = {};
   supplierInfos.forEach((s: any) => {
     const tmplId = s.product_tmpl_id?.[0];
@@ -222,40 +320,10 @@ export const getAllProductsService = async (category?: number) => {
     });
   });
 
-  // templateId → [POs]
-  // one product can appear in MANY POs
-  // connection key: product.name + invoiceNumber
-  const posByTemplate: Record<number, any[]> = {};
-  allPOLines.forEach((line: any) => {
-    const variantId = line.product_id?.[0];
-    const variant = allVariants.find((v: any) => v.id === variantId);
-    if (!variant) return;
+  // templateId → [POs]  (many POs per product, safe — returns {} if not installed)
+  const posByTemplate = await safeFetchPurchaseOrders(templateIds, allVariants);
 
-    const tmplId = variant.product_tmpl_id?.[0];
-    const po = poById[line.order_id?.[0]];
-    if (!po) return;
-
-    if (!posByTemplate[tmplId]) posByTemplate[tmplId] = [];
-
-    // avoid duplicates (same product twice in one PO)
-    const alreadyAdded = posByTemplate[tmplId].find((x) => x.id === po.id);
-    if (!alreadyAdded) {
-      posByTemplate[tmplId].push({
-        id: po.id,
-        poNumber: po.name || null,
-        // connection key 1: invoice number links PO → product
-        invoiceNumber: po.x_supplier_invoice_number || null,
-        // PO has ONE supplier
-        supplierId: po.partner_id?.[0] || null,
-        supplierName: po.partner_id?.[1] || null,
-        date: po.date_order || null,
-        status: po.state || null,   // draft | purchase | done | cancel
-        totalAmount: po.amount_total || 0,
-      });
-    }
-  });
-
-  // ─── Map products ─────────────────────────────────────────────────────────
+  // ─── Map ─────────────────────────────────────────────────────────────────
 
   return products.map((p: any) => {
     const variantId = variantByTemplate[p.id];
@@ -275,8 +343,8 @@ export const getAllProductsService = async (category?: number) => {
     return toCleanProduct(
       mapProductInput(
         p,
-        suppliersByTemplate[p.id] || [],   // many suppliers
-        posByTemplate[p.id] || [],          // many POs
+        suppliersByTemplate[p.id] || [],
+        posByTemplate[p.id] || [],
         location
       ),
       attrs
@@ -287,7 +355,6 @@ export const getAllProductsService = async (category?: number) => {
 // ─── getProductByIdService ────────────────────────────────────────────────────
 
 export const getProductByIdService = async (id: number) => {
-  // 1. Product
   const product = await odooRequest(
     "product.template",
     "search_read",
@@ -297,7 +364,6 @@ export const getProductByIdService = async (id: number) => {
 
   if (!product.length) return null;
 
-  // 2. Attributes
   const attrs = await odooRequest(
     "product.template.attribute.value",
     "search_read",
@@ -305,7 +371,7 @@ export const getProductByIdService = async (id: number) => {
     { fields: ATTR_FIELDS }
   );
 
-  // 3. Suppliers — many suppliers for this product
+  // many suppliers for this product
   const supplierInfos = await odooRequest(
     "product.supplierinfo",
     "search_read",
@@ -320,7 +386,6 @@ export const getProductByIdService = async (id: number) => {
     productCode: s.product_code || null,
   }));
 
-  // 4. Variant
   const variants = await odooRequest(
     "product.product",
     "search_read",
@@ -328,68 +393,18 @@ export const getProductByIdService = async (id: number) => {
     { fields: ["id"], limit: 1 }
   );
 
-  // 5. Location
   let location = null;
   if (variants.length) {
     location = await getProductLocation(variants[0].id);
   }
 
-  // 6. Purchase Orders — many POs for this product
-  //    PO has ONE supplier | linked by product.name + invoiceNumber
-  const purchaseOrders: any[] = [];
-
-  if (variants.length) {
-    const poLines = await odooRequest(
-      "purchase.order.line",
-      "search_read",
-      [[["product_id", "=", variants[0].id]]],
-      { fields: ["order_id"] }
-    );
-
-    const poIds = [...new Set(poLines.map((l: any) => l.order_id?.[0]).filter(Boolean))];
-
-    if (poIds.length) {
-      const pos = await odooRequest(
-        "purchase.order",
-        "search_read",
-        [[["id", "in", poIds]]],
-        {
-          fields: [
-            "id",
-            "name",
-            "partner_id",     // ONE supplier per PO
-            "date_order",
-            "state",
-            "amount_total",
-            "x_supplier_invoice_number",
-          ],
-        }
-      );
-
-      pos.forEach((po: any) => {
-        purchaseOrders.push({
-          id: po.id,
-          poNumber: po.name || null,
-          // connection key: invoiceNumber links PO → product
-          invoiceNumber: po.x_supplier_invoice_number || null,
-          // ONE supplier per PO
-          supplierId: po.partner_id?.[0] || null,
-          supplierName: po.partner_id?.[1] || null,
-          date: po.date_order || null,
-          status: po.state || null,
-          totalAmount: po.amount_total || 0,
-        });
-      });
-    }
-  }
+  // many POs for this product (safe — returns [] if not installed)
+  const purchaseOrders = variants.length
+    ? await safeFetchPurchaseOrdersForProduct(variants[0].id)
+    : [];
 
   return toCleanProduct(
-    mapProductInput(
-      product[0],
-      suppliers,        // many suppliers
-      purchaseOrders,   // many POs
-      location
-    ),
+    mapProductInput(product[0], suppliers, purchaseOrders, location),
     attrs
   );
 };
