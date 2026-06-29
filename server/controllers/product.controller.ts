@@ -14,6 +14,7 @@ import Order from "../models/order.model.js";
 import cloudinary, { uploadImage } from "../utils/uploadImages.js";
 import { ensureOdooAttributeValues } from "../utils/odooAttributes.js";
 import { Product } from "../models/product.model.js";
+import { getABCTTaxId } from "../services/tax.service.js";
 
 cloudinary.v2.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -198,12 +199,10 @@ export const resolveOrCreateSupplier = async (
     domain.push([["name", "=", supplierName]]);
   }
 
-  const found = await odooRequest(
-    "res.partner",
-    "search_read",
-    domain,
-    { fields: ["id", "name", "ref"], limit: 1 },
-  );
+  const found = await odooRequest("res.partner", "search_read", domain, {
+    fields: ["id", "name", "ref"],
+    limit: 1,
+  });
 
   if (found.length) return found[0].id;
 
@@ -342,7 +341,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
     let base64Image: string | null = null;
     if (image) base64Image = await toBase64(image);
-
+    const abctTaxId = await getABCTTaxId();
     createdProductTemplateId = await odooRequest("product.template", "create", [
       {
         name,
@@ -358,6 +357,8 @@ export const createProduct = async (req: Request, res: Response) => {
         categ_id: categoryId,
         image_1920: base64Image || false,
         x_supplier_invoice_number: supplierId || false,
+
+        taxes_id: abctTaxId ? [[6, 0, [abctTaxId]]] : [],
       },
     ]);
 
@@ -365,18 +366,21 @@ export const createProduct = async (req: Request, res: Response) => {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
 
     // ── Supplier: find or create partner in Odoo ──────────────────────────
- const resolvedSupplierId = await resolveOrCreateSupplier(supplierId, supplierName);
+    const resolvedSupplierId = await resolveOrCreateSupplier(
+      supplierId,
+      supplierName,
+    );
 
-if (resolvedSupplierId) {
-  await odooRequest("product.supplierinfo", "create", [
-    {
-      product_tmpl_id: createdProductTemplateId,
-      partner_id: resolvedSupplierId,
-      price: Number(supplierPrice) || 0,
-      product_code: supplierId || false,
-    },
-  ]);
-}
+    if (resolvedSupplierId) {
+      await odooRequest("product.supplierinfo", "create", [
+        {
+          product_tmpl_id: createdProductTemplateId,
+          partner_id: resolvedSupplierId,
+          price: Number(supplierPrice) || 0,
+          product_code: supplierId || false,
+        },
+      ]);
+    }
     // ── Attributes ────────────────────────────────────────────────────────
     if (attributes) {
       for (const key in attributes) {
@@ -568,9 +572,20 @@ export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, price, stock, reference, barcode, itemNumber, attributes,
-      warehouseName, shelfName, supplierId, supplierName, supplierPrice,
-      shippingCost, currency,
+      name,
+      price,
+      stock,
+      reference,
+      barcode,
+      itemNumber,
+      attributes,
+      warehouseName,
+      shelfName,
+      supplierId,
+      supplierName,
+      supplierPrice,
+      shippingCost,
+      currency,
     } = req.body;
 
     let imageUrl: string | null = null;
@@ -579,9 +594,13 @@ export const updateProduct = async (req: Request, res: Response) => {
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
       imageUrl = uploaded.url;
-      const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const response = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+      });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
+
+    const abctTaxId = await getABCTTaxId();
 
     await odooRequest("product.template", "write", [
       [Number(id)],
@@ -596,12 +615,18 @@ export const updateProduct = async (req: Request, res: Response) => {
         x_currency: currency || "USD",
         x_supplier_invoice_number: supplierId || false,
         ...(base64Image && { image_1920: base64Image }),
+
+        ...(abctTaxId && { taxes_id: [[6, 0, [abctTaxId]]] }),
       },
     ]);
 
-    const finalColors: string[] = [...new Set<string>(attributes?.colors ?? [])];
+    const finalColors: string[] = [
+      ...new Set<string>(attributes?.colors ?? []),
+    ];
     const finalSizes: string[] = [...new Set<string>(attributes?.sizes ?? [])];
-    const finalMaterials: string[] = [...new Set<string>(attributes?.materials ?? [])];
+    const finalMaterials: string[] = [
+      ...new Set<string>(attributes?.materials ?? []),
+    ];
 
     for (const [key, values] of [
       ["colors", finalColors],
@@ -618,14 +643,18 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-   
     let resolvedLocationId: number | null = null;
 
     if (warehouseName && shelfName) {
       const warehouseResults = await odooRequest(
         "stock.location",
         "search_read",
-        [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
+        [
+          [
+            ["name", "=", warehouseName],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
 
@@ -641,7 +670,13 @@ export const updateProduct = async (req: Request, res: Response) => {
       const shelfResults = await odooRequest(
         "stock.location",
         "search_read",
-        [[["name", "=", shelfName], ["location_id", "=", warehouseLocationId], ["usage", "=", "internal"]]],
+        [
+          [
+            ["name", "=", shelfName],
+            ["location_id", "=", warehouseLocationId],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
 
@@ -649,177 +684,209 @@ export const updateProduct = async (req: Request, res: Response) => {
         resolvedLocationId = shelfResults[0].id;
       } else {
         resolvedLocationId = await odooRequest("stock.location", "create", [
-          { name: shelfName, location_id: warehouseLocationId, usage: "internal" },
+          {
+            name: shelfName,
+            location_id: warehouseLocationId,
+            usage: "internal",
+          },
         ]);
       }
     } else if (shelfName) {
       const found = await odooRequest(
         "stock.location",
         "search_read",
-        [[["usage", "=", "internal"], ["name", "=", shelfName]]],
+        [
+          [
+            ["usage", "=", "internal"],
+            ["name", "=", shelfName],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
       if (found[0]) resolvedLocationId = found[0].id;
     }
 
+    let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
 
-let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
-
-if (stock !== undefined && stock !== null) {
-  const variants = await odooRequest(
-    "product.product",
-    "search_read",
-    [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
-    { fields: ["id", "display_name"] },
-  );
-
-  if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
-
-  for (const v of variants) {
-    // 1. Find ALL existing internal quants for this variant
-    const existingQuants = await odooRequest(
-      "stock.quant",
-      "search_read",
-      [[
-        ["product_id", "=", v.id],
-        ["location_id.usage", "=", "internal"],
-      ]],
-      { fields: ["id", "quantity", "location_id"] },
-    );
-
-    // 2. Determine target location
-    let targetLocationId: number;
-
-    if (resolvedLocationId) {
-      targetLocationId = resolvedLocationId;
-    } else if (existingQuants.length) {
-      targetLocationId = existingQuants[0].location_id[0];
-    } else {
-      const warehouses = await odooRequest(
-        "stock.warehouse",
+    if (stock !== undefined && stock !== null) {
+      const variants = await odooRequest(
+        "product.product",
         "search_read",
-        [[]],
-        { fields: ["lot_stock_id"], limit: 1 },
+        [
+          [
+            ["product_tmpl_id", "=", Number(id)],
+            ["active", "=", true],
+          ],
+        ],
+        { fields: ["id", "display_name"] },
       );
-      if (!warehouses.length || !warehouses[0].lot_stock_id) {
-        throw new Error("Could not resolve warehouse stock location in Odoo");
+
+      if (!variants.length)
+        throw new Error(`No active variant found for template ID ${id}`);
+
+      for (const v of variants) {
+        // 1. Find ALL existing internal quants for this variant
+        const existingQuants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [
+            [
+              ["product_id", "=", v.id],
+              ["location_id.usage", "=", "internal"],
+            ],
+          ],
+          { fields: ["id", "quantity", "location_id"] },
+        );
+
+        // 2. Determine target location
+        let targetLocationId: number;
+
+        if (resolvedLocationId) {
+          targetLocationId = resolvedLocationId;
+        } else if (existingQuants.length) {
+          targetLocationId = existingQuants[0].location_id[0];
+        } else {
+          const warehouses = await odooRequest(
+            "stock.warehouse",
+            "search_read",
+            [[]],
+            { fields: ["lot_stock_id"], limit: 1 },
+          );
+          if (!warehouses.length || !warehouses[0].lot_stock_id) {
+            throw new Error(
+              "Could not resolve warehouse stock location in Odoo",
+            );
+          }
+          targetLocationId = warehouses[0].lot_stock_id[0];
+        }
+
+        // 3. Zero out ALL quants not at target location
+        const otherQuants = existingQuants.filter(
+          (q: any) => q.location_id[0] !== targetLocationId,
+        );
+
+        for (const q of otherQuants) {
+          await odooRequest("stock.quant", "write", [
+            [q.id],
+            { inventory_quantity: 0 },
+          ]);
+          await odooRequest("stock.quant", "action_apply_inventory", [[q.id]]);
+          console.log(
+            ` Zeroed quant ${q.id} at old location ${q.location_id[1]}`,
+          );
+        }
+
+        // 4. Find or create quant at target location
+        const targetQuant = existingQuants.find(
+          (q: any) => q.location_id[0] === targetLocationId,
+        );
+
+        let quantId: number;
+
+        if (targetQuant) {
+          quantId = targetQuant.id;
+          await odooRequest("stock.quant", "write", [
+            [quantId],
+            { inventory_quantity: Number(stock) },
+          ]);
+          console.log(
+            `✅ Updated quant ${quantId} at location ${targetLocationId} to qty ${stock}`,
+          );
+        } else {
+          quantId = await odooRequest("stock.quant", "create", [
+            {
+              product_id: v.id,
+              location_id: targetLocationId,
+              inventory_quantity: Number(stock),
+            },
+          ]);
+          console.log(
+            `✅ Created quant ${quantId} at location ${targetLocationId} with qty ${stock}`,
+          );
+        }
+
+        // 5. Apply inventory
+        await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
+
+        // 6. Verify — only check the target location, not all internal
+        const verifiedQuants = await odooRequest(
+          "stock.quant",
+          "search_read",
+          [
+            [
+              ["product_id", "=", v.id],
+              ["location_id", "=", targetLocationId],
+            ],
+          ],
+          { fields: ["id", "quantity"] },
+        );
+
+        const actualQty = verifiedQuants.reduce(
+          (sum: number, q: any) => sum + Number(q.quantity || 0),
+          0,
+        );
+
+        console.log(
+          `🔍 Verified variant ${v.id} at location ${targetLocationId}: qty=${actualQty}`,
+        );
+
+        if (Math.abs(actualQty - Number(stock)) > 0.01) {
+          throw new Error(
+            `Stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`,
+          );
+        }
       }
-      targetLocationId = warehouses[0].lot_stock_id[0];
+
+      verifiedStock = Number(stock);
     }
 
-    // 3. Zero out ALL quants not at target location
-    const otherQuants = existingQuants.filter(
-      (q: any) => q.location_id[0] !== targetLocationId
+    const resolvedSupplierId = await resolveOrCreateSupplier(
+      supplierId,
+      supplierName,
     );
 
-    for (const q of otherQuants) {
-      await odooRequest("stock.quant", "write", [
-        [q.id],
-        { inventory_quantity: 0 },
-      ]);
-      await odooRequest("stock.quant", "action_apply_inventory", [[q.id]]);
-      console.log(` Zeroed quant ${q.id} at old location ${q.location_id[1]}`);
-    }
-
-    // 4. Find or create quant at target location
-    const targetQuant = existingQuants.find(
-      (q: any) => q.location_id[0] === targetLocationId
-    );
-
-    let quantId: number;
-
-    if (targetQuant) {
-      quantId = targetQuant.id;
-      await odooRequest("stock.quant", "write", [
-        [quantId],
-        { inventory_quantity: Number(stock) },
-      ]);
-      console.log(`✅ Updated quant ${quantId} at location ${targetLocationId} to qty ${stock}`);
-    } else {
-      quantId = await odooRequest("stock.quant", "create", [
+    if (resolvedSupplierId) {
+      await odooRequest("res.partner", "write", [
+        [resolvedSupplierId],
         {
-          product_id: v.id,
-          location_id: targetLocationId,
-          inventory_quantity: Number(stock),
+          ...(supplierName && { name: supplierName }),
+          ...(supplierId && { ref: supplierId }),
+          supplier_rank: 1,
         },
       ]);
-      console.log(`✅ Created quant ${quantId} at location ${targetLocationId} with qty ${stock}`);
-    }
 
-    // 5. Apply inventory
-    await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
-
-    // 6. Verify — only check the target location, not all internal
-    const verifiedQuants = await odooRequest(
-      "stock.quant",
-      "search_read",
-      [[
-        ["product_id", "=", v.id],
-        ["location_id", "=", targetLocationId],
-      ]],
-      { fields: ["id", "quantity"] },
-    );
-
-    const actualQty = verifiedQuants.reduce(
-      (sum: number, q: any) => sum + Number(q.quantity || 0),
-      0
-    );
-
-    console.log(`🔍 Verified variant ${v.id} at location ${targetLocationId}: qty=${actualQty}`);
-
-    if (Math.abs(actualQty - Number(stock)) > 0.01) {
-      throw new Error(
-        `Stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`
+      const existingSupplierInfo = await odooRequest(
+        "product.supplierinfo",
+        "search_read",
+        [[["product_tmpl_id", "=", Number(id)]]],
+        { fields: ["id"], limit: 1 },
       );
+
+      if (existingSupplierInfo.length) {
+        await odooRequest("product.supplierinfo", "write", [
+          [existingSupplierInfo[0].id],
+          {
+            partner_id: resolvedSupplierId,
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
+        ]);
+      } else {
+        await odooRequest("product.supplierinfo", "create", [
+          {
+            product_tmpl_id: Number(id),
+            partner_id: resolvedSupplierId,
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
+        ]);
+      }
     }
-  }
-
-  verifiedStock = Number(stock);
-}
-
-const resolvedSupplierId = await resolveOrCreateSupplier(supplierId, supplierName);
-
-if (resolvedSupplierId) {
-  await odooRequest("res.partner", "write", [
-    [resolvedSupplierId],
-    {
-      ...(supplierName && { name: supplierName }),
-      ...(supplierId && { ref: supplierId }),
-      supplier_rank: 1,
-    },
-  ]);
-
-  const existingSupplierInfo = await odooRequest(
-    "product.supplierinfo",
-    "search_read",
-    [[["product_tmpl_id", "=", Number(id)]]],
-    { fields: ["id"], limit: 1 },
-  );
-
-  if (existingSupplierInfo.length) {
-    await odooRequest("product.supplierinfo", "write", [
-      [existingSupplierInfo[0].id],
-      {
-        partner_id: resolvedSupplierId,
-        price: Number(supplierPrice) || 0,
-        product_code: supplierId || false,
-      },
-    ]);
-  } else {
-    await odooRequest("product.supplierinfo", "create", [
-      {
-        product_tmpl_id: Number(id),
-        partner_id: resolvedSupplierId,
-        price: Number(supplierPrice) || 0,
-        product_code: supplierId || false,
-      },
-    ]);
-  }
-}
 
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
-    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+    const finalPriceXCD =
+      ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
     res.json({
       success: true,
@@ -1284,18 +1351,10 @@ export const getProductHistory = CatchAsyncError(
       });
     } catch (err: any) {
       console.error("PRODUCT HISTORY ERROR:", err);
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message: err?.message || "Product history failed",
-        });
+      return res.status(500).json({
+        success: false,
+        message: err?.message || "Product history failed",
+      });
     }
   },
 );
-
-
-
-
-
-

@@ -22,6 +22,7 @@ import receiptRouter from "./routes/receipts.route.js";
 import ReturnRouter from "./routes/Posreturn.route.js";
 import POSReportRouter from "./routes/posReport.route.js";
 import PurshaseRouter from "./routes/purchase.route.js";
+import taxSettingsRouter from "./routes/taxSettings.routes.js";
 
 
 
@@ -74,7 +75,7 @@ app.use("/api/v1", receiptRouter);
 app.use("/api/v1", ReturnRouter);
 app.use("/api/v1",POSReportRouter );
 app.use("/api/v1",PurshaseRouter)
-
+app.use("/api/v1",taxSettingsRouter)
 // test route
 app.get("/test", (req: Request, res: Response) => {
   res.json({
