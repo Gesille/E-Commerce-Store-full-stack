@@ -748,7 +748,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       const suppliers = await odooRequest(
         "res.partner",
         "search_read",
-        [[[ "|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""] ]]],
+      [["|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""]]]
         { fields: ["id"], limit: 1 },
       );
  

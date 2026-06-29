@@ -36,7 +36,6 @@ const mapProductInput = (p: any, supplierName: string | null, location: any) => 
   location,
 });
 
-// ✅ helper - جلب الـ quants مع location لمنتج معين
 const getProductLocation = async (productVariantId: number) => {
   const quants = await odooRequest(
     "stock.quant",
@@ -50,7 +49,7 @@ const getProductLocation = async (productVariantId: number) => {
   const locationId = quants[0].location_id?.[0];
   const locationName = quants[0].location_id?.[1];
 
-  // جلب تفاصيل الـ location + parent (warehouse)
+
   const locationDetails = await odooRequest(
     "stock.location",
     "search_read",
@@ -63,7 +62,7 @@ const getProductLocation = async (productVariantId: number) => {
   return {
     shelfId: loc?.id || null,
     shelfName: loc?.name || null,
-    fullPath: loc?.complete_name || locationName || null,       // مثال: WH/Stock/Shelf A
+    fullPath: loc?.complete_name || locationName || null,     
     warehouseId: loc?.location_id?.[0] || null,
     warehouseName: loc?.location_id?.[1] || null,
   };
@@ -94,7 +93,7 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["product_tmpl_id", "partner_id", "price"] }
   );
 
-  // ✅ جلب الـ variants لكل المنتجات دفعة وحدة
+
   const templateIds = products.map((p: any) => p.id);
 
   const allVariants = await odooRequest(
@@ -104,17 +103,18 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["id", "product_tmpl_id"] }
   );
 
-  // ✅ جلب الـ quants لكل الـ variants دفعة وحدة
   const variantIds = allVariants.map((v: any) => v.id);
 
-  const allQuants = await odooRequest(
-    "stock.quant",
-    "search_read",
-    [[["product_id", "in", variantIds], ["location_id.usage", "=", "internal"]]],
-    { fields: ["product_id", "location_id", "quantity"] }
-  );
+const allQuants = variantIds.length
+  ? await odooRequest(
+      "stock.quant",
+      "search_read",
+      [[["product_id", "in", variantIds], ["location_id.usage", "=", "internal"]]],
+      { fields: ["product_id", "location_id", "quantity"] }
+    )
+  : [];
 
-  // ✅ جلب تفاصيل الـ locations دفعة وحدة
+ 
   const locationIds = [...new Set(allQuants.map((q: any) => q.location_id?.[0]).filter(Boolean))];
 
   const allLocations = locationIds.length
