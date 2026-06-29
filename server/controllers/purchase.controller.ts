@@ -38,7 +38,7 @@ export const getProductsForPO = async (req: Request, res: Response) => {
 // ─── Create Purchase Order ────────────────────────────────────────────────────
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
-    const { supplierId, lines, expectedDate, notes } = req.body;
+    const { supplierId, lines, expectedDate, note } = req.body;
 
     if (!supplierId) {
       return res
@@ -98,7 +98,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       {
         partner_id: Number(supplierId),
         order_line: orderLines,
-        notes: notes || false,
+        notes: note || false,
       },
     ]);
 
@@ -220,7 +220,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
           "state",
           "amount_total",
           "date_order",
-          "notes",
+          "note",
         ],
         order: "date_order desc",
         limit: 50,
@@ -267,7 +267,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
       state: o.state,
       total: o.amount_total,
       date: o.date_order,
-      notes: o.notes,
+      note: o.note,
       lines: linesByOrder[o.id] ?? [],
     }));
 
@@ -324,19 +324,6 @@ export const createSupplier = async (req: Request, res: Response) => {
       success: true,
       supplier: { id: supplierId, name },
     });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
-export const getPurchaseOrderFields = async (req: Request, res: Response) => {
-  try {
-    const fields = await odooRequest(
-      "purchase.order",
-      "fields_get",
-      [],
-      { attributes: ["string", "type"] }
-    );
-    return res.json({ success: true, fields });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }

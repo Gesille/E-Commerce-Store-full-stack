@@ -10,7 +10,7 @@ export interface CreatePOPayload {
   supplierId: number;
   lines: POLine[];
   expectedDate?: string;
-  notes?: string;
+  note?: string;
 }
 
 export interface PurchaseOrder {
@@ -21,7 +21,7 @@ export interface PurchaseOrder {
   state: "draft" | "sent" | "purchase" | "done" | "cancel";
   total: number;
   date: string;
-  notes: string;
+  note: string;
   pickingIds: number[];
   lines: {
     productId: number;

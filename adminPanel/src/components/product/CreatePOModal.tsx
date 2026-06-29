@@ -74,7 +74,7 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
         supplierId,
         lines,
         expectedDate: expectedDate || undefined,
-        notes: notes || undefined,
+        note: notes || undefined,
       }).unwrap();
 
       toast.success(`Purchase Order ${result.purchaseOrderName} created!`);
