@@ -63,7 +63,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       "product.product",
       "search_read",
       [[["id", "in", productIds]]],
-      { fields: ["id","uom_id"] },
+      { fields: ["id", "uom_id"] },
     );
 
     const productMap: Record<number, any> = {};
@@ -78,15 +78,13 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     }
 
     // 2. Build order lines
-   const plannedDate = expectedDate
-  ? formatOdooDatetime(new Date(expectedDate))
-  : formatOdooDatetime(
-      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    );
+    const plannedDate = expectedDate
+      ? formatOdooDatetime(new Date(expectedDate))
+      : formatOdooDatetime(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
 
     const orderLines = lines.map((line: any) => {
       const product = productMap[line.productId];
-      
+
       return [
         0,
         0,
@@ -95,7 +93,6 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
           product_qty: line.qty,
           price_unit: line.unitPrice,
           date_planned: plannedDate,
-          
         },
       ];
     });
@@ -146,7 +143,6 @@ export const confirmPurchaseOrder = async (req: Request, res: Response) => {
       success: true,
       purchaseOrderName: po[0].name,
       state: po[0].state,
-      
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
@@ -228,6 +224,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
           "amount_total",
           "date_order",
           "note",
+          "picking_ids"
         ],
         order: "date_order desc",
         limit: 50,
@@ -275,6 +272,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
       total: o.amount_total,
       date: o.date_order,
       note: o.note,
+      pickingIds:o.picking_ids,
       lines: linesByOrder[o.id] ?? [],
     }));
 

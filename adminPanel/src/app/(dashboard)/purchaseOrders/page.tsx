@@ -82,7 +82,7 @@ export default function PurchaseOrdersPage() {
                   <td className="px-4 py-3 font-mono font-medium text-indigo-700">{order.name}</td>
                   <td className="px-4 py-3 text-slate-700">{order.supplier}</td>
                   <td className="px-4 py-3 text-slate-500">{new Date(order.date).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-slate-500">{order.notes || "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{order.note || "—"}</td>
                   <td className="px-4 py-3 font-medium">${order.total.toFixed(2)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATE_COLORS[order.state]}`}>

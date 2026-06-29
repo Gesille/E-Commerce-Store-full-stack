@@ -47,7 +47,7 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
     { productId: 0, qty: 1, unitPrice: 0 },
   ]);
   const [expectedDate, setExpectedDate] = useState("");
-  const [notes, setNotes] = useState("");
+  const [note, setNotes] = useState("");
 
   const { data: suppliers = [], refetch: refetchSuppliers } = useGetSuppliersQuery();
   const { data: products = [] } = useGetProductsForPOQuery();
@@ -74,7 +74,7 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
         supplierId,
         lines,
         expectedDate: expectedDate || undefined,
-        note: notes || undefined,
+        note: note || undefined,
       }).unwrap();
 
       toast.success(`Purchase Order ${result.purchaseOrderName} created!`);
@@ -158,7 +158,7 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
           <div className="space-y-1.5">
             <Label className="text-sm font-medium text-slate-700">Notes</Label>
             <Textarea
-              value={notes}
+              value={note}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="e.g. Container #25, Invoice #INV-001"
               className="bg-white border-indigo-200 resize-none"
