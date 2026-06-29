@@ -293,7 +293,8 @@ pickings.forEach((p: any) => {
         subtotal: l.price_subtotal,
       });
     });
-
+const stripHtml = (html: string) =>
+  html ? html.replace(/<[^>]*>/g, "").trim() : "";
     const result = orders.map((o: any) => ({
       id: o.id,
       name: o.name,
@@ -302,7 +303,7 @@ pickings.forEach((p: any) => {
       state: o.state,
       total: o.amount_total,
       date: o.date_order,
-      note: o.note,
+     note: stripHtml(o.note),
       pickingIds: pickingsByOrder[o.id] ?? [],  
       lines: linesByOrder[o.id] ?? [],
     }));

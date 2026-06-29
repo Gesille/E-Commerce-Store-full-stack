@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-
-
 import { Button } from "@/components/ui/button";
-
-import { Plus, CheckCircle, PackageCheck } from "lucide-react";
+import { Plus, CheckCircle, PackageCheck, ChevronDown, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
-import { useGetPurchaseOrdersQuery, useConfirmPurchaseOrderMutation, useReceivePurchaseOrderMutation } from "@/redux/product/purchaseApi";
+import {
+  useGetPurchaseOrdersQuery,
+  useConfirmPurchaseOrderMutation,
+  useReceivePurchaseOrderMutation,
+} from "@/redux/product/purchaseApi";
 import { CreatePOModal } from "@/components/product/CreatePOModal";
-
 
 const STATE_COLORS: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-700",
@@ -21,9 +21,16 @@ const STATE_COLORS: Record<string, string> = {
 
 export default function PurchaseOrdersPage() {
   const [openCreate, setOpenCreate] = useState(false);
-  const { data: orders = [], isLoading } = useGetPurchaseOrdersQuery();
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  const { data, isLoading } = useGetPurchaseOrdersQuery();
+  const orders = (data as any)?.purchaseOrders ?? [];
+
   const [confirmPO] = useConfirmPurchaseOrderMutation();
   const [receivePO] = useReceivePurchaseOrderMutation();
+
+  const toggleExpand = (id: number) =>
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const handleConfirm = async (id: number) => {
     try {
@@ -67,6 +74,7 @@ export default function PurchaseOrdersPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
               <tr>
+                <th className="px-4 py-3 text-left w-6" />
                 <th className="px-4 py-3 text-left">PO Number</th>
                 <th className="px-4 py-3 text-left">Supplier</th>
                 <th className="px-4 py-3 text-left">Date</th>
@@ -77,37 +85,83 @@ export default function PurchaseOrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {orders.map((order:any) => (
-                <tr key={order.id} className="hover:bg-slate-50 transition">
-                  <td className="px-4 py-3 font-mono font-medium text-indigo-700">{order.name}</td>
-                  <td className="px-4 py-3 text-slate-700">{order.supplier}</td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(order.date).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-slate-500">{order.note || "—"}</td>
-                  <td className="px-4 py-3 font-medium">${order.total.toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATE_COLORS[order.state]}`}>
-                      {order.state.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 flex gap-2">
-                    {order.state === "draft" && (
-                      <Button size="sm" variant="outline"
-                        className="text-green-600 border-green-200 hover:bg-green-50 gap-1"
-                        onClick={() => handleConfirm(order.id)}
-                      >
-                        <CheckCircle size={13} /> Confirm
-                      </Button>
-                    )}
-                    {order.state === "purchase" && order.pickingIds.map((pid:any) => (
-                      <Button key={pid} size="sm" variant="outline"
-                        className="text-blue-600 border-blue-200 hover:bg-blue-50 gap-1"
-                        onClick={() => handleReceive(pid)}
-                      >
-                        <PackageCheck size={13} /> Receive
-                      </Button>
-                    ))}
-                  </td>
-                </tr>
+              {orders.map((order: any) => (
+                <>
+                  {/* Main row */}
+                  <tr
+                    key={order.id}
+                    className="hover:bg-slate-50 transition cursor-pointer"
+                    onClick={() => toggleExpand(order.id)}
+                  >
+                    <td className="px-4 py-3 text-slate-400">
+                      {expanded[order.id]
+                        ? <ChevronDown size={14} />
+                        : <ChevronRight size={14} />}
+                    </td>
+                    <td className="px-4 py-3 font-mono font-medium text-indigo-700">{order.name}</td>
+                    <td className="px-4 py-3 text-slate-700">{order.supplier}</td>
+                    <td className="px-4 py-3 text-slate-500">{new Date(order.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-slate-500">{order.note || "—"}</td>
+                    <td className="px-4 py-3 font-medium">${order.total.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATE_COLORS[order.state]}`}>
+                        {order.state.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      {order.state === "draft" && (
+                        <Button size="sm" variant="outline"
+                          className="text-green-600 border-green-200 hover:bg-green-50 gap-1"
+                          onClick={() => handleConfirm(order.id)}
+                        >
+                          <CheckCircle size={13} /> Confirm
+                        </Button>
+                      )}
+                      {order.state === "purchase" && (order.pickingIds ?? []).map((pid: any) => (
+                        <Button key={pid} size="sm" variant="outline"
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50 gap-1"
+                          onClick={() => handleReceive(pid)}
+                        >
+                          <PackageCheck size={13} /> Receive
+                        </Button>
+                      ))}
+                    </td>
+                  </tr>
+
+                  {/* Expanded lines row */}
+                  {expanded[order.id] && (
+                    <tr key={`${order.id}-lines`} className="bg-indigo-50/40">
+                      <td colSpan={8} className="px-8 py-3">
+                        {order.lines?.length ? (
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-slate-400 uppercase">
+                                <th className="text-left pb-2 font-medium">Product</th>
+                                <th className="text-left pb-2 font-medium">Ordered</th>
+                                <th className="text-left pb-2 font-medium">Received</th>
+                                <th className="text-left pb-2 font-medium">Unit Price</th>
+                                <th className="text-left pb-2 font-medium">Subtotal</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-indigo-100">
+                              {order.lines.map((line: any, i: number) => (
+                                <tr key={i}>
+                                  <td className="py-1.5 text-slate-700 font-medium">{line.productName}</td>
+                                  <td className="py-1.5 text-slate-600">{line.orderedQty}</td>
+                                  <td className="py-1.5 text-slate-600">{line.receivedQty}</td>
+                                  <td className="py-1.5 text-slate-600">${line.unitPrice.toFixed(2)}</td>
+                                  <td className="py-1.5 text-slate-700 font-medium">${line.subtotal.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="text-xs text-slate-400">No lines found.</p>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
