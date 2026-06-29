@@ -15,6 +15,7 @@ import {
   ListOrdered,
   RotateCcw,
   Upload,
+  TicketCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -165,6 +166,17 @@ const AppSidebar = () => {
                   </SheetTrigger>
                   <AddProduct />
                 </Sheet>
+              </SidebarMenuItem>
+                 <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <Link
+                    href="/pos/purchaseOrders"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
+                  >
+                    <TicketCheck size={16} />
+                    <span className="text-sm">Purchase Orders</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
              
               <SidebarMenuItem>
