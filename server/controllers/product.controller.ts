@@ -183,6 +183,39 @@ const ATTRIBUTE_NAME_MAP: Record<string, string> = {
   sizes: "Size",
   materials: "Material",
 };
+const resolveOrCreateSupplier = async (
+  supplierId?: string,
+  supplierName?: string,
+): Promise<number | null> => {
+  if (!supplierId && !supplierName) return null;
+
+  const domain: any[] = [];
+  if (supplierId && supplierName) {
+    domain.push(["|", ["ref", "=", supplierId], ["name", "=", supplierName]]);
+  } else if (supplierId) {
+    domain.push([["ref", "=", supplierId]]);
+  } else {
+    domain.push([["name", "=", supplierName]]);
+  }
+
+  const found = await odooRequest(
+    "res.partner",
+    "search_read",
+    domain,
+    { fields: ["id", "name", "ref"], limit: 1 },
+  );
+
+  if (found.length) return found[0].id;
+
+  return await odooRequest("res.partner", "create", [
+    {
+      name: supplierName || supplierId || "Unknown Supplier",
+      ref: supplierId || false,
+      supplier_rank: 1,
+      is_company: true,
+    },
+  ]);
+};
 const createAttributeLines = async (
   productTemplateId: number,
   attributeId: number,
@@ -332,44 +365,18 @@ export const createProduct = async (req: Request, res: Response) => {
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
 
     // ── Supplier: find or create partner in Odoo ──────────────────────────
-    let resolvedSupplierId: number | null = null;
+ const resolvedSupplierId = await resolveOrCreateSupplier(supplierId, supplierName);
 
-    if (supplierName || supplierId) {
-      const suppliers = await odooRequest(
-        "res.partner",
-        "search_read",
-        [
-          [
-            "|",
-            ["name", "=", supplierName || ""],
-            ["ref", "=", supplierId || ""],
-          ],
-        ],
-        { fields: ["id", "name", "ref"], limit: 1 },
-      );
-
-      if (suppliers.length > 0) {
-        resolvedSupplierId = suppliers[0].id;
-      } else {
-        resolvedSupplierId = await odooRequest("res.partner", "create", [
-          {
-            name: supplierName || "Unknown Supplier",
-            ref: supplierId || false,
-            supplier_rank: 1,
-          },
-        ]);
-      }
-
-      await odooRequest("product.supplierinfo", "create", [
-        {
-          product_tmpl_id: createdProductTemplateId,
-          partner_id: resolvedSupplierId,
-          price: Number(supplierPrice) || 0,
-          product_code: supplierId || false,
-        },
-      ]);
-    }
-
+if (resolvedSupplierId) {
+  await odooRequest("product.supplierinfo", "create", [
+    {
+      product_tmpl_id: createdProductTemplateId,
+      partner_id: resolvedSupplierId,
+      price: Number(supplierPrice) || 0,
+      product_code: supplierId || false,
+    },
+  ]);
+}
     // ── Attributes ────────────────────────────────────────────────────────
     if (attributes) {
       for (const key in attributes) {
@@ -592,7 +599,6 @@ export const updateProduct = async (req: Request, res: Response) => {
       },
     ]);
 
-    // ✅ Sync attributes — deduplicate before writing to prevent duplicates
     const finalColors: string[] = [...new Set<string>(attributes?.colors ?? [])];
     const finalSizes: string[] = [...new Set<string>(attributes?.sizes ?? [])];
     const finalMaterials: string[] = [...new Set<string>(attributes?.materials ?? [])];
@@ -612,7 +618,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
 
-    // ✅ Resolve location in Odoo
+   
     let resolvedLocationId: number | null = null;
 
     if (warehouseName && shelfName) {
@@ -712,7 +718,7 @@ if (stock !== undefined && stock !== null) {
         { inventory_quantity: 0 },
       ]);
       await odooRequest("stock.quant", "action_apply_inventory", [[q.id]]);
-      console.log(`🧹 Zeroed quant ${q.id} at old location ${q.location_id[1]}`);
+      console.log(` Zeroed quant ${q.id} at old location ${q.location_id[1]}`);
     }
 
     // 4. Find or create quant at target location
@@ -771,47 +777,45 @@ if (stock !== undefined && stock !== null) {
   verifiedStock = Number(stock);
 }
 
-    // ✅ Update supplier info
-    if (supplierName || supplierId) {
-      const suppliers = await odooRequest(
-        "res.partner",
-        "search_read",
-        [["|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""]]],
-        { fields: ["id"], limit: 1 },
-      );
+const resolvedSupplierId = await resolveOrCreateSupplier(supplierId, supplierName);
 
-      let resolvedSupplierId: number;
-      if (suppliers.length) {
-        resolvedSupplierId = suppliers[0].id;
-      } else {
-        resolvedSupplierId = await odooRequest("res.partner", "create", [
-          { name: supplierName || "Unknown Supplier", ref: supplierId || false, supplier_rank: 1 },
-        ]);
-      }
+if (resolvedSupplierId) {
+  await odooRequest("res.partner", "write", [
+    [resolvedSupplierId],
+    {
+      ...(supplierName && { name: supplierName }),
+      ...(supplierId && { ref: supplierId }),
+      supplier_rank: 1,
+    },
+  ]);
 
-      const existingSupplierInfo = await odooRequest(
-        "product.supplierinfo",
-        "search_read",
-        [[["product_tmpl_id", "=", Number(id)], ["partner_id", "=", resolvedSupplierId]]],
-        { fields: ["id"], limit: 1 },
-      );
+  const existingSupplierInfo = await odooRequest(
+    "product.supplierinfo",
+    "search_read",
+    [[["product_tmpl_id", "=", Number(id)]]],
+    { fields: ["id"], limit: 1 },
+  );
 
-      if (existingSupplierInfo.length) {
-        await odooRequest("product.supplierinfo", "write", [
-          [existingSupplierInfo[0].id],
-          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
-        ]);
-      } else {
-        await odooRequest("product.supplierinfo", "create", [
-          {
-            product_tmpl_id: Number(id),
-            partner_id: resolvedSupplierId,
-            price: Number(supplierPrice) || 0,
-            product_code: supplierId || false,
-          },
-        ]);
-      }
-    }
+  if (existingSupplierInfo.length) {
+    await odooRequest("product.supplierinfo", "write", [
+      [existingSupplierInfo[0].id],
+      {
+        partner_id: resolvedSupplierId,
+        price: Number(supplierPrice) || 0,
+        product_code: supplierId || false,
+      },
+    ]);
+  } else {
+    await odooRequest("product.supplierinfo", "create", [
+      {
+        product_tmpl_id: Number(id),
+        partner_id: resolvedSupplierId,
+        price: Number(supplierPrice) || 0,
+        product_code: supplierId || false,
+      },
+    ]);
+  }
+}
 
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
