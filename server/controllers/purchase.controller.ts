@@ -20,9 +20,9 @@ export const getSuppliers = async (req: Request, res: Response) => {
 export const getProductsForPO = async (req: Request, res: Response) => {
   try {
     const products = await odooRequest(
-      "product.template",
+      "product.product",          // ← variants, not templates
       "search_read",
-      [[["active", "=", true]]],
+      [[["active", "=", true], ["sale_ok", "=", true]]],
       {
         fields: ["id", "name", "uom_id", "standard_price"],
         order: "name asc",
