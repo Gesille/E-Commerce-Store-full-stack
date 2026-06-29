@@ -8,17 +8,14 @@ const PRODUCT_FIELDS = [
   "name",
   "list_price",
   "standard_price",
-  "x_shipping_cost",  
-  "x_markup",          
-  "x_final_price",  
   "currency_id",
   "qty_available",
   "image_1920",
   "categ_id",
   "taxes_id",
   "supplier_taxes_id",
-  
 ];
+
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
 
 const mapProductInput = (p: any, supplierName: string | null, location: any) => ({
@@ -39,6 +36,7 @@ const mapProductInput = (p: any, supplierName: string | null, location: any) => 
   location,
 });
 
+// ✅ helper - جلب الـ quants مع location لمنتج معين
 const getProductLocation = async (productVariantId: number) => {
   const quants = await odooRequest(
     "stock.quant",
@@ -96,7 +94,7 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["product_tmpl_id", "partner_id", "price"] }
   );
 
-
+  // ✅ جلب الـ variants لكل المنتجات دفعة وحدة
   const templateIds = products.map((p: any) => p.id);
 
   const allVariants = await odooRequest(
@@ -106,7 +104,7 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["id", "product_tmpl_id"] }
   );
 
-
+  // ✅ جلب الـ quants لكل الـ variants دفعة وحدة
   const variantIds = allVariants.map((v: any) => v.id);
 
   const allQuants = await odooRequest(
@@ -116,7 +114,7 @@ export const getAllProductsService = async (category?: number) => {
     { fields: ["product_id", "location_id", "quantity"] }
   );
 
-
+  // ✅ جلب تفاصيل الـ locations دفعة وحدة
   const locationIds = [...new Set(allQuants.map((q: any) => q.location_id?.[0]).filter(Boolean))];
 
   const allLocations = locationIds.length
@@ -128,7 +126,7 @@ export const getAllProductsService = async (category?: number) => {
       )
     : [];
 
-
+  // بناء maps للبحث السريع
   const variantByTemplate: Record<number, number> = {};
   allVariants.forEach((v: any) => {
     variantByTemplate[v.product_tmpl_id?.[0]] = v.id;
@@ -194,6 +192,7 @@ export const getProductByIdService = async (id: number) => {
     { fields: ["partner_id", "price"], limit: 1 }
   );
 
+  // ✅ جلب الـ variant
   const variants = await odooRequest(
     "product.product",
     "search_read",
