@@ -4,10 +4,19 @@ import { odooRequest } from "../odoo/odoo.client.js";
 // ─── Get all suppliers ────────────────────────────────────────────────────────
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
+    const { search } = req.query;
+
+    const domain: any[] = [["supplier_rank", ">", 0]];
+    if (search) {
+      domain.push("|");
+      domain.push(["name", "ilike", search]);
+      domain.push(["ref", "ilike", search]);
+    }
+
     const suppliers = await odooRequest(
       "res.partner",
       "search_read",
-      [[["supplier_rank", ">", 0]]],
+      [domain],
       { fields: ["id", "name", "ref"], order: "name asc" },
     );
     return res.json({ success: true, suppliers });

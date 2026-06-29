@@ -109,10 +109,10 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
               </SelectTrigger>
               <SelectContent>
                 {suppliers.map((s: any) => (
-                  <SelectItem key={s.id} value={String(s.id)}>
-                    {s.name}
-                  </SelectItem>
-                ))}
+  <SelectItem key={s.id} value={String(s.id)}>
+    {s.name}{s.ref ? ` (${s.ref})` : ""}
+  </SelectItem>
+))}
               </SelectContent>
             </Select>
             <div className="flex items-center gap-2">
