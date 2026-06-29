@@ -29,18 +29,66 @@ export const getSuppliers = async (req: Request, res: Response) => {
 export const getProductsForPO = async (req: Request, res: Response) => {
   try {
     const products = await odooRequest(
-      "product.product",          // ← variants, not templates
+      "product.product",
       "search_read",
-      [[["active", "=", true], ["sale_ok", "=", true]]],
+      [[["active", "=", true]]],
       {
-        fields: ["id", "name", "uom_id", "standard_price"],
+        fields: [
+          "id",
+          "name",
+          "default_code",
+          "barcode",
+          "product_tmpl_id",
+          "standard_price",
+        ],
         order: "name asc",
-      },
+      }
     );
 
-    return res.json({ success: true, products });
+    const supplierInfos = await odooRequest(
+      "product.supplierinfo",
+      "search_read",
+      [[]],
+      {
+        fields: [
+          "partner_id",
+          "product_tmpl_id",
+        ],
+      }
+    );
+
+    const supplierMap: Record<number, any[]> = {};
+
+    supplierInfos.forEach((s: any) => {
+      const templateId = s.product_tmpl_id?.[0];
+
+      if (!supplierMap[templateId])
+        supplierMap[templateId] = [];
+
+      supplierMap[templateId].push({
+        id: s.partner_id?.[0],
+        name: s.partner_id?.[1],
+      });
+    });
+
+    const result = products.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      code: p.default_code,
+      barcode: p.barcode,
+      standardPrice: p.standard_price,
+      suppliers: supplierMap[p.product_tmpl_id?.[0]] || [],
+    }));
+
+    res.json({
+      success: true,
+      products: result,
+    });
   } catch (err: any) {
-    return res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 

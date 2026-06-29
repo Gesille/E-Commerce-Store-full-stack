@@ -68,7 +68,11 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
     resetForm();
     onClose();
   };
-
+const filteredProducts = supplierId
+  ? products.filter((p: any) =>
+      p.suppliers?.some((s: any) => s.id === supplierId)
+    )
+  : products;
   const handleSubmit = async () => {
     if (!supplierId) return toast.error("Please select a supplier");
     if (lines.some((l) => !l.productId))
@@ -172,7 +176,7 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
                   <div key={i} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-5">
                       <ProductCombobox
-                        products={products}
+                        products={filteredProducts}
                         value={line.productId}
                         onChange={(id: any) => updateLine(i, "productId", id)}
                       />
