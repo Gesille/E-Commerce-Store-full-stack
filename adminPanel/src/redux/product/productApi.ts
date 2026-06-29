@@ -43,7 +43,7 @@ export const productApi = apiSlice.injectEndpoints({
     supplier: p.supplier ?? "",
     purchaseOrders: p.purchaseOrders ?? [],
     invoiceNumber: p.invoiceNumber ?? "",
-    supplierInvoiceNumber: p.invoiceNumber ?? "",
+    supplierInvoiceNumber: p.supplierInvoiceNumber ?? "",
 
     attributes: {
       

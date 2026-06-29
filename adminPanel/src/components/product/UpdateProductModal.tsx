@@ -208,7 +208,7 @@ export const UpdateProductModal = ({
   const [shelfName, setShelfName] = useState("");
   const [supplierId, setSupplierId] = useState("");
   const [supplierName, setSupplierName] = useState("");
-  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState(""); // ✅ added
+   
   const [colors, setColors] = useState<string[]>([]);
   const [sizes, setSizes] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
@@ -248,7 +248,7 @@ export const UpdateProductModal = ({
     );
     setSupplierName(p.supplier ?? p.supplierName ?? "");
 
-    setPurchaseOrderNumber(p.purchaseOrders?.[0]?.poNumber ?? "");
+  
     setColors(Array.isArray(p.attributes?.colors) ? p.attributes.colors : []);
     setSizes(Array.isArray(p.attributes?.sizes) ? p.attributes.sizes : []);
     setMaterials(
@@ -299,9 +299,9 @@ export const UpdateProductModal = ({
         currency,
         warehouseName: warehouseName || undefined,
         shelfName: shelfName || undefined,
-        supplierInvoiceNumber: supplierId || undefined,
-        supplier: supplierName || undefined,
-        purchaseOrderNumber: purchaseOrderNumber || undefined,
+     supplierId: supplierId || undefined,
+supplierName: supplierName || undefined,
+       
         attributes: { colors, sizes, materials },
       };
       if (imageChanged && image) payload.image = image;
@@ -560,21 +560,7 @@ export const UpdateProductModal = ({
               />
             </div>
 
-            {/* ✅ Purchase Order Number */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-2 text-orange-600 text-sm font-medium">
-                <FileText size={13} /> Purchase Order #
-              </Label>
-              <Input
-                value={purchaseOrderNumber}
-                onChange={(e) => setPurchaseOrderNumber(e.target.value)}
-                placeholder="e.g. PO-2024-001"
-                className={`${fieldClass} border-orange-200`}
-              />
-              <p className="text-xs text-slate-400">
-                Creates or links a PO in Odoo under Purchase → Orders
-              </p>
-            </div>
+           
           </Section>
 
           {/* ── 6. Attributes ── */}

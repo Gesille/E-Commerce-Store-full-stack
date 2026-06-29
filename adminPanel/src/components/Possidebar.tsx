@@ -98,6 +98,8 @@ const POSSidebar = () => {
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
               {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
               {navItem("/pos/POSReport", <BookDashed size={16} />, "POSReport")}
+              {navItem("/pos/purchaseOrders", <RotateCcw size={16} />, "purchase-orders")}
+
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

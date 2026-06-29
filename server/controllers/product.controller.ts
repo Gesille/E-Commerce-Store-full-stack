@@ -183,7 +183,7 @@ const ATTRIBUTE_NAME_MAP: Record<string, string> = {
   sizes: "Size",
   materials: "Material",
 };
-const resolveOrCreateSupplier = async (
+export const resolveOrCreateSupplier = async (
   supplierId?: string,
   supplierName?: string,
 ): Promise<number | null> => {
@@ -1293,3 +1293,9 @@ export const getProductHistory = CatchAsyncError(
     }
   },
 );
+
+
+
+
+
+
