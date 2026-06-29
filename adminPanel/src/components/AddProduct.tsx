@@ -166,27 +166,6 @@ const AddProduct = () => {
       sizes: [],
       colors: [],
       images: {},
-
-      transportationStorageLocal: 0,
-      brokerageHandlingLocal: 0,
-      customsDutiesLocal: 0,
-      portFeesLocal:0,
-      tariffsLocal:0,
-      insurancesLocal:0,
-      vatTaxesLocal:0,
-      documentationCosts:0,
-      internalFees:0,
-      freightInternational:0,
-      transportationStorageInternational:0,
-      portFeesInternational:0,
-      brokerageHandlingInternational:0,
-      customsDutiesInternational:0,
-      tariffsInternational:0,
-      insurancesInternational:0,
-      vatTaxesInternational:0,
-      currencyConversion:0,
-      paymentProcessing:0,
-      bankCharges:0,
       markup: 0,
     },
   });
@@ -195,9 +174,9 @@ const AddProduct = () => {
     {},
   );
   const [createProduct, { isLoading }] = useCreateProductMutation();
-  const { data: categories = [], isLoading: categoriesLoading } =
+  const { data: categories = [], isLoading: categoriesLoading,error: categoriesError } =
     useGetCategoriesQuery();
-
+console.log("categories:", categories, "error:", categoriesError);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const watchedBarcode = form.watch("barcode");
 
