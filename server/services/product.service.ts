@@ -14,6 +14,7 @@ const PRODUCT_FIELDS = [
   "categ_id",
   "taxes_id",
   "supplier_taxes_id",
+  "x_supplier_invoice_number",
 ];
 
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
@@ -33,6 +34,7 @@ const mapProductInput = (p: any, supplierName: string | null, location: any, sto
   supplier_taxes_id: p.supplier_taxes_id,
   product_tmpl_id: [p.id],
   supplier_name: supplierName,
+   x_supplier_invoice_number: p.x_supplier_invoice_number || null,
   location,
 });
 
