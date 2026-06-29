@@ -73,7 +73,17 @@ export const purchaseApi = apiSlice.injectEndpoints({
       query: (pickingId) => ({ url: `purchase-orders/receive/${pickingId}`, method: "POST", credentials: "include" as const }),
       invalidatesTags: ["PurchaseOrders", "Products"],
     }),
-
+createSupplier: builder.mutation<
+  { success: boolean; supplier: { id: number; name: string } },
+  { name: string; phone?: string; email?: string; ref?: string }
+>({
+  query: (body) => ({
+    url: "/purchase-orders/suppliers",
+    method: "POST",
+    body,
+  }),
+  invalidatesTags: ["Suppliers"],
+}),
   }),
 });
 
@@ -84,4 +94,5 @@ export const {
   useCreatePurchaseOrderMutation,
   useConfirmPurchaseOrderMutation,
   useReceivePurchaseOrderMutation,
+  useCreateSupplierMutation
 } = purchaseApi;

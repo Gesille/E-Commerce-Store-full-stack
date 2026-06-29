@@ -253,3 +253,50 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
+
+// ─── Create Supplier ──────────────────────────────────────────────────────────
+export const createSupplier = async (req: Request, res: Response) => {
+  try {
+    const { name, phone, email, ref } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Supplier name is required" });
+    }
+
+    // Check if already exists
+    const existing = await odooRequest(
+      "res.partner",
+      "search_read",
+      [[["name", "=", name], ["supplier_rank", ">", 0]]],
+      { fields: ["id", "name"], limit: 1 }
+    );
+
+    if (existing.length) {
+      return res.status(409).json({
+        success: false,
+        message: "Supplier already exists",
+        supplier: { id: existing[0].id, name: existing[0].name },
+      });
+    }
+
+    const supplierId = await odooRequest("res.partner", "create", [
+      {
+        name,
+        phone: phone || false,
+        email: email || false,
+        ref: ref || false,
+        supplier_rank: 1,
+        is_company: true,
+      },
+    ]);
+
+    return res.status(201).json({
+      success: true,
+      supplier: { id: supplierId, name },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
