@@ -656,114 +656,120 @@ export const updateProduct = async (req: Request, res: Response) => {
       if (found[0]) resolvedLocationId = found[0].id;
     }
 
-    // ✅ Update stock
-    let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
 
-    if (stock !== undefined && stock !== null) {
-      const variants = await odooRequest(
-        "product.product",
+let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
+
+if (stock !== undefined && stock !== null) {
+  const variants = await odooRequest(
+    "product.product",
+    "search_read",
+    [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
+    { fields: ["id", "display_name"] },
+  );
+
+  if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
+
+  for (const v of variants) {
+    // 1. Find ALL existing internal quants for this variant
+    const existingQuants = await odooRequest(
+      "stock.quant",
+      "search_read",
+      [[
+        ["product_id", "=", v.id],
+        ["location_id.usage", "=", "internal"],
+      ]],
+      { fields: ["id", "quantity", "location_id"] },
+    );
+
+    // 2. Determine target location
+    let targetLocationId: number;
+
+    if (resolvedLocationId) {
+      targetLocationId = resolvedLocationId;
+    } else if (existingQuants.length) {
+      targetLocationId = existingQuants[0].location_id[0];
+    } else {
+      const warehouses = await odooRequest(
+        "stock.warehouse",
         "search_read",
-        [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
-        { fields: ["id", "display_name"] },
+        [[]],
+        { fields: ["lot_stock_id"], limit: 1 },
       );
-
-      if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
-
-      for (const v of variants) {
-        // Find existing quant at any internal location
-        const existingQuants = await odooRequest(
-          "stock.quant",
-          "search_read",
-          [[
-            ["product_id", "=", v.id],
-            ["location_id.usage", "=", "internal"],
-          ]],
-          { fields: ["id", "quantity", "location_id"], limit: 1 },
-        );
-
-        let quantId: number;
-
-        if (existingQuants.length) {
-          quantId = existingQuants[0].id;
-          const existingLocationId = existingQuants[0].location_id[0];
-
-          if (resolvedLocationId && resolvedLocationId !== existingLocationId) {
-            // ✅ Location changed — write new location + qty in one shot
-            await odooRequest("stock.quant", "write", [
-              [quantId],
-              {
-                location_id: resolvedLocationId,
-                inventory_quantity: Number(stock),
-              },
-            ]);
-            console.log(`✅ Quant ${quantId} moved to location ${resolvedLocationId} with qty ${stock} for variant ${v.id}`);
-          } else {
-            // ✅ Same location — just update qty
-            await odooRequest("stock.quant", "write", [
-              [quantId],
-              { inventory_quantity: Number(stock) },
-            ]);
-            console.log(`✅ Quant ${quantId} qty updated to ${stock} for variant ${v.id}`);
-          }
-        } else {
-          // ✅ No existing quant — create at resolved or default location
-          let targetLocationId: number;
-
-          if (resolvedLocationId) {
-            targetLocationId = resolvedLocationId;
-          } else {
-            const warehouses = await odooRequest(
-              "stock.warehouse",
-              "search_read",
-              [[]],
-              { fields: ["lot_stock_id"], limit: 1 },
-            );
-            if (!warehouses.length || !warehouses[0].lot_stock_id) {
-              throw new Error("Could not resolve warehouse stock location in Odoo");
-            }
-            targetLocationId = warehouses[0].lot_stock_id[0];
-          }
-
-          quantId = await odooRequest("stock.quant", "create", [
-            {
-              product_id: v.id,
-              location_id: targetLocationId,
-              inventory_quantity: Number(stock),
-            },
-          ]);
-          console.log(`✅ Quant ${quantId} created at location ${targetLocationId} for variant ${v.id}`);
-        }
-
-        // ✅ Apply inventory adjustment
-        await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
-
-        // ✅ Verify by product + location instead of quantId
-        // (Odoo can reassign IDs internally after apply)
-        const verifiedQuants = await odooRequest(
-          "stock.quant",
-          "search_read",
-          [[
-            ["product_id", "=", v.id],
-            ["location_id.usage", "=", "internal"],
-            ["quantity", ">", 0],
-          ]],
-          { fields: ["id", "quantity", "location_id"] },
-        );
-
-        if (!verifiedQuants.length) {
-          throw new Error(`No positive quant found after apply for variant ${v.id}`);
-        }
-
-        const actualQty = verifiedQuants.reduce((sum: number, q: any) => sum + q.quantity, 0);
-        console.log(`🔍 Verified variant ${v.id}: total qty=${actualQty}`);
-
-        if (Math.abs(actualQty - Number(stock)) > 0.01) {
-          throw new Error(`Stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`);
-        }
+      if (!warehouses.length || !warehouses[0].lot_stock_id) {
+        throw new Error("Could not resolve warehouse stock location in Odoo");
       }
-
-      verifiedStock = Number(stock);
+      targetLocationId = warehouses[0].lot_stock_id[0];
     }
+
+    // 3. Zero out ALL quants not at target location
+    const otherQuants = existingQuants.filter(
+      (q: any) => q.location_id[0] !== targetLocationId
+    );
+
+    for (const q of otherQuants) {
+      await odooRequest("stock.quant", "write", [
+        [q.id],
+        { inventory_quantity: 0 },
+      ]);
+      await odooRequest("stock.quant", "action_apply_inventory", [[q.id]]);
+      console.log(`🧹 Zeroed quant ${q.id} at old location ${q.location_id[1]}`);
+    }
+
+    // 4. Find or create quant at target location
+    const targetQuant = existingQuants.find(
+      (q: any) => q.location_id[0] === targetLocationId
+    );
+
+    let quantId: number;
+
+    if (targetQuant) {
+      quantId = targetQuant.id;
+      await odooRequest("stock.quant", "write", [
+        [quantId],
+        { inventory_quantity: Number(stock) },
+      ]);
+      console.log(`✅ Updated quant ${quantId} at location ${targetLocationId} to qty ${stock}`);
+    } else {
+      quantId = await odooRequest("stock.quant", "create", [
+        {
+          product_id: v.id,
+          location_id: targetLocationId,
+          inventory_quantity: Number(stock),
+        },
+      ]);
+      console.log(`✅ Created quant ${quantId} at location ${targetLocationId} with qty ${stock}`);
+    }
+
+    // 5. Apply inventory
+    await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
+
+    // 6. Verify — only check the target location, not all internal
+    const verifiedQuants = await odooRequest(
+      "stock.quant",
+      "search_read",
+      [[
+        ["product_id", "=", v.id],
+        ["location_id", "=", targetLocationId],
+      ]],
+      { fields: ["id", "quantity"] },
+    );
+
+    const actualQty = verifiedQuants.reduce(
+      (sum: number, q: any) => sum + Number(q.quantity || 0),
+      0
+    );
+
+    console.log(`🔍 Verified variant ${v.id} at location ${targetLocationId}: qty=${actualQty}`);
+
+    if (Math.abs(actualQty - Number(stock)) > 0.01) {
+      throw new Error(
+        `Stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`
+      );
+    }
+  }
+
+  verifiedStock = Number(stock);
+}
 
     // ✅ Update supplier info
     if (supplierName || supplierId) {
