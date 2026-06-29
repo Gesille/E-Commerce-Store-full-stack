@@ -18,7 +18,7 @@ const PRODUCT_FIELDS = [
 
 const ATTR_FIELDS = ["id", "name", "attribute_id", "product_tmpl_id"];
 
-const mapProductInput = (p: any, supplierName: string | null, location: any) => ({
+const mapProductInput = (p: any, supplierName: string | null, location: any, stockOverride?: number) => ({
   id: p.id,
   default_code: p.default_code,
   barcode: p.barcode,
@@ -26,7 +26,7 @@ const mapProductInput = (p: any, supplierName: string | null, location: any) => 
   lst_price: p.list_price,
   standard_price: p.standard_price,
   currency_id: p.currency_id,
-  qty_available: p.qty_available,
+    qty_available: stockOverride ?? p.qty_available,
   image_1920: p.image_1920,
   categ_id: p.categ_id,
   taxes_id: p.taxes_id,
@@ -126,16 +126,24 @@ const allQuants = variantIds.length
       )
     : [];
 
-  // بناء maps للبحث السريع
-  const variantByTemplate: Record<number, number> = {};
-  allVariants.forEach((v: any) => {
-    variantByTemplate[v.product_tmpl_id?.[0]] = v.id;
-  });
 
-  const quantByVariant: Record<number, any> = {};
-  allQuants.forEach((q: any) => {
-    quantByVariant[q.product_id?.[0]] = q;
-  });
+ const variantByTemplate: Record<number, number> = {};
+allVariants.forEach((v: any) => {
+  
+  if (!variantByTemplate[v.product_tmpl_id?.[0]]) {
+    variantByTemplate[v.product_tmpl_id?.[0]] = v.id;
+  }
+});
+
+const quantByVariant: Record<number, any> = {};
+allQuants.forEach((q: any) => {
+  const variantId = q.product_id?.[0];
+  const existing = quantByVariant[variantId];
+  // Prefer quants with actual stock over empty ones
+  if (!existing || q.quantity > 0) {
+    quantByVariant[variantId] = q;
+  }
+});
 
   const locationById: Record<number, any> = {};
   allLocations.forEach((l: any) => {
@@ -151,20 +159,20 @@ const allQuants = variantIds.length
     const quant = variantId ? quantByVariant[variantId] : null;
     const loc = quant ? locationById[quant.location_id?.[0]] : null;
 
-    const location = loc
-      ? {
-          shelfId: loc.id || null,
-          shelfName: loc.name || null,
-          fullPath: loc.complete_name || null,
-          warehouseId: loc.location_id?.[0] || null,
-          warehouseName: loc.location_id?.[1] || null,
-        }
-      : null;
-
+const location = loc
+  ? {
+      shelfId: loc.id || null,
+      shelfName: loc.name || null,
+      fullPath: loc.complete_name || null,
+      warehouseId: loc.location_id?.[0] || null,
+      warehouseName: loc.location_id?.[1] || null,
+    }
+  : null;
+const actualStock = quant?.quantity ?? p.qty_available;
     return toCleanProduct(
-      mapProductInput(p, supplier?.partner_id?.[1] || null, location),
-      attrs
-    );
+  mapProductInput(p, supplier?.partner_id?.[1] || null, location, actualStock),
+  attrs
+);
   });
 };
 
