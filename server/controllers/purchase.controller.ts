@@ -224,7 +224,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
           "amount_total",
           "date_order",
           "note",
-          "picking_ids"
+          // ← removed "picking_ids"
         ],
         order: "date_order desc",
         limit: 50,
@@ -232,6 +232,8 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
     );
 
     const orderIds = orders.map((o: any) => o.id);
+
+    // ─── Fetch lines ───────────────────────────────────────────────────────
     const lines = orderIds.length
       ? await odooRequest(
           "purchase.order.line",
@@ -250,6 +252,27 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
         )
       : [];
 
+    // ─── Fetch pickings separately ─────────────────────────────────────────
+    const pickings = orderIds.length
+      ? await odooRequest(
+          "stock.picking",
+          "search_read",
+          [[
+            ["purchase_id", "in", orderIds],
+            ["picking_type_code", "=", "incoming"],
+          ]],
+          { fields: ["id", "purchase_id", "state"] },
+        )
+      : [];
+
+    const pickingsByOrder: Record<number, number[]> = {};
+    pickings.forEach((p: any) => {
+      const oid = p.purchase_id?.[0];
+      if (!pickingsByOrder[oid]) pickingsByOrder[oid] = [];
+      pickingsByOrder[oid].push(p.id);
+    });
+
+    // ─── Build line map ────────────────────────────────────────────────────
     const linesByOrder: Record<number, any[]> = {};
     lines.forEach((l: any) => {
       const oid = l.order_id?.[0];
@@ -263,6 +286,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
         subtotal: l.price_subtotal,
       });
     });
+
     const result = orders.map((o: any) => ({
       id: o.id,
       name: o.name,
@@ -272,7 +296,7 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
       total: o.amount_total,
       date: o.date_order,
       note: o.note,
-      pickingIds:o.picking_ids,
+      pickingIds: pickingsByOrder[o.id] ?? [],  // ← now populated correctly
       lines: linesByOrder[o.id] ?? [],
     }));
 
