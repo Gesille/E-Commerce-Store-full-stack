@@ -36,6 +36,11 @@ export const getProductsForPO = async (req: Request, res: Response) => {
 };
 
 // ─── Create Purchase Order ────────────────────────────────────────────────────
+function formatOdooDatetime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 export const createPurchaseOrder = async (req: Request, res: Response) => {
   try {
     const { supplierId, lines, expectedDate, note } = req.body;
@@ -73,9 +78,11 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     }
 
     // 2. Build order lines
-    const plannedDate = expectedDate
-      ? new Date(expectedDate).toISOString()
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+   const plannedDate = expectedDate
+  ? formatOdooDatetime(new Date(expectedDate))
+  : formatOdooDatetime(
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    );
 
     const orderLines = lines.map((line: any) => {
       const product = productMap[line.productId];
