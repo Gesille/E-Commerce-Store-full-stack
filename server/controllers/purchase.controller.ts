@@ -98,7 +98,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       {
         partner_id: Number(supplierId),
         order_line: orderLines,
-        notes: note || false,
+        note: note || false,
       },
     ]);
 
