@@ -8,7 +8,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
       "res.partner",
       "search_read",
       [[["supplier_rank", ">", 0]]],
-      { fields: ["id", "name", "ref"], order: "name asc" }
+      { fields: ["id", "name", "ref"], order: "name asc" },
     );
     return res.json({ success: true, suppliers });
   } catch (err: any) {
@@ -19,15 +19,14 @@ export const getSuppliers = async (req: Request, res: Response) => {
 // ─── Get all products ─────────────────────────────────────────────────────────
 export const getProductsForPO = async (req: Request, res: Response) => {
   try {
- 
     const products = await odooRequest(
-      "product.template",          
+      "product.template",
       "search_read",
-      [[["active", "=", true]]],  
+      [[["active", "=", true]]],
       {
         fields: ["id", "name", "uom_id", "standard_price"],
         order: "name asc",
-      }
+      },
     );
 
     return res.json({ success: true, products });
@@ -42,11 +41,15 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
     const { supplierId, lines, expectedDate, notes } = req.body;
 
     if (!supplierId) {
-      return res.status(400).json({ success: false, message: "supplierId is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "supplierId is required" });
     }
 
     if (!lines?.length) {
-      return res.status(400).json({ success: false, message: "At least one line is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "At least one line is required" });
     }
 
     // 1. Validate products
@@ -55,7 +58,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       "product.product",
       "search_read",
       [[["id", "in", productIds]]],
-      { fields: ["id", "uom_po_id", "uom_id"] }
+      { fields: ["id", "uom_po_id", "uom_id"] },
     );
 
     const productMap: Record<number, any> = {};
@@ -78,7 +81,8 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       const product = productMap[line.productId];
       const uomId = product.uom_po_id?.[0] ?? product.uom_id?.[0] ?? 1;
       return [
-        0, 0,
+        0,
+        0,
         {
           product_id: line.productId,
           product_qty: line.qty,
@@ -103,7 +107,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       "purchase.order",
       "search_read",
       [[["id", "=", poId]]],
-      { fields: ["name", "state", "amount_total"], limit: 1 }
+      { fields: ["name", "state", "amount_total"], limit: 1 },
     );
 
     return res.status(201).json({
@@ -128,14 +132,14 @@ export const confirmPurchaseOrder = async (req: Request, res: Response) => {
       "purchase.order",
       "search_read",
       [[["id", "=", id]]],
-      { fields: ["name", "state", "picking_ids"], limit: 1 }
+      { fields: ["name", "state"], limit: 1 },
     );
 
     return res.json({
       success: true,
       purchaseOrderName: po[0].name,
       state: po[0].state,
-      pickingIds: po[0].picking_ids ?? [],
+      
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
@@ -151,24 +155,30 @@ export const receivePurchaseOrder = async (req: Request, res: Response) => {
       "stock.picking",
       "search_read",
       [[["id", "=", id]]],
-      { fields: ["state", "picking_type_code"], limit: 1 }
+      { fields: ["state", "picking_type_code"], limit: 1 },
     );
 
     if (!picking.length)
-      return res.status(404).json({ success: false, message: "Picking not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Picking not found" });
 
     if (picking[0].state === "done")
-      return res.status(400).json({ success: false, message: "Already received" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Already received" });
 
     if (picking[0].picking_type_code !== "incoming")
-      return res.status(400).json({ success: false, message: "Not a supplier receipt" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Not a supplier receipt" });
 
     // Set qty_done on all move lines
     const moveLines = await odooRequest(
       "stock.move.line",
       "search_read",
       [[["picking_id", "=", id]]],
-      { fields: ["id", "product_uom_qty"] }
+      { fields: ["id", "product_uom_qty"] },
     );
 
     for (const ml of moveLines) {
@@ -203,10 +213,18 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
       "search_read",
       [domain],
       {
-        fields: ["id", "name", "partner_id", "state", "amount_total", "date_order", "picking_ids", "notes"],
+        fields: [
+          "id",
+          "name",
+          "partner_id",
+          "state",
+          "amount_total",
+          "date_order",
+          "notes",
+        ],
         order: "date_order desc",
         limit: 50,
-      }
+      },
     );
 
     const orderIds = orders.map((o: any) => o.id);
@@ -216,8 +234,15 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
           "search_read",
           [[["order_id", "in", orderIds]]],
           {
-            fields: ["order_id", "product_id", "product_qty", "qty_received", "price_unit", "price_subtotal"],
-          }
+            fields: [
+              "order_id",
+              "product_id",
+              "product_qty",
+              "qty_received",
+              "price_unit",
+              "price_subtotal",
+            ],
+          },
         )
       : [];
 
@@ -234,7 +259,6 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
         subtotal: l.price_subtotal,
       });
     });
-
     const result = orders.map((o: any) => ({
       id: o.id,
       name: o.name,
@@ -244,7 +268,6 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
       total: o.amount_total,
       date: o.date_order,
       notes: o.notes,
-      pickingIds: o.picking_ids ?? [],
       lines: linesByOrder[o.id] ?? [],
     }));
 
@@ -254,23 +277,28 @@ export const getPurchaseOrders = async (req: Request, res: Response) => {
   }
 };
 
-
-
 // ─── Create Supplier ──────────────────────────────────────────────────────────
 export const createSupplier = async (req: Request, res: Response) => {
   try {
     const { name, phone, email, ref } = req.body;
 
     if (!name) {
-      return res.status(400).json({ success: false, message: "Supplier name is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Supplier name is required" });
     }
 
     // Check if already exists
     const existing = await odooRequest(
       "res.partner",
       "search_read",
-      [[["name", "=", name], ["supplier_rank", ">", 0]]],
-      { fields: ["id", "name"], limit: 1 }
+      [
+        [
+          ["name", "=", name],
+          ["supplier_rank", ">", 0],
+        ],
+      ],
+      { fields: ["id", "name"], limit: 1 },
     );
 
     if (existing.length) {
