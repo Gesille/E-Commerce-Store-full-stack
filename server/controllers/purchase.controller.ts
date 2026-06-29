@@ -19,12 +19,17 @@ export const getSuppliers = async (req: Request, res: Response) => {
 // ─── Get all products ─────────────────────────────────────────────────────────
 export const getProductsForPO = async (req: Request, res: Response) => {
   try {
+ 
     const products = await odooRequest(
-      "product.product",
+      "product.template",          
       "search_read",
-      [[["purchase_ok", "=", true], ["active", "=", true]]],
-      { fields: ["id", "name", "uom_po_id", "uom_id"], order: "name asc" }
+      [[["active", "=", true]]],  
+      {
+        fields: ["id", "name", "uom_id", "standard_price"],
+        order: "name asc",
+      }
     );
+
     return res.json({ success: true, products });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
