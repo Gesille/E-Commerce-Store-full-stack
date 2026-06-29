@@ -11,6 +11,7 @@ import { Plus, Trash2 } from "lucide-react";
 
 import toast from "react-hot-toast";
 import { useGetSuppliersQuery, useGetProductsForPOQuery, useCreatePurchaseOrderMutation } from "@/redux/product/purchaseApi";
+import { ProductCombobox } from "@/app/(pos)/pos/purchaseOrders/ProductCombobox";
 
 interface POLine {
   productId: number;
@@ -126,17 +127,12 @@ export const CreatePOModal = ({ open, onClose }: Props) => {
               {lines.map((line, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-5">
-                    <Select onValueChange={(v) => updateLine(i, "productId", Number(v))}>
-                      <SelectTrigger className="bg-white border-slate-200 text-sm">
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p:any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+  <ProductCombobox
+    products={products}
+    value={line.productId}
+    onChange={(id:any) => updateLine(i, "productId", id)}
+  />
+</div>
                   <div className="col-span-3">
                     <Input type="number" min={1} value={line.qty}
                       onChange={(e) => updateLine(i, "qty", Number(e.target.value))}
