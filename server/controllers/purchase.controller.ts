@@ -58,7 +58,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
       "product.product",
       "search_read",
       [[["id", "in", productIds]]],
-      { fields: ["id", "uom_po_id", "uom_id"] },
+      { fields: ["id","uom_id"] },
     );
 
     const productMap: Record<number, any> = {};
@@ -79,7 +79,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
 
     const orderLines = lines.map((line: any) => {
       const product = productMap[line.productId];
-      const uomId = product.uom_po_id?.[0] ?? product.uom_id?.[0] ?? 1;
+      
       return [
         0,
         0,
@@ -88,7 +88,7 @@ export const createPurchaseOrder = async (req: Request, res: Response) => {
           product_qty: line.qty,
           price_unit: line.unitPrice,
           date_planned: plannedDate,
-          product_uom: uomId,
+          
         },
       ];
     });
@@ -324,6 +324,19 @@ export const createSupplier = async (req: Request, res: Response) => {
       success: true,
       supplier: { id: supplierId, name },
     });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+export const getPurchaseOrderFields = async (req: Request, res: Response) => {
+  try {
+    const fields = await odooRequest(
+      "purchase.order",
+      "fields_get",
+      [],
+      { attributes: ["string", "type"] }
+    );
+    return res.json({ success: true, fields });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: err.message });
   }

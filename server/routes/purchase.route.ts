@@ -7,6 +7,7 @@ import {
   receivePurchaseOrder,
   getPurchaseOrders,
   createSupplier,
+  getPurchaseOrderFields,
 } from "../controllers/purchase.controller.js";
 import { authorizeRoles, isAuthenticated } from "../middleware/auth.js";
 
@@ -19,5 +20,5 @@ PurchaseRouter.post("/purchase-orders",isAuthenticated,authorizeRoles("admin"), 
 PurchaseRouter.post("/purchase-orders/confirm/:id", isAuthenticated,authorizeRoles("admin"),confirmPurchaseOrder);
 PurchaseRouter.post("/purchase-orders/receive/:pickingId",isAuthenticated,authorizeRoles("admin"), receivePurchaseOrder);
 PurchaseRouter.post("/purchase-orders/suppliers", isAuthenticated,authorizeRoles("admin"),createSupplier);
-
+PurchaseRouter.get("/purchase-orders/fields", getPurchaseOrderFields);
 export default PurchaseRouter;
