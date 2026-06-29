@@ -45,6 +45,7 @@ export const purchaseApi = apiSlice.injectEndpoints({
     getProductsForPO: builder.query<{ id: number; name: string }[], void>({
       query: () => ({ url: "purchase-orders/products", method: "GET", credentials: "include" as const }),
       transformResponse: (res: any) => res.products,
+      providesTags: ["Products"], 
     }),
 
     getPurchaseOrders: builder.query<PurchaseOrder[], { supplierId?: number; state?: string } | void>({

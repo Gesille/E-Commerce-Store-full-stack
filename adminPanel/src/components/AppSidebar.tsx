@@ -170,7 +170,7 @@ const AppSidebar = () => {
                  <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link
-                    href="/pos/purchaseOrders"
+                    href="/purchaseOrders"
                     className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition"
                   >
                     <TicketCheck size={16} />

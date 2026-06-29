@@ -11,7 +11,7 @@ import { Plus, Trash2 } from "lucide-react";
 
 import toast from "react-hot-toast";
 import { useGetSuppliersQuery, useGetProductsForPOQuery, useCreatePurchaseOrderMutation } from "@/redux/product/purchaseApi";
-import { ProductCombobox } from "@/app/(pos)/pos/purchaseOrders/ProductCombobox";
+import { ProductCombobox } from "@/app/(dashboard)/purchaseOrders/ProductCombobox";
 
 interface POLine {
   productId: number;
