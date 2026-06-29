@@ -561,21 +561,34 @@ export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
-      name, price, stock, reference, barcode, itemNumber, attributes,
-      warehouseName, shelfName, supplierId, supplierName, supplierPrice,
-      shippingCost, currency,
+      name,
+      price,
+      stock,
+      reference,
+      barcode,
+      itemNumber,
+      attributes,
+      warehouseName,
+      shelfName,
+      supplierId,
+      supplierName,
+      supplierPrice,
+      shippingCost,
+      currency,
     } = req.body;
- 
+
     let imageUrl: string | null = null;
     let base64Image: string | null = null;
- 
+
     if (req.body.image) {
       const uploaded = await uploadImage(req.body.image);
       imageUrl = uploaded.url;
-      const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const response = await axios.get(imageUrl, {
+        responseType: "arraybuffer",
+      });
       base64Image = Buffer.from(response.data, "binary").toString("base64");
     }
- 
+
     await odooRequest("product.template", "write", [
       [Number(id)],
       {
@@ -591,12 +604,16 @@ export const updateProduct = async (req: Request, res: Response) => {
         ...(base64Image && { image_1920: base64Image }),
       },
     ]);
- 
+
     // ✅ Sync attributes — deduplicate before writing to prevent "WHITE, WHITE" bug
-    const finalColors: string[] = [...new Set<string>(attributes?.colors ?? [])];
+    const finalColors: string[] = [
+      ...new Set<string>(attributes?.colors ?? []),
+    ];
     const finalSizes: string[] = [...new Set<string>(attributes?.sizes ?? [])];
-    const finalMaterials: string[] = [...new Set<string>(attributes?.materials ?? [])];
- 
+    const finalMaterials: string[] = [
+      ...new Set<string>(attributes?.materials ?? []),
+    ];
+
     for (const [key, values] of [
       ["colors", finalColors],
       ["sizes", finalSizes],
@@ -611,18 +628,23 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
       await syncAttributeLine(Number(id), attributeId, valueIds);
     }
- 
+
     // ✅ Resolve location in Odoo and SAVE it (old code only put it in the response, never wrote to Odoo)
     let resolvedLocationId: number | null = null;
- 
+
     if (warehouseName && shelfName) {
       const warehouseResults = await odooRequest(
         "stock.location",
         "search_read",
-        [[["name", "=", warehouseName], ["usage", "=", "internal"]]],
+        [
+          [
+            ["name", "=", warehouseName],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
- 
+
       let warehouseLocationId: number;
       if (warehouseResults.length) {
         warehouseLocationId = warehouseResults[0].id;
@@ -631,69 +653,117 @@ export const updateProduct = async (req: Request, res: Response) => {
           { name: warehouseName, usage: "internal" },
         ]);
       }
- 
+
       const shelfResults = await odooRequest(
         "stock.location",
         "search_read",
-        [[["name", "=", shelfName], ["location_id", "=", warehouseLocationId], ["usage", "=", "internal"]]],
+        [
+          [
+            ["name", "=", shelfName],
+            ["location_id", "=", warehouseLocationId],
+            ["usage", "=", "internal"],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
- 
+
       if (shelfResults.length) {
         resolvedLocationId = shelfResults[0].id;
       } else {
         resolvedLocationId = await odooRequest("stock.location", "create", [
-          { name: shelfName, location_id: warehouseLocationId, usage: "internal" },
+          {
+            name: shelfName,
+            location_id: warehouseLocationId,
+            usage: "internal",
+          },
         ]);
       }
     } else if (shelfName) {
       const found = await odooRequest(
         "stock.location",
         "search_read",
-        [[["usage", "=", "internal"], ["name", "=", shelfName]]],
+        [
+          [
+            ["usage", "=", "internal"],
+            ["name", "=", shelfName],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
       if (found[0]) resolvedLocationId = found[0].id;
     }
- 
+
     let verifiedStock: number = stock !== undefined ? Number(stock) : 0;
 
     if (stock !== undefined && stock !== null) {
       const variants = await odooRequest(
         "product.product",
         "search_read",
-        [[["product_tmpl_id", "=", Number(id)], ["active", "=", true]]],
+        [
+          [
+            ["product_tmpl_id", "=", Number(id)],
+            ["active", "=", true],
+          ],
+        ],
         { fields: ["id", "display_name"] },
       );
 
-      if (!variants.length) throw new Error(`No active variant found for template ID ${id}`);
+      if (!variants.length)
+        throw new Error(`No active variant found for template ID ${id}`);
 
       for (const v of variants) {
-        // Search for ANY existing quant for this variant at ANY internal location
         const existingQuants = await odooRequest(
           "stock.quant",
           "search_read",
-          [[
-            ["product_id", "=", v.id],
-            ["location_id.usage", "=", "internal"],
-          ]],
+          [
+            [
+              ["product_id", "=", v.id],
+              ["location_id.usage", "=", "internal"],
+            ],
+          ],
           { fields: ["id", "quantity", "location_id"], limit: 1 },
         );
 
         let quantId: number;
 
         if (existingQuants.length) {
-          // ✅ Update the existing quant — only set inventory_quantity, never write quantity directly
+          const existingLocationId = existingQuants[0].location_id[0];
           quantId = existingQuants[0].id;
-          await odooRequest("stock.quant", "write", [
-            [quantId],
-            { inventory_quantity: Number(stock) },
-          ]);
-          console.log(`✅ Quant ${quantId} inventory_quantity set to ${stock} for variant ${v.id}`);
-        } else {
-          // No quant exists yet — use resolved location or warehouse default
-          let targetLocationId: number;
 
+          if (resolvedLocationId && resolvedLocationId !== existingLocationId) {
+            // Zero out old location
+            await odooRequest("stock.quant", "write", [
+              [quantId],
+              { inventory_quantity: 0 },
+            ]);
+            await odooRequest("stock.quant", "action_apply_inventory", [
+              [quantId],
+            ]);
+
+            // Create at new location
+            quantId = await odooRequest("stock.quant", "create", [
+              {
+                product_id: v.id,
+                location_id: resolvedLocationId,
+                inventory_quantity: Number(stock),
+              },
+            ]);
+            console.log(
+              ` Quant moved to location ${resolvedLocationId} for variant ${v.id}`,
+            );
+          } else {
+         
+            await odooRequest("stock.quant", "write", [
+              [quantId],
+              { inventory_quantity: Number(stock) },
+            ]);
+            console.log(
+              ` Quant ${quantId} qty updated to ${stock} for variant ${v.id}`,
+            );
+          }
+        } else {
+         
+          let targetLocationId: number;
           if (resolvedLocationId) {
             targetLocationId = resolvedLocationId;
           } else {
@@ -704,7 +774,9 @@ export const updateProduct = async (req: Request, res: Response) => {
               { fields: ["lot_stock_id"], limit: 1 },
             );
             if (!warehouses.length || !warehouses[0].lot_stock_id) {
-              throw new Error("Could not resolve warehouse stock location in Odoo");
+              throw new Error(
+                "Could not resolve warehouse stock location in Odoo",
+              );
             }
             targetLocationId = warehouses[0].lot_stock_id[0];
           }
@@ -716,13 +788,14 @@ export const updateProduct = async (req: Request, res: Response) => {
               inventory_quantity: Number(stock),
             },
           ]);
-          console.log(`✅ Quant ${quantId} created at location ${targetLocationId} for variant ${v.id}`);
+          console.log(
+            ` Quant created at location ${targetLocationId} for variant ${v.id}`,
+          );
         }
 
-        // Apply the inventory adjustment — this is what actually commits the change in Odoo
+        // Apply and verify
         await odooRequest("stock.quant", "action_apply_inventory", [[quantId]]);
 
-        // Verify
         const verifiedQuant = await odooRequest(
           "stock.quant",
           "search_read",
@@ -730,48 +803,67 @@ export const updateProduct = async (req: Request, res: Response) => {
           { fields: ["quantity"] },
         );
 
-        if (!verifiedQuant.length) throw new Error(`Could not find quant ${quantId} after apply`);
+        if (!verifiedQuant.length)
+          throw new Error(`Could not find quant ${quantId} after apply`);
 
         const actualQty = verifiedQuant[0].quantity;
-        console.log(`🔍 Verified quant ${quantId}: qty=${actualQty}`);
-
         if (Math.abs(actualQty - Number(stock)) > 0.01) {
-          throw new Error(`Odoo stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`);
+          throw new Error(
+            `Stock mismatch: expected ${stock}, got ${actualQty} for variant ${v.id}`,
+          );
         }
       }
 
       verifiedStock = Number(stock);
     }
- 
+
     // ✅ Update supplier info
     if (supplierName || supplierId) {
       const suppliers = await odooRequest(
         "res.partner",
         "search_read",
-      [["|", ["name", "=", supplierName || ""], ["ref", "=", supplierId || ""]]],
+        [
+          [
+            "|",
+            ["name", "=", supplierName || ""],
+            ["ref", "=", supplierId || ""],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
- 
+
       let resolvedSupplierId: number;
       if (suppliers.length) {
         resolvedSupplierId = suppliers[0].id;
       } else {
         resolvedSupplierId = await odooRequest("res.partner", "create", [
-          { name: supplierName || "Unknown Supplier", ref: supplierId || false, supplier_rank: 1 },
+          {
+            name: supplierName || "Unknown Supplier",
+            ref: supplierId || false,
+            supplier_rank: 1,
+          },
         ]);
       }
- 
+
       const existingSupplierInfo = await odooRequest(
         "product.supplierinfo",
         "search_read",
-        [[["product_tmpl_id", "=", Number(id)], ["partner_id", "=", resolvedSupplierId]]],
+        [
+          [
+            ["product_tmpl_id", "=", Number(id)],
+            ["partner_id", "=", resolvedSupplierId],
+          ],
+        ],
         { fields: ["id"], limit: 1 },
       );
- 
+
       if (existingSupplierInfo.length) {
         await odooRequest("product.supplierinfo", "write", [
           [existingSupplierInfo[0].id],
-          { price: Number(supplierPrice) || 0, product_code: supplierId || false },
+          {
+            price: Number(supplierPrice) || 0,
+            product_code: supplierId || false,
+          },
         ]);
       } else {
         await odooRequest("product.supplierinfo", "create", [
@@ -784,11 +876,12 @@ export const updateProduct = async (req: Request, res: Response) => {
         ]);
       }
     }
- 
+
     const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
     const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
-    const finalPriceXCD = ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
- 
+    const finalPriceXCD =
+      ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
+
     res.json({
       success: true,
       message: "Product updated successfully",
@@ -824,7 +917,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: err.message });
   }
 };
- 
+
 // delete product
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
@@ -1029,11 +1122,11 @@ export const getProductHistory = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const templateId = Number(req.params.id);
- 
+
       if (!templateId) {
         return next(new ErrorHandler("Invalid product id", 400));
       }
- 
+
       // 1. Variants
       const variants = await odooRequest(
         "product.product",
@@ -1041,54 +1134,80 @@ export const getProductHistory = CatchAsyncError(
         [[["product_tmpl_id", "=", templateId]]],
         { fields: ["id"] },
       );
- 
+
       const variantIds = variants.map((v: any) => v.id);
- 
+
       if (!variantIds.length) {
-        return res.json({ success: true, currentStock: 0, lastRestock: null, stockMoves: [], salesHistory: [] });
+        return res.json({
+          success: true,
+          currentStock: 0,
+          lastRestock: null,
+          stockMoves: [],
+          salesHistory: [],
+        });
       }
- 
+
       // 2. Current Stock
       const quants = await odooRequest(
         "stock.quant",
         "search_read",
-        [[["product_id", "in", variantIds], ["location_id.usage", "=", "internal"]]],
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["location_id.usage", "=", "internal"],
+          ],
+        ],
         { fields: ["quantity"] },
       );
- 
+
       const currentStock = quants.reduce(
         (sum: number, q: any) => sum + Number(q.quantity || 0),
         0,
       );
- 
+
       // 3. Stock Moves
       const moves = await odooRequest(
         "stock.move",
         "search_read",
-        [[["product_id", "in", variantIds], ["state", "=", "done"]]],
+        [
+          [
+            ["product_id", "in", variantIds],
+            ["state", "=", "done"],
+          ],
+        ],
         {
-          fields: ["id", "date", "create_date", "write_date", "location_id", "location_dest_id", "origin", "reference", "product_uom_qty"],
+          fields: [
+            "id",
+            "date",
+            "create_date",
+            "write_date",
+            "location_id",
+            "location_dest_id",
+            "origin",
+            "reference",
+            "product_uom_qty",
+          ],
           order: "create_date desc",
           limit: 100,
         },
       );
- 
+
       const stockMoves: any[] = [];
- 
+
       for (const m of moves) {
         const from = String(m.location_id?.[1] || "").toLowerCase();
         const to = String(m.location_dest_id?.[1] || "").toLowerCase();
         const reference = String(m.reference || m.origin || "").toLowerCase();
- 
+
         // ✅ Skip "Confirmed" moves — these are zero-qty bookkeeping Odoo emits
         // on every action_apply_inventory call when quantity didn't actually change
         if (reference.includes("confirmed")) {
           continue;
         }
- 
+
         // ✅ Determine type
         let type: "restock" | "sale" | "return" | "adjustment" = "adjustment";
- 
+
         if (reference.includes("pos") || reference.includes("sale")) {
           type = "sale";
         } else if (reference.includes("return")) {
@@ -1101,11 +1220,11 @@ export const getProductHistory = CatchAsyncError(
         ) {
           type = "restock";
         }
- 
+
         // ✅ Always read qty from move lines for ALL move types
         // Never use product_uom_qty for inventory adjustments — it is always 0 on the move header
         let qty = 0;
- 
+
         try {
           const lines = await odooRequest(
             "stock.move.line",
@@ -1113,21 +1232,24 @@ export const getProductHistory = CatchAsyncError(
             [[["move_id", "=", m.id]]],
             { fields: ["qty_done"] },
           );
-          qty = lines.reduce((sum: number, l: any) => sum + Number(l.qty_done || 0), 0);
+          qty = lines.reduce(
+            (sum: number, l: any) => sum + Number(l.qty_done || 0),
+            0,
+          );
         } catch (e: any) {
           console.log("move line error:", e.message);
         }
- 
+
         // Fallback only if move lines gave nothing
         if (!qty) {
           qty = Number(m.product_uom_qty || 0);
         }
- 
+
         // Skip zero-qty non-sale moves — nothing actually happened
         if (!qty && type !== "sale") {
           continue;
         }
- 
+
         stockMoves.push({
           movementDate: m.date,
           insertedDate: m.create_date,
@@ -1139,18 +1261,24 @@ export const getProductHistory = CatchAsyncError(
           to: m.location_dest_id?.[1] || "—",
         });
       }
- 
+
       // 4. POS Sales
       const posLines = await odooRequest(
         "pos.order.line",
         "search_read",
         [[["product_id", "in", variantIds]]],
-        { fields: ["qty", "price_subtotal", "order_id", "create_date"], order: "create_date desc", limit: 50 },
+        {
+          fields: ["qty", "price_subtotal", "order_id", "create_date"],
+          order: "create_date desc",
+          limit: 50,
+        },
       );
- 
-      const orderIds = [...new Set(posLines.map((l: any) => l.order_id?.[0]))].filter(Boolean);
+
+      const orderIds = [
+        ...new Set(posLines.map((l: any) => l.order_id?.[0])),
+      ].filter(Boolean);
       let orders: any[] = [];
- 
+
       if (orderIds.length) {
         orders = await odooRequest(
           "pos.order",
@@ -1159,17 +1287,19 @@ export const getProductHistory = CatchAsyncError(
           { fields: ["id", "name", "date_order"] },
         );
       }
- 
+
       const orderMap: Record<number, any> = {};
-      orders.forEach((o: any) => { orderMap[o.id] = { name: o.name, date: o.date_order }; });
- 
+      orders.forEach((o: any) => {
+        orderMap[o.id] = { name: o.name, date: o.date_order };
+      });
+
       const salesHistory = posLines.map((l: any) => ({
         date: orderMap[l.order_id?.[0]]?.date ?? l.create_date,
         orderId: orderMap[l.order_id?.[0]]?.name ?? "#" + l.order_id?.[0],
         qty: Number(l.qty || 0),
         total: Number(l.price_subtotal || 0),
       }));
- 
+
       // 5. Last Restock
       // ✅ Only "Updated" moves where stock flows INTO the warehouse (not out to inventory adjustment)
       const restocks = stockMoves
@@ -1183,21 +1313,29 @@ export const getProductHistory = CatchAsyncError(
             !toLocation.includes("inventory")
           );
         })
-        .sort((a, b) => new Date(b.insertedDate).getTime() - new Date(a.insertedDate).getTime());
- 
+        .sort(
+          (a, b) =>
+            new Date(b.insertedDate).getTime() -
+            new Date(a.insertedDate).getTime(),
+        );
+
       let lastRestock = null;
- 
+
       if (restocks.length) {
         const latest = restocks[0];
         const sameBatch = restocks.filter(
-          (x) => Math.abs(new Date(x.insertedDate).getTime() - new Date(latest.insertedDate).getTime()) < 60000,
+          (x) =>
+            Math.abs(
+              new Date(x.insertedDate).getTime() -
+                new Date(latest.insertedDate).getTime(),
+            ) < 60000,
         );
         lastRestock = {
           date: latest.insertedDate,
           qty: sameBatch.reduce((sum, x) => sum + x.qty, 0),
         };
       }
- 
+
       return res.json({
         success: true,
         currentStock,
@@ -1207,7 +1345,12 @@ export const getProductHistory = CatchAsyncError(
       });
     } catch (err: any) {
       console.error("PRODUCT HISTORY ERROR:", err);
-      return res.status(500).json({ success: false, message: err?.message || "Product history failed" });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message: err?.message || "Product history failed",
+        });
     }
   },
 );
