@@ -229,7 +229,11 @@ const markupAmount  = landedCostXCD * Number(markup) / 100;
 const priceBeforeTax = landedCostXCD + markupAmount;
 const taxAmount      = priceBeforeTax * 0.17;
 const calculatedFinalPrice = priceBeforeTax + taxAmount;
- 
+ useEffect(() => {
+  if (useFinalPriceAsSale) {
+    form.setValue("price", parseFloat(calculatedFinalPrice.toFixed(2)));
+  }
+}, [calculatedFinalPrice, useFinalPriceAsSale]);
   // Barcode scanner
   useEffect(() => {
     let buffer = "";
