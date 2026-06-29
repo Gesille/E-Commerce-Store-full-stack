@@ -187,7 +187,7 @@ const AddProduct = () => {
       currencyConversion:0,
       paymentProcessing:0,
       bankCharges:0,
-      markup: 1,
+      markup: 0,
     },
   });
 
@@ -206,11 +206,8 @@ const AddProduct = () => {
   const shippingCost = form.watch("shippingCost") ?? 0;
   const currency = form.watch("currency") ?? "USD";
   const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
-  const calculatedFinalPrice =
-    (Number(supplierPrice) + Number(shippingCost)) *
-    (XCD_RATES[currency] ?? 2.67);
 
-  const xcdPreview = calculatedFinalPrice.toFixed(2);
+ 
   const [useFinalPriceAsSale, setUseFinalPriceAsSale] = useState(false);
   // Base64 helper
   const toBase64 = (file: File): Promise<string> =>
@@ -220,11 +217,19 @@ const AddProduct = () => {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  useEffect(() => {
-    if (useFinalPriceAsSale) {
-      form.setValue("price", Number(calculatedFinalPrice.toFixed(2)));
-    }
-  }, [calculatedFinalPrice, useFinalPriceAsSale, form]);
+
+
+
+    const markup = form.watch("markup") ?? 0;
+const rate = XCD_RATES[currency] ?? 2.67;
+const buyPriceXCD   = Number(supplierPrice) * rate;
+const shippingXCD   = Number(shippingCost)  * rate;
+const landedCostXCD = buyPriceXCD + shippingXCD;
+const markupAmount  = landedCostXCD * Number(markup) / 100;
+const priceBeforeTax = landedCostXCD + markupAmount;
+const taxAmount      = priceBeforeTax * 0.17;
+const calculatedFinalPrice = priceBeforeTax + taxAmount;
+ 
   // Barcode scanner
   useEffect(() => {
     let buffer = "";
@@ -284,7 +289,7 @@ const AddProduct = () => {
         stock: data.quantity,
         categoryId: data.category,
         image: imageBase64,
-
+markup: data.markup, 
         supplierPrice: data.supplierPrice,
         shippingCost: data.shippingCost,
         currency: data.currency,
@@ -615,30 +620,60 @@ const AddProduct = () => {
                   </FormItem>
                 )}
               />
+              <FormField
+  control={form.control}
+  name="markup"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel className="flex items-center gap-2 text-emerald-700">
+        <Tag size={14} /> Markup %
+      </FormLabel>
+      <FormControl>
+        <Input
+          type="number"
+          min={0}
+          step="0.1"
+          {...field}
+          className="bg-white border-emerald-200 rounded-lg"
+        />
+      </FormControl>
+      <FormDescription>e.g. 1.3 = add 1.3% on top of landed cost</FormDescription>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
 
               {/* XCD preview */}
-              <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Final Price (XCD)</span>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 space-y-2">
+  <div className="flex justify-between text-xs text-slate-500">
+    <span>Supplier Cost (XCD)</span>
+    <span>{buyPriceXCD.toFixed(2)}</span>
+  </div>
+  <div className="flex justify-between text-xs text-slate-500">
+    <span>Shipping (XCD)</span>
+    <span>{shippingXCD.toFixed(2)}</span>
+  </div>
+  <div className="flex justify-between text-xs text-slate-500">
+    <span>+ Markup ({markup}%)</span>
+    <span>+{markupAmount.toFixed(2)}</span>
+  </div>
+  <div className="flex justify-between text-xs text-slate-500">
+    <span>+ ABCT Tax (17%)</span>
+    <span>+{taxAmount.toFixed(2)}</span>
+  </div>
+  <div className="flex justify-between text-sm font-semibold text-emerald-700 border-t border-emerald-200 pt-2">
+    <span>Final Sale Price (XCD)</span>
+    <span>XCD {calculatedFinalPrice.toFixed(2)}</span>
+  </div>
 
-                  <span className="font-semibold text-emerald-700">
-                    XCD {xcdPreview}
-                  </span>
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={useFinalPriceAsSale}
-                    onCheckedChange={(checked) =>
-                      setUseFinalPriceAsSale(!!checked)
-                    }
-                  />
-
-                  <span className="text-sm text-slate-600">
-                    Use final price as sale price
-                  </span>
-                </label>
-              </div>
+  <label className="flex items-center gap-2 cursor-pointer pt-1">
+    <Checkbox
+      checked={useFinalPriceAsSale}
+      onCheckedChange={(checked) => setUseFinalPriceAsSale(!!checked)}
+    />
+    <span className="text-sm text-slate-600">Use final price as sale price</span>
+  </label>
+</div>
             </Section>
 
             {/* ── 3. Inventory ────────────────────────────────────────── */}

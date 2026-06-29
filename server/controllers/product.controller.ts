@@ -235,52 +235,39 @@ const createAttributeLines = async (
 
 const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
 
+const ABCT_RATE = 0.17;
+
 function calcLandedCost(body: Record<string, any>) {
   const currency: string = body.currency ?? "USD";
   const exchangeRate: number = XCD_RATES[currency] ?? 2.67;
 
-  // 1. Buy price converted to XCD
-  const supplierPrice = Number(body.supplierPrice) || 0;
-  const buyPriceXCD = supplierPrice * exchangeRate;
+  const supplierPrice  = Number(body.supplierPrice)  || 0;
+  const shippingCost   = Number(body.shippingCost)   || 0;
+  const markup         = Number(body.markup)         || 0;
 
-  // 2. All landed costs (already entered in XCD by the user)
-  const internationalCosts =
-    (Number(body.freightInternational) || 0) +
-    (Number(body.transportationStorageInternational) || 0) +
-    (Number(body.portFeesInternational) || 0) +
-    (Number(body.brokerageHandlingInternational) || 0) +
-    (Number(body.customsDutiesInternational) || 0) +
-    (Number(body.tariffsInternational) || 0) +
-    (Number(body.insurancesInternational) || 0) +
-    (Number(body.vatTaxesInternational) || 0) +
-    (Number(body.currencyConversion) || 0) +
-    (Number(body.paymentProcessing) || 0) +
-    (Number(body.bankCharges) || 0);
+  // 1. Convert supplier cost to XCD
+  const buyPriceXCD    = supplierPrice * exchangeRate;
 
-  const localCosts =
-    (Number(body.transportationStorageLocal) || 0) +
-    (Number(body.portFeesLocal) || 0) +
-    (Number(body.brokerageHandlingLocal) || 0) +
-    (Number(body.customsDutiesLocal) || 0) +
-    (Number(body.tariffsLocal) || 0) +
-    (Number(body.insurancesLocal) || 0) +
-    (Number(body.vatTaxesLocal) || 0) +
-    (Number(body.documentationCosts) || 0) +
-    (Number(body.internalFees) || 0);
+  // 2. Convert shipping to XCD
+  const shippingXCD    = shippingCost * exchangeRate;
 
-  const totalCostsXCD = internationalCosts + localCosts;
+  // 3. Total landed cost
+  const landedCostXCD  = buyPriceXCD + shippingXCD;
 
-  // 3. Landed cost = buy price + all costs ascribed to this unit
-  const landedCostXCD = buyPriceXCD + totalCostsXCD;
+  // 4. Apply markup
+const markupAmount   = parseFloat((landedCostXCD * markup / 100).toFixed(2));
+const priceBeforeTax = parseFloat((landedCostXCD + markupAmount).toFixed(2));
 
-  // 4. Final selling price = landed cost × markup
-  const markup = Number(body.markup) || 1;
-  const finalPriceXCD = landedCostXCD * markup;
+  // 5. Add 17% ABCT
+  const taxAmount      = parseFloat((priceBeforeTax * ABCT_RATE).toFixed(2));
+  const finalPriceXCD  = parseFloat((priceBeforeTax + taxAmount).toFixed(2));
 
   return {
     buyPriceXCD,
-    totalCostsXCD,
+    shippingXCD,
     landedCostXCD,
+    priceBeforeTax,
+    taxAmount,
     finalPriceXCD,
     exchangeRate,
   };
@@ -309,35 +296,18 @@ export const createProduct = async (req: Request, res: Response) => {
       supplierPrice,
       currency,
       markup,
-      freightInternational,
-      transportationStorageInternational,
-      portFeesInternational,
-      brokerageHandlingInternational,
-      customsDutiesInternational,
-      tariffsInternational,
-      insurancesInternational,
-      vatTaxesInternational,
-      currencyConversion,
-      paymentProcessing,
-      bankCharges,
-      transportationStorageLocal,
-      portFeesLocal,
-      brokerageHandlingLocal,
-      customsDutiesLocal,
-      tariffsLocal,
-      insurancesLocal,
-      vatTaxesLocal,
-      documentationCosts,
-      internalFees,
+      
     } = req.body;
 
-    const {
-      buyPriceXCD,
-      totalCostsXCD,
-      landedCostXCD,
-      finalPriceXCD,
-      exchangeRate,
-    } = calcLandedCost(req.body);
+const {
+  buyPriceXCD,
+  shippingXCD,
+  landedCostXCD,
+  priceBeforeTax,
+  taxAmount,
+  finalPriceXCD,
+  exchangeRate,
+} = calcLandedCost(req.body);
 
     let base64Image: string | null = null;
     if (image) base64Image = await toBase64(image);
@@ -361,7 +331,7 @@ export const createProduct = async (req: Request, res: Response) => {
         taxes_id: abctTaxId ? [[6, 0, [abctTaxId]]] : [],
       },
     ]);
-
+console.log("ABCT TAX ID:", abctTaxId);
     if (!createdProductTemplateId)
       throw new Error("Failed to retrieve Product Template ID from Odoo.");
 
@@ -514,15 +484,19 @@ export const createProduct = async (req: Request, res: Response) => {
       productTemplateId: createdProductTemplateId,
       productId,
       costing: {
-        supplierPrice: Number(supplierPrice) || 0,
-        currency: currency || "USD",
-        exchangeRate,
-        buyPriceXCD: parseFloat(buyPriceXCD.toFixed(2)),
-        totalCostsXCD: parseFloat(totalCostsXCD.toFixed(2)),
-        landedCostXCD: parseFloat(landedCostXCD.toFixed(2)),
-        markup: Number(markup) || 1,
-        finalPriceXCD: parseFloat(finalPriceXCD.toFixed(2)),
-      },
+  supplierPrice:  Number(supplierPrice) || 0,
+  shippingCost:   Number(req.body.shippingCost) || 0,
+  currency:       currency || "USD",
+  exchangeRate,
+  buyPriceXCD:    parseFloat(buyPriceXCD.toFixed(2)),
+  shippingXCD:    parseFloat(shippingXCD.toFixed(2)),
+  landedCostXCD:  parseFloat(landedCostXCD.toFixed(2)),
+  markup:         Number(markup) || 1,
+  priceBeforeTax: parseFloat(priceBeforeTax.toFixed(2)),
+  taxRate:        "17%",
+  taxAmount:      parseFloat(taxAmount.toFixed(2)),
+  finalPriceXCD:  parseFloat(finalPriceXCD.toFixed(2)),
+},
       location: {
         id: resolvedLocationId,
         shelfName: resolvedShelfName,

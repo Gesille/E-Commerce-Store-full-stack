@@ -49,11 +49,7 @@ export const getTaxExemptFiscalPositionId = async (): Promise<number | null> => 
   return _taxExemptFiscalPositionId;
 };
 
-/**
- * Returns the Odoo ID of the "Tax Holiday" fiscal position.
- * This maps ABCT → 0% (used for government-declared tax-free days).
- * Must be created manually in Odoo once: Accounting → Fiscal Positions → "Tax Holiday"
- */
+
 export const getTaxHolidayFiscalPositionId = async (): Promise<number | null> => {
   if (_taxHolidayFiscalPositionId) return _taxHolidayFiscalPositionId;
 
@@ -75,16 +71,6 @@ export const getTaxHolidayFiscalPositionId = async (): Promise<number | null> =>
 
 // ─── Order-Level Tax Resolution ───────────────────────────────────────────────
 
-/**
- * Determines which fiscal_position_id (if any) to attach to an order.
- *
- * Priority:
- *   1. Customer is exempt (x_tax_exempt = true on res.partner)  → Tax Exempt fiscal position
- *   2. Today is a tax holiday (stored in MongoDB TaxSettings)    → Tax Holiday fiscal position
- *   3. Neither                                                   → false (normal ABCT applies)
- *
- * Returns: Odoo fiscal position ID or false
- */
 export const resolveFiscalPosition = async (
   customerId?: number,
 ): Promise<number | false> => {

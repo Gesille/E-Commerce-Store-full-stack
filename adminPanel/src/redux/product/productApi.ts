@@ -29,6 +29,7 @@ export const productApi = apiSlice.injectEndpoints({
     barcode: p.barcode ?? "",
     supplierPrice: p.supplierPrice ?? 0,
     shippingCost: p.shippingCost ?? 0,
+    
     currency: p.currency ?? "USD",
 
   
@@ -114,7 +115,7 @@ export const productApi = apiSlice.injectEndpoints({
         supplierPrice?: number;
         shippingCost?: number;
         currency?: "USD" | "EUR";
-
+markup?: number;  
         // Inventory
         stock: number;
         categoryId: number;
