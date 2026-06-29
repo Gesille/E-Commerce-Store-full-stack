@@ -201,11 +201,11 @@ const createAttributeLines = async (
 
 // ─── Landed Cost Utility ─────────────────────────────────────────────────────
 
-const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
+const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
 
 function calcLandedCost(body: Record<string, any>) {
   const currency: string = body.currency ?? "USD";
-  const exchangeRate: number = XCD_RATES[currency] ?? 2.7;
+  const exchangeRate: number = XCD_RATES[currency] ?? 2.67;
 
   // 1. Buy price converted to XCD
   const supplierPrice = Number(body.supplierPrice) || 0;
@@ -877,8 +877,8 @@ export const updateProduct = async (req: Request, res: Response) => {
       }
     }
 
-    const XCD_RATES: Record<string, number> = { USD: 2.7, EUR: 2.9 };
-    const rate = XCD_RATES[currency ?? "USD"] ?? 2.7;
+    const XCD_RATES: Record<string, number> = { USD: 2.67, EUR: 3.15 };
+    const rate = XCD_RATES[currency ?? "USD"] ?? 2.67;
     const finalPriceXCD =
       ((Number(supplierPrice) || 0) + (Number(shippingCost) || 0)) * rate;
 
