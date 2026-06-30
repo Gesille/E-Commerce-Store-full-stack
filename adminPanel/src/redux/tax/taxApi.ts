@@ -95,7 +95,7 @@ export const taxApi = apiSlice.injectEndpoints({
     // ── Diagnostics ────────────────────────────────────────────────────────
     getTaxStatus: builder.query<TaxStatus, void>({
       query: () => ({
-        url: "tax-settings/status",
+        url: "status",
         method: "GET",
         credentials: "include" as const,
       }),
@@ -104,7 +104,7 @@ export const taxApi = apiSlice.injectEndpoints({
 
     clearTaxCache: builder.mutation<{ success: boolean; message: string }, void>({
       query: () => ({
-        url: "tax-settings/clear-cache",
+        url: "clear-cache",
         method: "POST",
         credentials: "include" as const,
       }),
@@ -113,7 +113,7 @@ export const taxApi = apiSlice.injectEndpoints({
     // ── Tax Holidays ───────────────────────────────────────────────────────
     getHolidays: builder.query<TaxHoliday[], void>({
       query: () => ({
-        url: "tax-settings/holidays",
+        url: "get-holidays",
         method: "GET",
         credentials: "include" as const,
       }),
@@ -127,7 +127,7 @@ export const taxApi = apiSlice.injectEndpoints({
       { label: string; startDate: string; endDate: string }
     >({
       query: (body) => ({
-        url: "tax-settings/holidays",
+        url: "create-holidays",
         method: "POST",
         credentials: "include" as const,
         body,
@@ -140,7 +140,7 @@ export const taxApi = apiSlice.injectEndpoints({
       { id: string; label?: string; startDate?: string; endDate?: string; active?: boolean }
     >({
       query: ({ id, ...body }) => ({
-        url: `tax-settings/holidays/${id}`,
+        url: `update-holidays/${id}`,
         method: "PATCH",
         credentials: "include" as const,
         body,
@@ -150,7 +150,7 @@ export const taxApi = apiSlice.injectEndpoints({
 
     deleteHoliday: builder.mutation<{ success: boolean }, string>({
       query: (id) => ({
-        url: `tax-settings/holidays/${id}`,
+        url: `delete-holidays/${id}`,
         method: "DELETE",
         credentials: "include" as const,
       }),
@@ -160,7 +160,7 @@ export const taxApi = apiSlice.injectEndpoints({
     // ── Customer Exemptions ────────────────────────────────────────────────
     getExemptCustomers: builder.query<ExemptCustomer[], void>({
       query: () => ({
-        url: "tax-settings/exempt-customers",
+        url: "get-exempt-customers",
         method: "GET",
         credentials: "include" as const,
       }),
@@ -174,7 +174,7 @@ export const taxApi = apiSlice.injectEndpoints({
       { odooPartnerId: number; exempt: boolean }
     >({
       query: ({ odooPartnerId, exempt }) => ({
-        url: `tax-settings/exempt-customers/${odooPartnerId}`,
+        url: `exempt-customers/${odooPartnerId}`,
         method: "PATCH",
         credentials: "include" as const,
         body: { exempt },
@@ -186,7 +186,7 @@ export const taxApi = apiSlice.injectEndpoints({
     getDailyTaxReport: builder.query<DailyTaxReport, { date?: string }>({
       query: ({ date } = {}) => ({
         url: date
-          ? `reports/taxes/daily?date=${date}`
+          ? `taxes-daily?date=${date}`
           : "reports/taxes/daily",
         method: "GET",
         credentials: "include" as const,
@@ -205,7 +205,7 @@ export const taxApi = apiSlice.injectEndpoints({
         if (month) params.set("month", String(month));
         const qs = params.toString();
         return {
-          url: `reports/taxes/monthly${qs ? `?${qs}` : ""}`,
+          url: `taxes-monthly${qs ? `?${qs}` : ""}`,
           method: "GET",
           credentials: "include" as const,
         };
@@ -219,7 +219,7 @@ export const taxApi = apiSlice.injectEndpoints({
       { dateFrom: string; dateTo: string }
     >({
       query: ({ dateFrom, dateTo }) => ({
-        url: `reports/taxes/range?dateFrom=${dateFrom}&dateTo=${dateTo}`,
+        url: `taxes-range?dateFrom=${dateFrom}&dateTo=${dateTo}`,
         method: "GET",
         credentials: "include" as const,
       }),

@@ -21,13 +21,13 @@ taxSettingsRouter.get("/status", getTaxStatus);
 taxSettingsRouter.post("/clear-cache", clearTaxCacheEndpoint);
 
 // ── Tax Holidays ─────────────────────────────────────────────────────────────
-taxSettingsRouter.get("/holidays", getHolidays);
-taxSettingsRouter.post("/holidays", createHoliday);
-taxSettingsRouter.patch("/holidays/:id", updateHoliday);
-taxSettingsRouter.delete("/holidays/:id", deleteHoliday);
+taxSettingsRouter.get("/get-holidays", getHolidays);
+taxSettingsRouter.post("/create-holidays", createHoliday);
+taxSettingsRouter.patch("/update-holidays/:id", updateHoliday);
+taxSettingsRouter.delete("/delete-holidays/:id", deleteHoliday);
 
 // ── Customer Exemptions ───────────────────────────────────────────────────────
-taxSettingsRouter.get("/exempt-customers", getExemptCustomers);
+taxSettingsRouter.get("/get-exempt-customers", getExemptCustomers);
 taxSettingsRouter.patch(
   "/exempt-customers/:odooPartnerId",
   setCustomerExemption,
