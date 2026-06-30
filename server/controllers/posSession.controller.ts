@@ -1053,40 +1053,92 @@ console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
     }
 
     // ─── FORCE STOCK DECREASE ─────────────────────────────────────
-    try {
-      const pickingId = await odooRequest("stock.picking", "create", [{
-        picking_type_id:  pickingTypeId,
-        location_id:      sourceLocationId,
-        location_dest_id: destLocationId,
-        origin:           odooRef,
-      }]);
+ 
+try {
+  const pickingId = await odooRequest("stock.picking", "create", [{
+    picking_type_id:  pickingTypeId,
+    location_id:      sourceLocationId,
+    location_dest_id: destLocationId,
+    origin:           odooRef,
+  }]);
 
-      for (const item of resolvedCart) {
-        const moveId = await odooRequest("stock.move", "create", [{
-          description_picking: item.realProductName,
-          product_id:          item.realProductId,
-          product_uom_qty:     item.qty,
-          location_id:         sourceLocationId,
-          location_dest_id:    destLocationId,
-          picking_id:          pickingId,
-        }]);
+  for (const item of resolvedCart) {
+    const moveId = await odooRequest("stock.move", "create", [{
+      description_picking: item.realProductName,
+      product_id:          item.realProductId,
+      product_uom_qty:     item.qty,
+      product_uom:         item.uomId,        // ← was missing, required field
+      location_id:         sourceLocationId,
+      location_dest_id:    destLocationId,
+      picking_id:          pickingId,
+    }]);
 
-        await odooRequest("stock.move.line", "create", [{
-          move_id:          moveId,
-          product_id:       item.realProductId,
-          qty_done:         item.qty,
-          location_id:      sourceLocationId,
-          location_dest_id: destLocationId,
-          picking_id:       pickingId,
-        }]);
-      }
+    await odooRequest("stock.move.line", "create", [{
+      move_id:           moveId,
+      product_id:        item.realProductId,
+      qty_done:          item.qty,             // Odoo ≤16
+      quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
+      product_uom_id:    item.uomId,
+      location_id:        sourceLocationId,
+      location_dest_id:   destLocationId,
+      picking_id:         pickingId,
+    }]);
+  }
 
-      await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
-      await odooRequest("stock.picking", "button_validate", [[pickingId]]);
-      console.log("[STOCK UPDATED SUCCESSFULLY]");
-    } catch (err: any) {
-      console.error("[STOCK UPDATE ERROR]", err?.message);
-    }
+  await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
+  await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
+  await odooRequest("stock.picking", "button_validate", [[pickingId]]);
+
+  console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
+} catch (err: any) {
+  console.error("[STOCK UPDATE ERROR]", err?.message, err);
+ 
+}
+
+let stockUpdateFailed = false;
+let stockErrorMessage: string | undefined;
+try {
+  const pickingId = await odooRequest("stock.picking", "create", [{
+    picking_type_id:  pickingTypeId,
+    location_id:      sourceLocationId,
+    location_dest_id: destLocationId,
+    origin:           odooRef,
+  }]);
+
+  for (const item of resolvedCart) {
+    const moveId = await odooRequest("stock.move", "create", [{
+      description_picking: item.realProductName,
+      product_id:          item.realProductId,
+      product_uom_qty:     item.qty,
+      product_uom:         item.uomId,        // ← was missing, required field
+      location_id:         sourceLocationId,
+      location_dest_id:    destLocationId,
+      picking_id:          pickingId,
+    }]);
+
+    await odooRequest("stock.move.line", "create", [{
+      move_id:           moveId,
+      product_id:        item.realProductId,
+      qty_done:          item.qty,             // Odoo ≤16
+      quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
+      product_uom_id:    item.uomId,
+      location_id:        sourceLocationId,
+      location_dest_id:   destLocationId,
+      picking_id:         pickingId,
+    }]);
+  }
+
+  await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
+  await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
+  await odooRequest("stock.picking", "button_validate", [[pickingId]]);
+
+  console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
+} catch (err: any) {
+  console.error("[STOCK UPDATE ERROR]", err?.message, err);
+  stockUpdateFailed = true;
+  stockErrorMessage = err?.message;
+ 
+}
 
     // ─── SAVE TO MONGODB (shift tracking only) ────────────────────
     try {
@@ -1138,16 +1190,20 @@ console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
     });
 
     // ─── RESPONSE ─────────────────────────────────────────────────
-    res.status(201).json({
-      success: true,
-      message: "Order created successfully and stock updated",
-      orderId,
-      tax: {
-        rate:   TAX_RATE_EFFECTIVE,
-        amount: Math.round(totalTaxAmount * 100) / 100,
-        reason: taxReason,
-      },
-    });
+   res.status(201).json({
+  success: true,
+  message: stockUpdateFailed
+    ? "Order created and paid, but stock update FAILED — check inventory manually"
+    : "Order created successfully and stock updated",
+  orderId,
+  stockUpdateFailed,
+  ...(stockUpdateFailed ? { stockError: stockErrorMessage } : {}),
+  tax: {
+    rate:   TAX_RATE_EFFECTIVE,
+    amount: Math.round(totalTaxAmount * 100) / 100,
+    reason: taxReason,
+  },
+});
   },
 );
 
