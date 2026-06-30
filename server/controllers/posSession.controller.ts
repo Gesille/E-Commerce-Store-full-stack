@@ -1078,8 +1078,9 @@ export const createOrder = CatchAsyncError(
           move_id:           moveId,
           product_id:        item.realProductId,
           qty_done:          item.qty,             // Odoo ≤16
-          quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
-          uom_id:            item.uomId,           // ← was 'product_uom_id', renamed to 'uom_id' in this Odoo version
+          quantity:          item.qty,             // Odoo 17+
+          picked:            true,                 // Odoo 17+: marks line as actually picked, required for quants to update
+          uom_id:            item.uomId,
           location_id:        sourceLocationId,
           location_dest_id:   destLocationId,
           picking_id:         pickingId,
@@ -1088,7 +1089,12 @@ export const createOrder = CatchAsyncError(
 
       await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
       await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
-      await odooRequest("stock.picking", "button_validate", [[pickingId]]);
+      await odooRequest(
+        "stock.picking",
+        "button_validate",
+        [[pickingId]],
+        { context: { skip_backorder: true, button_validate_picking_ids: [pickingId] } },
+      );
 
       console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
     } catch (err: any) {
