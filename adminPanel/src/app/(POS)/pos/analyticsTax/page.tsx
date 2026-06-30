@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   useGetDailyTaxReportQuery,
   useGetMonthlyTaxReportQuery,
-  downloadTaxReportExcel,
+  downloadTaxReportPDF,
 } from "@/redux/tax/taxApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,8 +303,8 @@ export default function TaxAnalyticsPage() {
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   const handleExport = () => {
-    if (mode === "daily") downloadTaxReportExcel({ date });
-    else downloadTaxReportExcel({ year, month });
+    if (mode === "daily") downloadTaxReportPDF({ date });
+    else downloadTaxReportPDF({ year, month });
   };
 
   return (
@@ -318,7 +318,7 @@ export default function TaxAnalyticsPage() {
           </p>
         </div>
         <Button onClick={handleExport} className="gap-1.5 text-xs">
-          <Download size={13} /> Export Excel
+          <Download size={13} /> Export PDF
         </Button>
       </div>
 

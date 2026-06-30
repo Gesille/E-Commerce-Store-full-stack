@@ -263,23 +263,13 @@ export const {
   useGetMonthlyTaxReportQuery,
   useGetTaxReportByRangeQuery,
 } = taxApi;
-
-// ─── Excel Export Helper ──────────────────────────────────────────────────────
-// Call this directly in your component — RTK Query doesn't handle file downloads.
-//
-// Usage:
-//   import { downloadTaxReportExcel } from "@/redux/tax/taxApi";
-//   downloadTaxReportExcel({ date: "2026-06-29" });
-//   downloadTaxReportExcel({ year: 2026, month: 6 });
-//   downloadTaxReportExcel({ dateFrom: "2026-06-01", dateTo: "2026-06-29" });
-
-export const downloadTaxReportExcel = (
+export const downloadTaxReportPDF = (
   params:
     | { date: string }
     | { year: number; month: number }
     | { dateFrom: string; dateTo: string },
 ) => {
-  const base = `${process.env.NEXT_PUBLIC_API_URL}/api/reports/taxes/export`;
+  const base = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/reports/taxes/export`;
   const qs   = new URLSearchParams(
     params as Record<string, string>,
   ).toString();
