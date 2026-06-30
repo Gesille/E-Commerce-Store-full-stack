@@ -1430,11 +1430,13 @@ export const createOdooInvoice = CatchAsyncError(
     const order = orders?.[0];
     if (!order) return next(new ErrorHandler("Order not found in Odoo", 404));
 
+    // pull tax_ids from the original POS lines so the invoice reflects
+    // the tax that was actually charged at sale time (17%, 0% holiday, etc.)
     const lines = await odooRequest(
       "pos.order.line",
       "search_read",
       [[["id", "in", order.lines]]],
-      { fields: ["product_id", "qty", "price_unit", "discount"] },
+      { fields: ["product_id", "qty", "price_unit", "discount", "tax_ids"] },
     );
 
     const invoiceId = await odooRequest("account.move", "create", [
@@ -1449,6 +1451,9 @@ export const createOdooInvoice = CatchAsyncError(
             quantity: line.qty,
             price_unit: line.price_unit,
             discount: line.discount ?? 0,
+            tax_ids: line.tax_ids?.length
+              ? [[6, 0, line.tax_ids]]
+              : [[6, 0, []]], // explicit empty = no tax, e.g. holiday
           },
         ]),
       },
