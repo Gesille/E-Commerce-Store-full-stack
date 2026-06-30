@@ -96,29 +96,8 @@ const formSchema = z.object({
   colors: z.array(z.enum(colors)),
   images: z.record(z.string(), z.any()).optional(),
 
-  // local costs
-  transportationStorageLocal: z.coerce.number().min(0).optional(),
-  brokerageHandlingLocal: z.coerce.number().min(0).optional(),
-  customsDutiesLocal: z.coerce.number().min(0).optional(),
-  portFeesLocal: z.coerce.number().min(0).optional(),
-  tariffsLocal: z.coerce.number().min(0).optional(),
-  insurancesLocal: z.coerce.number().min(0).optional(),
-  vatTaxesLocal: z.coerce.number().min(0).optional(),
-  documentationCosts: z.coerce.number().min(0).optional(),
-  internalFees: z.coerce.number().min(0).optional(),
 
-  // international costs
-  freightInternational: z.coerce.number().min(0).optional(),
-  transportationStorageInternational: z.coerce.number().min(0).optional(),
-  portFeesInternational: z.coerce.number().min(0).optional(),
-  brokerageHandlingInternational: z.coerce.number().min(0).optional(),
-  customsDutiesInternational: z.coerce.number().min(0).optional(),
-  tariffsInternational: z.coerce.number().min(0).optional(),
-  insurancesInternational: z.coerce.number().min(0).optional(),
-  vatTaxesInternational: z.coerce.number().min(0).optional(),
-  currencyConversion: z.coerce.number().min(0).optional(),
-  paymentProcessing: z.coerce.number().min(0).optional(),
-  bankCharges: z.coerce.number().min(0).optional(),
+
   // markup
   markup: z.coerce.number().min(1).default(1),
 });
@@ -174,9 +153,12 @@ const AddProduct = () => {
     {},
   );
   const [createProduct, { isLoading }] = useCreateProductMutation();
-  const { data: categories = [], isLoading: categoriesLoading,error: categoriesError } =
-    useGetCategoriesQuery();
-console.log("categories:", categories, "error:", categoriesError);
+const { data: categories = [], isLoading: categoriesLoading, error, status } =
+  useGetCategoriesQuery();
+
+console.log("STATUS:", status);
+console.log("ERROR:", JSON.stringify(error));
+console.log("CATEGORIES:", categories);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const watchedBarcode = form.watch("barcode");
 

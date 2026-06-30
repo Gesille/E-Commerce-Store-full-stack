@@ -28,7 +28,7 @@ export const categoryApi = apiSlice.injectEndpoints({
         credentials: "include" as const,
         body,
       }),
-      invalidatesTags: ["Categories"], // ✅ auto-refetch after create
+      invalidatesTags: ["Categories"], 
     }),
      updateCategory: builder.mutation({
       query: ({ id, ...body }: { id: string; catTitle?: string; catDesc?: string }) => ({
