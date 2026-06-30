@@ -3,10 +3,6 @@ import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const TAX_RATE = 0.17;
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function round2(n: number): number {
@@ -68,7 +64,7 @@ export const lookupReceipt = CatchAsyncError(
           "payment_ids",
         ],
         limit: 1,
-      }
+      },
     );
 
     if (!orders?.length) {
@@ -85,8 +81,8 @@ export const lookupReceipt = CatchAsyncError(
       return next(
         new ErrorHandler(
           `Order is not paid (current state: ${order.state})`,
-          400
-        )
+          400,
+        ),
       );
     }
 
@@ -101,11 +97,12 @@ export const lookupReceipt = CatchAsyncError(
               "product_id",
               "qty",
               "price_unit",
+              "price_subtotal",
               "price_subtotal_incl",
               "discount",
               "tax_ids",
             ],
-          }
+          },
         )
       : [];
 
@@ -114,7 +111,7 @@ export const lookupReceipt = CatchAsyncError(
           "pos.payment",
           "search_read",
           [[["id", "in", order.payment_ids]]],
-          { fields: ["payment_method_id", "amount"] }
+          { fields: ["payment_method_id", "amount"] },
         )
       : [];
 
@@ -126,21 +123,28 @@ export const lookupReceipt = CatchAsyncError(
       session: order.session_id?.[1] ?? "—",
       paymentMethod: payments[0]?.payment_method_id?.[1] ?? "Cash",
       originalTotal: order.amount_total,
-      items: lines.map((l: any) => ({
-        productId: l.product_id?.[0],
-        name: l.product_id?.[1] ?? "—",
-        sku: String(l.product_id?.[0] ?? ""),
-        unitPrice: l.price_unit,
-        taxRate: TAX_RATE,
-        qty: l.qty,
-        discount: l.discount ?? 0,
-        subtotal: l.price_subtotal_incl,
-        odooLineId: l.id, // needed for return creation
-      })),
+
+      items: lines.map((l: any) => {
+        const subtotal = l.price_subtotal ?? 0;
+        const subtotalIncl = l.price_subtotal_incl ?? 0;
+        const actualTaxRate =
+          subtotal > 0 ? (subtotalIncl - subtotal) / subtotal : 0;
+        return {
+          productId: l.product_id?.[0],
+          name: l.product_id?.[1] ?? "—",
+          sku: String(l.product_id?.[0] ?? ""),
+          unitPrice: l.price_unit,
+          taxRate: Math.round(actualTaxRate * 10000) / 10000,
+          qty: l.qty,
+          discount: l.discount ?? 0,
+          subtotal: l.price_subtotal_incl,
+          odooLineId: l.id,
+        };
+      }),
     };
 
     res.status(200).json({ success: true, receipt });
-  }
+  },
 );
 
 // ─── Create Return ────────────────────────────────────────────────────────────
@@ -198,7 +202,7 @@ export const createReturn = CatchAsyncError(
             ["pos_reference", "=", receiptNumber],
           ],
         ],
-        { fields: ["id", "session_id", "lines"], limit: 1 }
+        { fields: ["id", "session_id", "lines"], limit: 1 },
       );
       if (!found?.length)
         return next(new ErrorHandler("Original order not found in Odoo", 404));
@@ -210,7 +214,7 @@ export const createReturn = CatchAsyncError(
       "pos.order",
       "read",
       [[orderId]],
-      { fields: ["id", "session_id", "lines", "payment_ids", "amount_total"] }
+      { fields: ["id", "session_id", "lines", "payment_ids", "amount_total"] },
     );
 
     if (!originalOrder)
@@ -225,100 +229,108 @@ export const createReturn = CatchAsyncError(
         "pos.payment",
         "search_read",
         [[["id", "in", originalOrder.payment_ids]]],
-        { fields: ["payment_method_id", "amount"], limit: 1 }
+        { fields: ["payment_method_id", "amount"], limit: 1 },
       );
       paymentMethodId = payments[0]?.payment_method_id?.[0] ?? false;
     }
 
     // 4. Fetch original lines to get refunded_orderline_id references
-    const originalLines: any[] = originalOrder.lines?.length
-      ? await odooRequest(
-          "pos.order.line",
-          "search_read",
-          [[["id", "in", originalOrder.lines]]],
-          {
-            fields: [
-              "id",
-              "product_id",
-              "qty",
-              "price_unit",
-              "discount",
-              "tax_ids",
-            ],
-          }
-        )
-      : [];
+  const originalLines: any[] = originalOrder.lines?.length
+  ? await odooRequest(
+      "pos.order.line",
+      "search_read",
+      [[["id", "in", originalOrder.lines]]],
+      {
+        fields: [
+          "id",
+          "product_id",
+          "qty",
+          "price_unit",
+          "price_subtotal",
+          "price_subtotal_incl",
+          "discount",
+          "tax_ids",
+        ],
+      }
+    )
+  : [];
 
     // 5. Compute totals
-    const subtotal = round2(
-      items.reduce((s, i) => s + i.unitPrice * i.qtyReturned, 0)
-    );
-    const taxTotal = round2(subtotal * TAX_RATE);
-    const total = round2(subtotal + taxTotal);
+ let subtotal = 0;
+let taxTotal = 0;
 
-    // 6. Build return order lines with refunded_orderline_id (native Odoo field)
-    const returnLines = items.map((item) => {
-      const odooLine = item.odooLineId
-        ? originalLines.find((l: any) => l.id === item.odooLineId)
-        : originalLines.find((l: any) => l.product_id?.[0] === item.productId);
+const itemsWithRealTax = items.map((item) => {
+  const odooLine = item.odooLineId
+    ? originalLines.find((l: any) => l.id === item.odooLineId)
+    : originalLines.find((l: any) => l.product_id?.[0] === item.productId);
 
-      return [
-        0,
-        0,
-        {
-          product_id: item.productId,
-          qty: -Math.abs(item.qtyReturned),       // negative = refund
-          price_unit: item.unitPrice,
-          price_subtotal: -round2(item.unitPrice * item.qtyReturned),
-          price_subtotal_incl: -round2(
-            item.unitPrice * item.qtyReturned * (1 + (item.taxRate ?? TAX_RATE))
-          ),
-          discount: odooLine?.discount ?? 0,
-          tax_ids: odooLine?.tax_ids?.length
-            ? [[6, 0, odooLine.tax_ids]]
-            : [],
-          // This is the native Odoo field that marks a line as a refund
-          // and links it back to the original order line
-          ...(odooLine ? { refunded_orderline_id: odooLine.id } : {}),
-        },
-      ];
-    });
+
+  const lineSubtotal     = odooLine?.price_subtotal ?? 0;
+  const lineSubtotalIncl = odooLine?.price_subtotal_incl ?? 0;
+  const realRate = lineSubtotal > 0
+    ? (lineSubtotalIncl - lineSubtotal) / lineSubtotal
+    : (item.taxRate ?? 0); 
+
+  const itemSubtotal = round2(item.unitPrice * item.qtyReturned);
+  const itemTax       = round2(itemSubtotal * realRate);
+
+  subtotal += itemSubtotal;
+  taxTotal += itemTax;
+
+  return { ...item, realRate, itemSubtotal, itemTax, odooLine };
+});
+
+const total = round2(subtotal + taxTotal);
+
+const returnLines = itemsWithRealTax.map((item) => {
+  const { odooLine, realRate } = item;
+  return [
+    0,
+    0,
+    {
+      product_id: item.productId,
+      qty: -Math.abs(item.qtyReturned),
+      price_unit: item.unitPrice,
+      price_subtotal: -item.itemSubtotal,
+      price_subtotal_incl: -round2(item.itemSubtotal * (1 + realRate)),
+      discount: odooLine?.discount ?? 0,
+      tax_ids: odooLine?.tax_ids?.length
+        ? [[6, 0, odooLine.tax_ids]]
+        : [],
+      ...(odooLine ? { refunded_orderline_id: odooLine.id } : {}),
+    },
+  ];
+});
 
     // 7. Create the refund order in Odoo
     // amount_* must be explicitly set — Odoo does not auto-compute on API create
-    const returnOrderId: number = await odooRequest(
-      "pos.order",
-      "create",
-      [
-        {
-          session_id: sessionId,
-          lines: returnLines,
-          amount_tax: -taxTotal,
-          amount_total: -total,
-          amount_paid: 0,
-          amount_return: 0,
-          // stores reason visibly in Odoo backend: "Return of RECEIPT | reason — notes"
-          pos_reference: `Return of ${receiptNumber} | ${reason}${notes ? " — " + notes : ""}`,
-        },
-      ]
-    );
+    const returnOrderId: number = await odooRequest("pos.order", "create", [
+      {
+        session_id: sessionId,
+        lines: returnLines,
+        amount_tax: -taxTotal,
+        amount_total: -total,
+        amount_paid: 0,
+        amount_return: 0,
+        // stores reason visibly in Odoo backend: "Return of RECEIPT | reason — notes"
+        pos_reference: `Return of ${receiptNumber} | ${reason}${notes ? " — " + notes : ""}`,
+      },
+    ]);
 
     if (!returnOrderId)
-      return next(new ErrorHandler("Failed to create return order in Odoo", 500));
+      return next(
+        new ErrorHandler("Failed to create return order in Odoo", 500),
+      );
 
     // 8. Add the refund payment so it shows as paid in Odoo
     if (paymentMethodId) {
-      await odooRequest(
-        "pos.payment",
-        "create",
-        [
-          {
-            pos_order_id: returnOrderId,
-            payment_method_id: paymentMethodId,
-            amount: -total,
-          },
-        ]
-      ).catch(() => {
+      await odooRequest("pos.payment", "create", [
+        {
+          pos_order_id: returnOrderId,
+          payment_method_id: paymentMethodId,
+          amount: -total,
+        },
+      ]).catch(() => {
         // Non-fatal: order is created, payment line optional
       });
     }
@@ -328,7 +340,7 @@ export const createReturn = CatchAsyncError(
       "pos.order",
       "read",
       [[returnOrderId]],
-      { fields: ["id", "name", "date_order", "state"] }
+      { fields: ["id", "name", "date_order", "state"] },
     );
 
     res.status(201).json({
@@ -349,26 +361,20 @@ export const createReturn = CatchAsyncError(
         total,
         status: "completed",
         createdAt: returnOrder?.date_order ?? new Date().toISOString(),
-        items: items.map((item) => ({
+        items: itemsWithRealTax.map((item) => ({
           productId: item.productId,
           name: item.name,
           sku: item.sku ?? "",
           unitPrice: item.unitPrice,
-          taxRate: item.taxRate ?? TAX_RATE,
+          taxRate: item.realRate, 
           qtyReturned: item.qtyReturned,
           refundSubtotal: round2(item.unitPrice * item.qtyReturned),
-          refundTax: round2(
-            item.unitPrice * item.qtyReturned * (item.taxRate ?? TAX_RATE)
-          ),
-          refundTotal: round2(
-            item.unitPrice *
-              item.qtyReturned *
-              (1 + (item.taxRate ?? TAX_RATE))
-          ),
+         refundTax: item.itemTax,
+          refundTotal: round2(item.itemSubtotal + item.itemTax),
         })),
       },
     });
-  }
+  },
 );
 
 // ─── Get Returns ──────────────────────────────────────────────────────────────
@@ -395,26 +401,27 @@ export const getReturns = CatchAsyncError(
       domain.push(["pos_reference", "ilike", search]);
     }
 
-    if (dateFrom)
-      domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
-    if (dateTo)
-      domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
+    if (dateFrom) domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
+    if (dateTo) domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
 
     // Map frontend status → Odoo state
     if (status === "completed") {
-      domain.push("|", ["state", "=", "done"],
-        "|", ["state", "=", "paid"], ["state", "=", "invoiced"]);
+      domain.push(
+        "|",
+        ["state", "=", "done"],
+        "|",
+        ["state", "=", "paid"],
+        ["state", "=", "invoiced"],
+      );
     } else if (status === "voided") {
       domain.push(["state", "=", "cancel"]);
     } else if (status === "pending") {
       domain.push(["state", "=", "draft"]);
     }
 
-    const total: number = await odooRequest(
-      "pos.order",
-      "search_count",
-      [domain]
-    );
+    const total: number = await odooRequest("pos.order", "search_count", [
+      domain,
+    ]);
 
     const orders: any[] = await odooRequest(
       "pos.order",
@@ -428,6 +435,7 @@ export const getReturns = CatchAsyncError(
           "date_order",
           "amount_total",
           "amount_tax",
+          "amount_untaxed",
           "state",
           "user_id",
           "lines",
@@ -435,7 +443,7 @@ export const getReturns = CatchAsyncError(
         limit,
         offset: (page - 1) * limit,
         order: "date_order desc",
-      }
+      },
     );
 
     // Batch fetch all lines
@@ -454,7 +462,7 @@ export const getReturns = CatchAsyncError(
               "price_unit",
               "price_subtotal_incl",
             ],
-          }
+          },
         )
       : [];
 
@@ -467,14 +475,8 @@ export const getReturns = CatchAsyncError(
 
     const returns = orders.map((o: any) => {
       const lines = linesByOrder[o.id] ?? [];
-      const subtotal = round2(
-        lines.reduce(
-          (s: number, l: any) =>
-            s + Math.abs(l.price_unit) * Math.abs(l.qty),
-          0
-        )
-      );
-      const taxTotal = round2(subtotal * TAX_RATE);
+      const subtotal = round2(Math.abs(o.amount_total) - Math.abs(o.amount_tax));
+      const taxTotal = round2(Math.abs(o.amount_tax));
 
       return {
         _id: String(o.id),
@@ -502,19 +504,24 @@ export const getReturns = CatchAsyncError(
     const statsOrders: any[] = await odooRequest(
       "pos.order",
       "search_read",
-      [[["pos_reference", "like", "Return of"], ["state", "!=", "cancel"]]],
-      { fields: ["amount_total", "lines"] }
+      [
+        [
+          ["pos_reference", "like", "Return of"],
+          ["state", "!=", "cancel"],
+        ],
+      ],
+      { fields: ["amount_total", "lines"] },
     );
 
     const totalRefunded = round2(
       statsOrders.reduce(
         (s: number, o: any) => s + Math.abs(o.amount_total),
-        0
-      )
+        0,
+      ),
     );
     const totalItems = statsOrders.reduce(
       (s: number, o: any) => s + (o.lines?.length ?? 0),
-      0
+      0,
     );
 
     res.status(200).json({
@@ -529,7 +536,7 @@ export const getReturns = CatchAsyncError(
       },
       returns,
     });
-  }
+  },
 );
 
 // ─── Get Return By ID ─────────────────────────────────────────────────────────
@@ -537,27 +544,21 @@ export const getReturns = CatchAsyncError(
 export const getReturnById = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const id = Number(req.params.id);
-    if (isNaN(id))
-      return next(new ErrorHandler("Invalid ID", 400));
+    if (isNaN(id)) return next(new ErrorHandler("Invalid ID", 400));
 
-    const orders: any[] = await odooRequest(
-      "pos.order",
-      "read",
-      [[id]],
-      {
-        fields: [
-          "id",
-          "name",
-          "pos_reference",
-          "date_order",
-          "amount_total",
-          "amount_tax",
-          "state",
-          "user_id",
-          "lines",
-        ],
-      }
-    );
+    const orders: any[] = await odooRequest("pos.order", "read", [[id]], {
+      fields: [
+        "id",
+        "name",
+        "pos_reference",
+        "date_order",
+        "amount_total",
+        "amount_tax",
+        "state",
+        "user_id",
+        "lines",
+      ],
+    });
 
     if (!orders?.length)
       return next(new ErrorHandler("Return order not found", 404));
@@ -565,29 +566,24 @@ export const getReturnById = CatchAsyncError(
     const o = orders[0];
 
     const lines: any[] = o.lines?.length
-      ? await odooRequest(
-          "pos.order.line",
-          "search_read",
-          [[["id", "in", o.lines]]],
-          {
-            fields: [
-              "id",
-              "product_id",
-              "qty",
-              "price_unit",
-              "price_subtotal_incl",
-            ],
-          }
-        )
-      : [];
-
-    const subtotal = round2(
-      lines.reduce(
-        (s: number, l: any) => s + Math.abs(l.price_unit) * Math.abs(l.qty),
-        0
-      )
-    );
-    const taxTotal = round2(subtotal * TAX_RATE);
+  ? await odooRequest(
+      "pos.order.line",
+      "search_read",
+      [[["id", "in", o.lines]]],
+      {
+        fields: [
+          "id",
+          "product_id",
+          "qty",
+          "price_unit",
+          "price_subtotal",
+          "price_subtotal_incl",
+        ],
+      },
+    )
+  : [];
+  const subtotal = round2(Math.abs(o.amount_total) - Math.abs(o.amount_tax));
+   const taxTotal = round2(Math.abs(o.amount_tax));
 
     res.status(200).json({
       success: true,
@@ -603,22 +599,33 @@ export const getReturnById = CatchAsyncError(
         status: mapState(o.state),
         createdAt: o.date_order,
         updatedAt: o.date_order,
-        items: lines.map((l: any) => ({
-          productId: l.product_id?.[0],
-          name: l.product_id?.[1] ?? "—",
-          sku: String(l.product_id?.[0] ?? ""),
-          unitPrice: Math.abs(l.price_unit),
-          taxRate: TAX_RATE,
-          qtyReturned: Math.abs(l.qty),
-          refundSubtotal: round2(Math.abs(l.price_unit) * Math.abs(l.qty)),
-          refundTax: round2(
-            Math.abs(l.price_unit) * Math.abs(l.qty) * TAX_RATE
-          ),
-          refundTotal: round2(Math.abs(l.price_subtotal_incl)),
-        })),
+      items: lines.map((l: any) => {
+  const lineSubtotal     = l.price_subtotal ?? 0;
+  const lineSubtotalIncl = l.price_subtotal_incl ?? 0;
+  const realRate = lineSubtotal > 0
+    ? (lineSubtotalIncl - lineSubtotal) / lineSubtotal
+    : 0;
+
+  const unitPrice = Math.abs(l.price_unit);
+  const qty       = Math.abs(l.qty);
+  const refundSubtotal = round2(unitPrice * qty);
+  const refundTax      = round2(refundSubtotal * realRate);
+
+  return {
+    productId: l.product_id?.[0],
+    name: l.product_id?.[1] ?? "—",
+    sku: String(l.product_id?.[0] ?? ""),
+    unitPrice,
+    taxRate: realRate,
+    qtyReturned: qty,
+    refundSubtotal,
+    refundTax,
+    refundTotal: round2(Math.abs(l.price_subtotal_incl)),
+  };
+}),
       },
     });
-  }
+  },
 );
 
 // ─── Void Return ──────────────────────────────────────────────────────────────
@@ -628,15 +635,11 @@ export const voidReturn = CatchAsyncError(
     const id = Number(req.params.id);
     const { voidedBy, notes } = req.body;
 
-    if (isNaN(id))
-      return next(new ErrorHandler("Invalid ID", 400));
+    if (isNaN(id)) return next(new ErrorHandler("Invalid ID", 400));
 
-    const orders: any[] = await odooRequest(
-      "pos.order",
-      "read",
-      [[id]],
-      { fields: ["id", "name", "state", "pos_reference"] }
-    );
+    const orders: any[] = await odooRequest("pos.order", "read", [[id]], {
+      fields: ["id", "name", "state", "pos_reference"],
+    });
 
     if (!orders?.length)
       return next(new ErrorHandler("Return order not found", 404));
@@ -655,7 +658,7 @@ export const voidReturn = CatchAsyncError(
             state: "cancel",
           },
         ]);
-      }
+      },
     );
 
     res.status(200).json({
@@ -669,7 +672,7 @@ export const voidReturn = CatchAsyncError(
         voidedAt: new Date().toISOString(),
       },
     });
-  }
+  },
 );
 
 // ─── Get Return Stats ─────────────────────────────────────────────────────────
@@ -684,26 +687,23 @@ export const getReturnStats = CatchAsyncError(
       ["state", "!=", "cancel"],
     ];
 
-    if (dateFrom)
-      domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
-    if (dateTo)
-      domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
+    if (dateFrom) domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
+    if (dateTo) domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
 
     const orders: any[] = await odooRequest(
       "pos.order",
       "search_read",
       [domain],
-      { fields: ["id", "amount_total", "lines", "pos_reference", "date_order"] }
+      {
+        fields: ["id", "amount_total", "lines", "pos_reference", "date_order"],
+      },
     );
 
     const totalRefunded = round2(
-      orders.reduce((s, o) => s + Math.abs(o.amount_total), 0)
+      orders.reduce((s, o) => s + Math.abs(o.amount_total), 0),
     );
     const totalReturns = orders.length;
-    const totalItems = orders.reduce(
-      (s, o) => s + (o.lines?.length ?? 0),
-      0
-    );
+    const totalItems = orders.reduce((s, o) => s + (o.lines?.length ?? 0), 0);
     const avgRefund =
       totalReturns > 0 ? round2(totalRefunded / totalReturns) : 0;
 
@@ -714,7 +714,7 @@ export const getReturnStats = CatchAsyncError(
       if (!reasonMap[r]) reasonMap[r] = { count: 0, total: 0 };
       reasonMap[r].count += 1;
       reasonMap[r].total = round2(
-        reasonMap[r].total + Math.abs(o.amount_total)
+        reasonMap[r].total + Math.abs(o.amount_total),
       );
     }
     const byReason = Object.entries(reasonMap)
@@ -729,7 +729,7 @@ export const getReturnStats = CatchAsyncError(
       if (!dailyMap[day]) dailyMap[day] = { count: 0, total: 0 };
       dailyMap[day].count += 1;
       dailyMap[day].total = round2(
-        dailyMap[day].total + Math.abs(o.amount_total)
+        dailyMap[day].total + Math.abs(o.amount_total),
       );
     }
     const daily = Object.entries(dailyMap)
@@ -738,7 +738,14 @@ export const getReturnStats = CatchAsyncError(
 
     res.status(200).json({
       success: true,
-      stats: { totalRefunded, totalReturns, totalItems, avgRefund, byReason, daily },
+      stats: {
+        totalRefunded,
+        totalReturns,
+        totalItems,
+        avgRefund,
+        byReason,
+        daily,
+      },
     });
-  }
+  },
 );

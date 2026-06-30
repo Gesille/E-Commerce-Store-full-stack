@@ -234,6 +234,10 @@ const change =
     ? order.amount_paid - order.amount_total
     : 0;
 
+
+const effectiveTaxRate =
+  subtotal > 0 ? (order.amount_tax / subtotal) * 100 : 0;
+
 const templateData = {
   // ── Receipt identity ──
   receiptNo: `RCP-${String(orderId).slice(-6)}`,
@@ -247,7 +251,6 @@ const templateData = {
   odooOrderId: orderId,
   customerName: order.partner_id ? order.partner_id[1] : null,
 
-  // ── Lines ──
   lines: lines.map((l: any) => ({
     qty: l.qty,
     name: l.product_id[1],
@@ -256,9 +259,9 @@ const templateData = {
     discount: Number(l.discount) || 0,
   })),
 
-  // ── Totals ──
   subtotal: Number(subtotal),
   tax: Number(order.amount_tax),
+  taxRateLabel: effectiveTaxRate.toFixed(0), 
   total: Number(order.amount_total),
   paymentLines: payments.map((p: any) => ({
     method: p.payment_method_id?.[1] ?? "Cash",
@@ -266,7 +269,6 @@ const templateData = {
   })),
   change: Number(change),
 
-  // ── Shop ──
   shopName:    process.env.SHOP_NAME    ?? "Chef's World",
   shopTagline: process.env.SHOP_TAGLINE ?? "Restaurant, Bar & Kitchen Supplies",
   shopAddress: process.env.SHOP_ADDRESS ?? "Epicurean Drive, Saint John",

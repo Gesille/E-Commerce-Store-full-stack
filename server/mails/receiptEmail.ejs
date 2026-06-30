@@ -324,9 +324,15 @@
           <td>$<%= subtotal.toFixed(2) %></td>
         </tr>
         <tr class="row-tax">
-          <td>Tax (17%)</td>
-          <td>$<%= tax.toFixed(2) %></td>
-        </tr>
+  <td>
+    <% if (tax > 0.005) { %>
+      Tax (<%= taxRateLabel %>%)
+    <% } else { %>
+      Tax (Exempt)
+    <% } %>
+  </td>
+  <td>$<%= tax.toFixed(2) %></td>
+</tr>
         <tr class="row-total">
           <td>Total</td>
           <td>$<%= total.toFixed(2) %></td>

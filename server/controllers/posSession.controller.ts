@@ -13,7 +13,7 @@ import { getABCTTaxId, getTaxExemptFiscalPositionId, resolveTaxRate } from "../s
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TAX_RATE = 0.17;
+
 async function getPaymentMethodId(method: string, configId: number, cardBrand?: string) {
   const methods = await odooRequest(
     "pos.payment.method", "search_read",
