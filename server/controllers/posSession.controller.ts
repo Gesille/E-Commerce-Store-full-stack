@@ -858,7 +858,6 @@ export const getActiveShifts = CatchAsyncError(
 
 
 
-
 export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
@@ -950,7 +949,7 @@ export const createOrder = CatchAsyncError(
         "stock.quant",
         "search_read",
         [[["product_id", "=", realProduct.id], ["location_id.usage", "=", "internal"]]],
-        { fields: ["quantity"] },
+        { fields: ["quantity", "location_id"] },
       );
       const availableQty = Math.max(
         0,
@@ -968,11 +967,26 @@ export const createOrder = CatchAsyncError(
         ));
       }
 
+      // ─── Pick the actual location this product's stock lives in ───────
+      // Prefer the location holding the most quantity, so we decrement from
+      // where the stock really is rather than the POS picking type's default
+      // (which may be a completely different, empty location like WH/Stock).
+      const bestQuant = [...quants].sort((a, b) => (b.quantity || 0) - (a.quantity || 0))[0];
+      const itemSourceLocationId = bestQuant?.location_id?.[0] || sourceLocationId;
+
+      console.log(
+        "[ITEM SOURCE LOCATION]",
+        realProduct.name,
+        "→",
+        bestQuant?.location_id, // [id, name]
+      );
+
       resolvedCart.push({
         ...item,
-        realProductId:   realProduct.id,
-        realProductName: realProduct.name,
-        uomId:           realProduct.uom_id?.[0],
+        realProductId:       realProduct.id,
+        realProductName:     realProduct.name,
+        uomId:                realProduct.uom_id?.[0],
+        itemSourceLocationId, // ← actual location to decrement from
       });
     }
 
@@ -1076,10 +1090,10 @@ export const createOrder = CatchAsyncError(
           description_picking: item.realProductName,
           product_id:          item.realProductId,
           product_uom_qty:     item.qty,
-          uom_id:               item.uomId,        // ← was 'product_uom', this Odoo instance uses 'uom_id'
-          location_id:          sourceLocationId,
-          location_dest_id:     destLocationId,
-          picking_id:           pickingId,
+          uom_id:               item.uomId,
+          location_id:           item.itemSourceLocationId, // ← actual location stock lives in
+          location_dest_id:      destLocationId,
+          picking_id:            pickingId,
         }]);
 
         await odooRequest("stock.move.line", "create", [{
@@ -1089,7 +1103,7 @@ export const createOrder = CatchAsyncError(
           quantity:          item.qty,             // Odoo 17+
           picked:            true,                 // Odoo 17+: marks line as actually picked, required for quants to update
           uom_id:            item.uomId,
-          location_id:        sourceLocationId,
+          location_id:        item.itemSourceLocationId, // ← actual location stock lives in
           location_dest_id:   destLocationId,
           picking_id:         pickingId,
         }]);
