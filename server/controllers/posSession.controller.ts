@@ -1258,7 +1258,7 @@ export const getCustomers = CatchAsyncError(
     const search = (req.query.search as string) ?? "";
     const domain: any[] = [["customer_rank", ">", 0]];
     if (search) domain.push(["name", "ilike", search]);
-
+const exemptFiscalPositionId = await getTaxExemptFiscalPositionId();
     const customers = await odooRequest(
       "res.partner",
       "search_read",
@@ -1270,7 +1270,7 @@ export const getCustomers = CatchAsyncError(
           "commercial_company_name",
           "parent_id",
           "is_company",
-          "x_tax_exempt",       
+          "property_account_position_id",       
         ],
         limit: 100,
       },
@@ -1288,7 +1288,9 @@ export const getCustomers = CatchAsyncError(
       company: c.parent_id
         ? c.parent_id[1]
         : c.commercial_company_name || undefined,
-        isTaxExempt: c.x_tax_exempt ?? false,
+       isTaxExempt: exemptFiscalPositionId
+    ? c.property_account_position_id?.[0] === exemptFiscalPositionId
+    : false,
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
@@ -1354,7 +1356,7 @@ export const createCustomer = CatchAsyncError(
         parent_id:    parentId,
         customer_rank: 1,
         // ── Tax Exemption ────────────────────────────────────────────
-        x_tax_exempt: isTaxExempt,
+       
         ...(fiscalPositionId && {
           property_account_position_id: fiscalPositionId,
         }),
