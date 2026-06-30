@@ -109,7 +109,21 @@ const POSSidebar = () => {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+ <SidebarGroup>
+          <SidebarGroupLabel className="text-[11px] text-muted-foreground px-2 mb-1">
+            Point of Sale Taxes
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+        
+              {navItem("/pos/tax", <Settings size={16} />, "Setting")}
+              {navItem("/pos/analyticsTax", <Newspaper  size={16} />, "AnalyticsTax")}
 
+              
+
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
        
 
        
