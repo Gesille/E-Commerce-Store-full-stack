@@ -1035,7 +1035,8 @@ console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
         amount_total:  amountTotal,
         amount_tax:    totalTaxAmount,
         amount_return: amountReturn,
-        note:          orderNote,
+         internal_note:        taxNote || false,        // system/audit note
+  general_customer_note: note || false, 
       }]);
       console.log("[POS] ORDER CREATED:", orderId);
     } catch (err: any) {
