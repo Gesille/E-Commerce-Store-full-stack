@@ -925,11 +925,11 @@ export const createOrder = CatchAsyncError(
 
     for (const item of cart) {
       const product = await odooRequest(
-        "product.product",
-        "search_read",
-        [[["product_tmpl_id", "=", Number(item.productId)]]],
-        { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
-      );
+  "product.product",
+  "search_read",
+  [[["id", "=", Number(item.productId)]]],
+  { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
+);
 
       if (!product.length) {
         return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
@@ -981,9 +981,10 @@ export const createOrder = CatchAsyncError(
         qty:                 item.qty,
         price_unit:          item.price,
         discount:            item.discount || 0,
-        tax_ids:             lineTaxIds, // ← real ABCT tax id when applicable, empty when exempt/holiday
+        tax_ids:             lineTaxIds, 
         price_subtotal:      lineSubtotal,
         price_subtotal_incl: lineSubtotal + lineTax,
+        note:                item.note || false,
       }];
     });
 
@@ -1634,11 +1635,11 @@ export const holdOrderToOdoo = CatchAsyncError(
     for (const item of cart) {
       // get variant
       const variant = await odooRequest(
-        "product.product",
-        "search_read",
-        [[["product_tmpl_id", "=", item.productId]]],
-        { fields: ["id"], limit: 1 },
-      );
+  "product.product",
+  "search_read",
+  [[["id", "=", item.productId]]],
+  { fields: ["id"], limit: 1 },
+);
 
       if (!variant[0]) continue;
 
