@@ -560,6 +560,62 @@ export const closeSession = CatchAsyncError(
       });
     }
 
+    // ── DRAFT ORDER CHECK ──────────────────────────────────────────────────
+    // Odoo refuses to close a session while any pos.order tied to it is still
+    // in state 'draft'. This usually happens when action_pos_order_paid
+    // failed silently during order creation (see createOrder's non-fatal
+    // try/catch around that call) and the order never advanced past draft.
+    // Try to recover those orders here; if any can't be fixed, report them
+    // explicitly instead of letting Odoo's generic error surface.
+    const draftOrders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[
+        ["session_id", "=", sessionId],
+        ["state", "=", "draft"],
+      ]],
+      { fields: ["id", "pos_reference", "amount_total", "amount_paid"] },
+    );
+
+    if (draftOrders.length) {
+      console.log(
+        "[CLOSE SESSION] Found draft orders, attempting to resolve:",
+        draftOrders.map((o: any) => o.pos_reference),
+      );
+
+      const stillDraft: any[] = [];
+
+      for (const order of draftOrders) {
+        try {
+          // Only safe to auto-mark-paid if it was actually fully paid
+          if (order.amount_paid >= order.amount_total && order.amount_total > 0) {
+            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+            console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+          } else {
+            stillDraft.push(order);
+          }
+        } catch (err: any) {
+          console.error(
+            "[CLOSE SESSION] Could not auto-resolve draft order:",
+            order.pos_reference,
+            err?.message,
+          );
+          stillDraft.push(order);
+        }
+      }
+
+      if (stillDraft.length) {
+        return next(
+          new ErrorHandler(
+            `Cannot close session — ${stillDraft.length} order(s) are still in draft and could not be auto-resolved: ` +
+              stillDraft.map((o: any) => o.pos_reference).join(", ") +
+              ". These likely failed payment confirmation in Odoo and need manual review before closing.",
+            409,
+          ),
+        );
+      }
+    }
+
     // ── Close active session ─────────────────────────────────────────────────
     const now = new Date();
 
@@ -577,9 +633,19 @@ export const closeSession = CatchAsyncError(
       },
     );
 
-    await odooRequest("pos.session", "action_pos_session_closing_control", [
-      [sessionId],
-    ]);
+    try {
+      await odooRequest("pos.session", "action_pos_session_closing_control", [
+        [sessionId],
+      ]);
+    } catch (err: any) {
+      console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
+      return next(
+        new ErrorHandler(
+          err?.message || "Failed to close POS session in Odoo",
+          409,
+        ),
+      );
+    }
 
     const shiftLogs = await CashierShiftLog.find({ odooSessionId: sessionId })
       .populate("cashierId", "name email role")
