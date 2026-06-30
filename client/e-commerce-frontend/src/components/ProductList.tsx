@@ -20,7 +20,8 @@ const ProductList = ({ params }: { params: "homepage" | "products" }) => {
   const { data, isLoading, error } = useGetProductsQuery(
     categoryId ? categoryId : undefined,
   );
-
+const { data: taxData } = useGetEffectiveTaxRateQuery();
+  const taxRate = taxData?.rate ?? 0;
   const allProducts = data?.products || [];
 console.log(allProducts)
   // On homepage: show 8 unless user clicked "View all"
@@ -34,8 +35,7 @@ console.log(allProducts)
     return (
       <p className="text-center py-10 text-red-500">Error loading products</p>
     );
- const { data: taxData } = useGetEffectiveTaxRateQuery();
-  const taxRate = taxData?.rate ?? 0;
+ 
   return (
     <div className="w-full">
       <Categories />
