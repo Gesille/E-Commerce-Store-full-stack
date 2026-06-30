@@ -1021,7 +1021,8 @@ export const createOrder = CatchAsyncError(
     // ─── CREATE ORDER IN ODOO ─────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;
     let orderId: number;
-
+const fields = await odooRequest("pos.order", "fields_get", [], { attributes: ["string", "type"] });
+console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
     try {
       orderId = await odooRequest("pos.order", "create", [{
         session_id:    session.id,
