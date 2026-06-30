@@ -1425,13 +1425,26 @@ export const createOdooInvoice = CatchAsyncError(
       "pos.order",
       "search_read",
       [[["id", "=", odooOrderId]]],
-      { fields: ["id", "partner_id", "lines", "amount_total"], limit: 1 },
+      { fields: ["id", "partner_id", "lines", "amount_total", "amount_tax"], limit: 1 },
     );
     const order = orders?.[0];
     if (!order) return next(new ErrorHandler("Order not found in Odoo", 404));
 
-    // pull tax_ids from the original POS lines so the invoice reflects
-    // the tax that was actually charged at sale time (17%, 0% holiday, etc.)
+    // Resolve the canonical ABCT tax record once — don't trust whatever
+    // tax_ids happen to be stored on the POS line, since those can include
+    // a product's default "Customer Taxes" tax in addition to (or instead of)
+    // the ABCT tax actually applied at sale time.
+    const abctTaxRecords = await odooRequest(
+      "account.tax",
+      "search_read",
+      [[["name", "=", "ABCT"], ["type_tax_use", "=", "sale"]]], // adjust name/domain to match your actual ABCT tax record
+      { fields: ["id", "amount"], limit: 1 },
+    );
+    const abctTax = abctTaxRecords?.[0];
+    if (!abctTax) {
+      return next(new ErrorHandler("ABCT tax record not found in Odoo", 500));
+    }
+
     const lines = await odooRequest(
       "pos.order.line",
       "search_read",
@@ -1439,23 +1452,29 @@ export const createOdooInvoice = CatchAsyncError(
       { fields: ["product_id", "qty", "price_unit", "discount", "tax_ids"] },
     );
 
+    // Determine per-line whether the ABCT tax was actually applied at sale,
+    // by checking if the known ABCT tax ID is present — not by forwarding
+    // the raw tax_ids array, which may contain other/duplicate taxes.
+    const invoiceLines = lines.map((line: any) => {
+      const wasTaxed = Array.isArray(line.tax_ids) && line.tax_ids.includes(abctTax.id);
+      return [
+        0,
+        0,
+        {
+          product_id: line.product_id[0],
+          quantity: line.qty,
+          price_unit: line.price_unit,
+          discount: line.discount ?? 0,
+          tax_ids: wasTaxed ? [[6, 0, [abctTax.id]]] : [[6, 0, []]],
+        },
+      ];
+    });
+
     const invoiceId = await odooRequest("account.move", "create", [
       {
         move_type: "out_invoice",
         partner_id: order.partner_id ? order.partner_id[0] : false,
-        invoice_line_ids: lines.map((line: any) => [
-          0,
-          0,
-          {
-            product_id: line.product_id[0],
-            quantity: line.qty,
-            price_unit: line.price_unit,
-            discount: line.discount ?? 0,
-            tax_ids: line.tax_ids?.length
-              ? [[6, 0, line.tax_ids]]
-              : [[6, 0, []]], // explicit empty = no tax, e.g. holiday
-          },
-        ]),
+        invoice_line_ids: invoiceLines,
       },
     ]);
 
@@ -1469,7 +1488,6 @@ export const createOdooInvoice = CatchAsyncError(
     });
   },
 );
-
 export const getPosOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const page = Number(req.query.page) || 1;
