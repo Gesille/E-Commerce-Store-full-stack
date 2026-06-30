@@ -71,50 +71,37 @@ export const getTaxHolidayFiscalPositionId = async (): Promise<number | null> =>
 
 // ─── Order-Level Tax Resolution ───────────────────────────────────────────────
 
-export const resolveFiscalPosition = async (
+export const resolveTaxRate = async (
   customerId?: number,
-): Promise<number | false> => {
-  // ── 1. Check customer exemption ───────────────────────────────────────────
+): Promise<{ rate: number; reason: string }> => {
+
+  // 1. Customer exempt?
   if (customerId) {
     const partners = await odooRequest(
-      "res.partner",
-      "search_read",
+      "res.partner", "search_read",
       [[["id", "=", customerId]]],
       { fields: ["x_tax_exempt"], limit: 1 },
     );
-
-    const isExempt = partners?.[0]?.x_tax_exempt;
-
-    if (isExempt) {
-      const fpId = await getTaxExemptFiscalPositionId();
-      if (fpId) {
-        console.log(`[TAX] Customer ${customerId} is tax-exempt → fiscal position ${fpId}`);
-        return fpId;
-      }
+    if (partners?.[0]?.x_tax_exempt) {
+      return { rate: 0, reason: "customer_exempt" };
     }
   }
 
-  // ── 2. Check tax holiday ──────────────────────────────────────────────────
+  // 2. Tax holiday?
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const holiday = await TaxSettings.findOne({
     type: "holiday",
     startDate: { $lte: today },
-    endDate: { $gte: today },
+    endDate:   { $gte: today },
     active: true,
   });
-
   if (holiday) {
-    const fpId = await getTaxHolidayFiscalPositionId();
-    if (fpId) {
-      console.log(`[TAX] Tax holiday active (${holiday.label}) → fiscal position ${fpId}`);
-      return fpId;
-    }
+    return { rate: 0, reason: `holiday:${holiday.label}` };
   }
 
-  // ── 3. Normal — ABCT applies ──────────────────────────────────────────────
-  return false;
+  // 3. Normal
+  return { rate: 0.17, reason: "normal" };
 };
 
 // ─── Clear cache (useful for testing) ────────────────────────────────────────

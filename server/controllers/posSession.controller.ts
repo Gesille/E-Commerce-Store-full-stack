@@ -7,6 +7,7 @@ import userModel from "../models/user.model.js";
 import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
 import mongoose from "mongoose";
+import { getTaxExemptFiscalPositionId, resolveTaxRate } from "../services/tax.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -872,21 +873,21 @@ export const createOrder = CatchAsyncError(
       note?: string;
       configId: number;
     } = req.body;
-
+ 
     // ─── VALIDATION ───────────────────────────────────────────────
     if (!cart?.length)         return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length) return next(new ErrorHandler("Payment method is required", 400));
     if (!cashierId)            return next(new ErrorHandler("cashierId is required", 400));
     if (!configId)             return next(new ErrorHandler("configId is required", 400));
-
+ 
     // ─── CASHIER ──────────────────────────────────────────────────
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
-
+ 
     // ─── SESSION ──────────────────────────────────────────────────
     const session = await fetchOpenOdooSession(configId);
     if (!session) return next(new ErrorHandler("No open POS session found", 409));
-
+ 
     // ─── SHIFT ────────────────────────────────────────────────────
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
@@ -894,7 +895,7 @@ export const createOrder = CatchAsyncError(
       state: "active",
     });
     if (!shift) return next(new ErrorHandler("Cashier does not have an active shift.", 409));
-
+ 
     // ─── POS CONFIG ───────────────────────────────────────────────
     const posConfig = await odooRequest(
       "pos.config",
@@ -904,7 +905,7 @@ export const createOrder = CatchAsyncError(
     );
     const pickingTypeId = posConfig?.[0]?.picking_type_id?.[0];
     if (!pickingTypeId) return next(new ErrorHandler("POS picking type not configured", 500));
-
+ 
     // ─── PICKING TYPE ─────────────────────────────────────────────
     const pickingType = await odooRequest(
       "stock.picking.type",
@@ -917,10 +918,10 @@ export const createOrder = CatchAsyncError(
     if (!sourceLocationId || !destLocationId) {
       return next(new ErrorHandler("Stock locations missing", 500));
     }
-
+ 
     // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
     const resolvedCart: any[] = [];
-
+ 
     for (const item of cart) {
       const product = await odooRequest(
         "product.product",
@@ -928,16 +929,16 @@ export const createOrder = CatchAsyncError(
         [[["product_tmpl_id", "=", Number(item.productId)]]],
         { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
       );
-
+ 
       if (!product.length) {
         return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
       }
-
+ 
       const realProduct  = product[0];
       const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
-
+ 
       console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
-
+ 
       if (availableQty <= 0) {
         return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
       }
@@ -946,7 +947,7 @@ export const createOrder = CatchAsyncError(
           `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
         ));
       }
-
+ 
       resolvedCart.push({
         ...item,
         realProductId:   realProduct.id,
@@ -954,17 +955,23 @@ export const createOrder = CatchAsyncError(
         uomId:           realProduct.uom_id?.[0],
       });
     }
-
+ 
+    // ─── TAX RATE ─────────────────────────────────────────────────
+    // Checks: 1) customer exempt  2) tax holiday  3) normal ABCT 17%
+    const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
+ 
+    console.log(`[TAX] rate=${TAX_RATE_EFFECTIVE * 100}% | reason=${taxReason}`);
+ 
     // ─── TOTALS ───────────────────────────────────────────────────
     let subtotal       = 0;
     let totalTaxAmount = 0;
-
+ 
     const orderLines = resolvedCart.map((item) => {
       const lineSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100);
-      const lineTax      = Math.round(lineSubtotal * TAX_RATE * 100) / 100;
+      const lineTax      = Math.round(lineSubtotal * TAX_RATE_EFFECTIVE * 100) / 100;
       subtotal       += lineSubtotal;
       totalTaxAmount += lineTax;
-
+ 
       return [0, 0, {
         product_id:          item.realProductId,
         qty:                 item.qty,
@@ -975,27 +982,39 @@ export const createOrder = CatchAsyncError(
         price_subtotal_incl: lineSubtotal + lineTax,
       }];
     });
-
+ 
     const amountTotal  = Math.round((subtotal + totalTaxAmount) * 100) / 100;
     const amountPaid   = paymentLines.reduce((sum, p) => sum + p.amount, 0);
     const amountReturn = Math.max(0, Math.round((amountPaid - amountTotal) * 100) / 100);
-
+ 
     if (amountPaid < amountTotal) {
       return next(new ErrorHandler("Order not fully paid", 400));
     }
-
+ 
     // ─── PAYMENTS ─────────────────────────────────────────────────
     const payment_ids = [];
-
-for (const p of paymentLines) {
-  const methodId = await getPaymentMethodId(p.method, configId, p.cardBrand);
-  payment_ids.push([0, 0, { amount: p.amount, payment_method_id: methodId }]);
-}
-
-    // ─── CREATE ORDER ─────────────────────────────────────────────
+ 
+    for (const p of paymentLines) {
+      const methodId = await getPaymentMethodId(p.method, configId, p.cardBrand);
+      payment_ids.push([0, 0, { amount: p.amount, payment_method_id: methodId }]);
+    }
+ 
+    // ─── BUILD ORDER NOTE ─────────────────────────────────────────
+    // We store the tax reason in the Odoo order note so tax reports
+    // can read it back directly from Odoo (no MongoDB dependency).
+    //
+    // Format:
+    //   normal order          → note is empty (or just the cashier note)
+    //   exempt customer       → "TAX_EXEMPT:customer_exempt"
+    //   tax holiday           → "TAX_EXEMPT:holiday:Back to School 2026"
+    //
+    const taxNote = taxReason !== "normal" ? `TAX_EXEMPT:${taxReason}` : "";
+    const orderNote = [taxNote, note].filter(Boolean).join(" | ");
+ 
+    // ─── CREATE ORDER IN ODOO ─────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;
     let orderId: number;
-
+ 
     try {
       orderId = await odooRequest("pos.order", "create", [{
         session_id:    session.id,
@@ -1006,15 +1025,16 @@ for (const p of paymentLines) {
         payment_ids:   payment_ids,
         amount_paid:   amountPaid,
         amount_total:  amountTotal,
-        amount_tax:    totalTaxAmount,
+        amount_tax:    totalTaxAmount,   // ← 0 if exempt/holiday, 17% if normal
         amount_return: amountReturn,
+        note:          orderNote,        // ← tax reason saved to Odoo for reports
       }]);
       console.log("[POS] ORDER CREATED:", orderId);
     } catch (err: any) {
       console.error(err);
       return next(new ErrorHandler(err?.message || "Failed to create POS order", 500));
     }
-
+ 
     // ─── MARK PAID (non-fatal) ────────────────────────────────────
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
@@ -1022,7 +1042,7 @@ for (const p of paymentLines) {
     } catch (err: any) {
       console.error("[POS PAYMENT ERROR]", err?.message);
     }
-
+ 
     // ─── FORCE STOCK DECREASE ─────────────────────────────────────
     try {
       const pickingId = await odooRequest("stock.picking", "create", [{
@@ -1031,8 +1051,7 @@ for (const p of paymentLines) {
         location_dest_id: destLocationId,
         origin:           odooRef,
       }]);
-      console.log("[PICKING CREATED]", pickingId);
-
+ 
       for (const item of resolvedCart) {
         const moveId = await odooRequest("stock.move", "create", [{
           description_picking: item.realProductName,
@@ -1042,8 +1061,7 @@ for (const p of paymentLines) {
           location_dest_id:    destLocationId,
           picking_id:          pickingId,
         }]);
-        console.log("[MOVE CREATED]", moveId);
-
+ 
         await odooRequest("stock.move.line", "create", [{
           move_id:          moveId,
           product_id:       item.realProductId,
@@ -1052,81 +1070,74 @@ for (const p of paymentLines) {
           location_dest_id: destLocationId,
           picking_id:       pickingId,
         }]);
-        console.log("[MOVE LINE CREATED]", item.qty);
       }
-
+ 
       await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
       await odooRequest("stock.picking", "button_validate", [[pickingId]]);
       console.log("[STOCK UPDATED SUCCESSFULLY]");
     } catch (err: any) {
-      console.error("[STOCK UPDATE ERROR] message:", err?.message);
-      console.error("[STOCK UPDATE ERROR] faultCode:", err?.faultCode);
-      console.error("[STOCK UPDATE ERROR] faultString:", err?.faultString);
-      // Non-fatal — order is already created
+      console.error("[STOCK UPDATE ERROR]", err?.message);
     }
-
-    // ─── SAVE TO MONGODB FOR SHIFT TRACKING ──────────────────────
-// ─── SAVE TO MONGODB FOR SHIFT TRACKING ──────────────────────
-try {
-  await POSOrder.create({
-    // ── IDs ───────────────────────────────────────────────────
-    sessionId:  shift._id,        // shift's MongoDB ObjectId (not Odoo's numeric session.id)
-    shiftId:    shift._id,        // same shift
-    cashierId:  cashier._id,      // MongoDB ObjectId from resolveCashier()
-    openedBy:   cashier._id,      // same cashier
-
-    // ── Odoo reference ────────────────────────────────────────
-    odooOrderId:   orderId,       // Odoo numeric order ID
-    receiptNumber: odooRef,       // "POS-{timestamp}" — already generated above
-
-    // ── Cart ──────────────────────────────────────────────────
-    cart: resolvedCart.map((item) => ({
-      productId: new mongoose.Types.ObjectId(),  // no MongoDB product ObjectId available
-      name:      item.realProductName,
-      price:     item.price,
-      qty:       item.qty,
-      discount:  item.discount ?? 0,
-      note:      item.note ?? "",
-    })),
-
-    // ── Payments ──────────────────────────────────────────────
-    paymentLines: paymentLines.map((p) => ({
-      method: p.method,
-      amount: p.amount,
-      ...(p.method === "card" && p.cardBrand ? { cardBrand: p.cardBrand } : {}),
-    })),
-
-    // ── Totals ────────────────────────────────────────────────
-    subtotal:       Math.round(subtotal * 100) / 100,
-    taxAmount:      Math.round(totalTaxAmount * 100) / 100,
-    discountAmount: 0,
-    total:          amountTotal,
-    amountPaid:     amountPaid,
-    change:         amountReturn,
-
-    // ── Meta ──────────────────────────────────────────────────
-    note:   note ?? "",
-    status: "paid",
-
-    // ── Optional customer ─────────────────────────────────────
-    ...(customerId ? { customerName: String(customerId) } : {}),
-  });
-
-  console.log("[POS] POSOrder saved to MongoDB ✓");
-} catch (e) {
-  console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
-}
-
+ 
+    // ─── SAVE TO MONGODB (shift tracking only) ────────────────────
+    try {
+      await POSOrder.create({
+        sessionId:  shift._id,
+        shiftId:    shift._id,
+        cashierId:  cashier._id,
+        openedBy:   cashier._id,
+ 
+        odooOrderId:   orderId,
+        receiptNumber: odooRef,
+ 
+        cart: resolvedCart.map((item) => ({
+          productId: new mongoose.Types.ObjectId(),
+          name:      item.realProductName,
+          price:     item.price,
+          qty:       item.qty,
+          discount:  item.discount ?? 0,
+          note:      item.note ?? "",
+        })),
+ 
+        paymentLines: paymentLines.map((p) => ({
+          method: p.method,
+          amount: p.amount,
+          ...(p.method === "card" && p.cardBrand ? { cardBrand: p.cardBrand } : {}),
+        })),
+ 
+        subtotal:       Math.round(subtotal * 100) / 100,
+        taxAmount:      Math.round(totalTaxAmount * 100) / 100,
+        discountAmount: 0,
+        total:          amountTotal,
+        amountPaid:     amountPaid,
+        change:         amountReturn,
+ 
+        note:   orderNote,
+        status: "paid",
+ 
+        ...(customerId ? { customerName: String(customerId) } : {}),
+      });
+ 
+      console.log("[POS] POSOrder saved to MongoDB ✓");
+    } catch (e) {
+      console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
+    }
+ 
     // ─── UPDATE SHIFT ─────────────────────────────────────────────
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
       $inc: { totalOrders: 1, totalSales: amountTotal },
     });
-
+ 
     // ─── RESPONSE ─────────────────────────────────────────────────
     res.status(201).json({
       success: true,
       message: "Order created successfully and stock updated",
       orderId,
+      tax: {
+        rate:   TAX_RATE_EFFECTIVE,
+        amount: Math.round(totalTaxAmount * 100) / 100,
+        reason: taxReason,
+      },
     });
   },
 );
@@ -1275,9 +1286,14 @@ export const getCustomers = CatchAsyncError(
 
 export const createCustomer = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { name, phone, email, street, city, country, company } = req.body;
+    const {
+      name, phone, email, street, city, country, company,
+      isTaxExempt = false,   // ← NEW: boolean, default false
+    } = req.body;
+ 
     if (!name) return next(new ErrorHandler("Customer name is required", 400));
-
+ 
+    // ── Country ────────────────────────────────────────────────────────────
     let countryId: number | false = false;
     if (country) {
       const countryMatch = await odooRequest(
@@ -1288,8 +1304,8 @@ export const createCustomer = CatchAsyncError(
       );
       countryId = countryMatch[0]?.id ?? false;
     }
-
-    // If a company name is provided, find or create the company partner
+ 
+    // ── Parent company ─────────────────────────────────────────────────────
     let parentId: number | false = false;
     if (company) {
       const existingCompany = await odooRequest(
@@ -1298,34 +1314,47 @@ export const createCustomer = CatchAsyncError(
         [[["name", "=", company], ["is_company", "=", true]]],
         { fields: ["id"], limit: 1 },
       );
-
+ 
       if (existingCompany.length > 0) {
         parentId = existingCompany[0].id;
       } else {
-        // Create the company partner first
         parentId = await odooRequest("res.partner", "create", [
           { name: company, is_company: true, customer_rank: 1 },
         ]);
       }
     }
-
+ 
+    // ── Fiscal position for exempt customers ───────────────────────────────
+    let fiscalPositionId: number | false = false;
+    if (isTaxExempt) {
+      const fpId = await getTaxExemptFiscalPositionId();
+      if (fpId) fiscalPositionId = fpId;
+    }
+ 
+    // ── Create partner in Odoo ─────────────────────────────────────────────
     const customerId = await odooRequest("res.partner", "create", [
       {
         name,
-        phone: phone ?? false,
-        email: email ?? false,
-        street: street ?? false,
-        city: city ?? false,
-        country_id: countryId,
-        parent_id: parentId,   // ✅ replaces company_name
+        phone:        phone ?? false,
+        email:        email ?? false,
+        street:       street ?? false,
+        city:         city ?? false,
+        country_id:   countryId,
+        parent_id:    parentId,
         customer_rank: 1,
+        // ── Tax Exemption ────────────────────────────────────────────
+        x_tax_exempt: isTaxExempt,
+        ...(fiscalPositionId && {
+          property_account_position_id: fiscalPositionId,
+        }),
       },
     ]);
-
+ 
     res.status(201).json({
       status: "success",
       message: "Customer created successfully",
       customerId,
+      isTaxExempt,
     });
   },
 );
