@@ -13,6 +13,8 @@ import {
   ScanBarcode,
   BookDashed,
   TicketCheck,
+  Settings,
+  Newspaper,
 } from "lucide-react";
 import {
   Sidebar,
@@ -99,6 +101,9 @@ const POSSidebar = () => {
               {navItem("/pos/receipts", <Receipt size={16} />, "Receipts")}
               {navItem("/pos/returns", <RotateCcw size={16} />, "Returns")}
               {navItem("/pos/POSReport", <BookDashed size={16} />, "POSReport")}
+              {navItem("/pos/tax", <Settings size={16} />, "Setting")}
+              {navItem("/pos/analyticsTax", <Newspaper  size={16} />, "AnalyticsTax")}
+
               
 
             </SidebarMenu>

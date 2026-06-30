@@ -9,6 +9,7 @@ import {
   setCustomerExemption,
   getTaxStatus,
   clearTaxCacheEndpoint,
+  getEffectiveTaxRate,
 } from "../controllers/taxSettings.controller.js";
 
 const taxSettingsRouter = express.Router();
@@ -27,6 +28,12 @@ taxSettingsRouter.delete("/holidays/:id", deleteHoliday);
 
 // ── Customer Exemptions ───────────────────────────────────────────────────────
 taxSettingsRouter.get("/exempt-customers", getExemptCustomers);
-taxSettingsRouter.patch("/exempt-customers/:odooPartnerId", setCustomerExemption);
-
+taxSettingsRouter.patch(
+  "/exempt-customers/:odooPartnerId",
+  setCustomerExemption,
+);
+taxSettingsRouter.get(
+  "/effective-rate",
+  getEffectiveTaxRate,
+);
 export default taxSettingsRouter;

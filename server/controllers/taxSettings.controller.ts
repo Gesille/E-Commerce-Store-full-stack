@@ -8,6 +8,7 @@ import {
   getTaxExemptFiscalPositionId,
   getTaxHolidayFiscalPositionId,
   clearTaxCache,
+  resolveTaxRate,
 } from "../services/tax.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -206,5 +207,25 @@ export const clearTaxCacheEndpoint = CatchAsyncError(
   async (req: Request, res: Response) => {
     clearTaxCache();
     res.json({ success: true, message: "Tax cache cleared" });
+  },
+);
+
+
+export const getEffectiveTaxRate = CatchAsyncError(
+  async (req: Request, res: Response) => {
+    const customerIdRaw = req.query.customerId as string | undefined;
+    const customerId =
+      customerIdRaw && !isNaN(Number(customerIdRaw))
+        ? Number(customerIdRaw)
+        : undefined;
+ 
+    const { rate, reason } = await resolveTaxRate(customerId);
+ 
+    res.json({
+      success: true,
+      rate,        // 0 or 0.17
+      reason,      // "normal" | "customer_exempt" | "holiday:<label>"
+      isExempt: rate === 0,
+    });
   },
 );

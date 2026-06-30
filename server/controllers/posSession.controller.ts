@@ -7,7 +7,7 @@ import userModel from "../models/user.model.js";
 import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
 import mongoose from "mongoose";
-import { getTaxExemptFiscalPositionId, resolveTaxRate } from "../services/tax.service.js";
+import { getABCTTaxId, getTaxExemptFiscalPositionId, resolveTaxRate } from "../services/tax.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -856,6 +856,7 @@ export const getActiveShifts = CatchAsyncError(
   },
 );
 
+
 export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
@@ -873,21 +874,21 @@ export const createOrder = CatchAsyncError(
       note?: string;
       configId: number;
     } = req.body;
- 
+
     // ─── VALIDATION ───────────────────────────────────────────────
     if (!cart?.length)         return next(new ErrorHandler("Cart is empty", 400));
     if (!paymentLines?.length) return next(new ErrorHandler("Payment method is required", 400));
     if (!cashierId)            return next(new ErrorHandler("cashierId is required", 400));
     if (!configId)             return next(new ErrorHandler("configId is required", 400));
- 
+
     // ─── CASHIER ──────────────────────────────────────────────────
     const cashier = await resolveCashier(cashierId).catch((e) => next(e));
     if (!cashier) return;
- 
+
     // ─── SESSION ──────────────────────────────────────────────────
     const session = await fetchOpenOdooSession(configId);
     if (!session) return next(new ErrorHandler("No open POS session found", 409));
- 
+
     // ─── SHIFT ────────────────────────────────────────────────────
     const shift = await CashierShiftLog.findOne({
       odooSessionId: session.id,
@@ -895,7 +896,7 @@ export const createOrder = CatchAsyncError(
       state: "active",
     });
     if (!shift) return next(new ErrorHandler("Cashier does not have an active shift.", 409));
- 
+
     // ─── POS CONFIG ───────────────────────────────────────────────
     const posConfig = await odooRequest(
       "pos.config",
@@ -905,7 +906,7 @@ export const createOrder = CatchAsyncError(
     );
     const pickingTypeId = posConfig?.[0]?.picking_type_id?.[0];
     if (!pickingTypeId) return next(new ErrorHandler("POS picking type not configured", 500));
- 
+
     // ─── PICKING TYPE ─────────────────────────────────────────────
     const pickingType = await odooRequest(
       "stock.picking.type",
@@ -918,10 +919,10 @@ export const createOrder = CatchAsyncError(
     if (!sourceLocationId || !destLocationId) {
       return next(new ErrorHandler("Stock locations missing", 500));
     }
- 
+
     // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
     const resolvedCart: any[] = [];
- 
+
     for (const item of cart) {
       const product = await odooRequest(
         "product.product",
@@ -929,16 +930,16 @@ export const createOrder = CatchAsyncError(
         [[["product_tmpl_id", "=", Number(item.productId)]]],
         { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
       );
- 
+
       if (!product.length) {
         return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
       }
- 
+
       const realProduct  = product[0];
       const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
- 
+
       console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
- 
+
       if (availableQty <= 0) {
         return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
       }
@@ -947,7 +948,7 @@ export const createOrder = CatchAsyncError(
           `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
         ));
       }
- 
+
       resolvedCart.push({
         ...item,
         realProductId:   realProduct.id,
@@ -955,66 +956,61 @@ export const createOrder = CatchAsyncError(
         uomId:           realProduct.uom_id?.[0],
       });
     }
- 
+
     // ─── TAX RATE ─────────────────────────────────────────────────
-    // Checks: 1) customer exempt  2) tax holiday  3) normal ABCT 17%
+
     const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
- 
-    console.log(`[TAX] rate=${TAX_RATE_EFFECTIVE * 100}% | reason=${taxReason}`);
- 
+    const abctTaxId = await getABCTTaxId();
+    const lineTaxIds =
+      TAX_RATE_EFFECTIVE > 0 && abctTaxId ? [[6, 0, [abctTaxId]]] : [[6, 0, []]];
+
+    console.log(`[TAX] rate=${TAX_RATE_EFFECTIVE * 100}% | reason=${taxReason} | abctTaxId=${abctTaxId}`);
+
     // ─── TOTALS ───────────────────────────────────────────────────
     let subtotal       = 0;
     let totalTaxAmount = 0;
- 
+
     const orderLines = resolvedCart.map((item) => {
       const lineSubtotal = item.price * item.qty * (1 - (item.discount || 0) / 100);
       const lineTax      = Math.round(lineSubtotal * TAX_RATE_EFFECTIVE * 100) / 100;
       subtotal       += lineSubtotal;
       totalTaxAmount += lineTax;
- 
+
       return [0, 0, {
         product_id:          item.realProductId,
         qty:                 item.qty,
         price_unit:          item.price,
         discount:            item.discount || 0,
-        tax_ids:             [[6, 0, []]],
+        tax_ids:             lineTaxIds, // ← real ABCT tax id when applicable, empty when exempt/holiday
         price_subtotal:      lineSubtotal,
         price_subtotal_incl: lineSubtotal + lineTax,
       }];
     });
- 
+
     const amountTotal  = Math.round((subtotal + totalTaxAmount) * 100) / 100;
     const amountPaid   = paymentLines.reduce((sum, p) => sum + p.amount, 0);
     const amountReturn = Math.max(0, Math.round((amountPaid - amountTotal) * 100) / 100);
- 
+
     if (amountPaid < amountTotal) {
       return next(new ErrorHandler("Order not fully paid", 400));
     }
- 
+
     // ─── PAYMENTS ─────────────────────────────────────────────────
     const payment_ids = [];
- 
+
     for (const p of paymentLines) {
       const methodId = await getPaymentMethodId(p.method, configId, p.cardBrand);
       payment_ids.push([0, 0, { amount: p.amount, payment_method_id: methodId }]);
     }
- 
+
     // ─── BUILD ORDER NOTE ─────────────────────────────────────────
-    // We store the tax reason in the Odoo order note so tax reports
-    // can read it back directly from Odoo (no MongoDB dependency).
-    //
-    // Format:
-    //   normal order          → note is empty (or just the cashier note)
-    //   exempt customer       → "TAX_EXEMPT:customer_exempt"
-    //   tax holiday           → "TAX_EXEMPT:holiday:Back to School 2026"
-    //
     const taxNote = taxReason !== "normal" ? `TAX_EXEMPT:${taxReason}` : "";
     const orderNote = [taxNote, note].filter(Boolean).join(" | ");
- 
+
     // ─── CREATE ORDER IN ODOO ─────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;
     let orderId: number;
- 
+
     try {
       orderId = await odooRequest("pos.order", "create", [{
         session_id:    session.id,
@@ -1025,16 +1021,16 @@ export const createOrder = CatchAsyncError(
         payment_ids:   payment_ids,
         amount_paid:   amountPaid,
         amount_total:  amountTotal,
-        amount_tax:    totalTaxAmount,   // ← 0 if exempt/holiday, 17% if normal
+        amount_tax:    totalTaxAmount,
         amount_return: amountReturn,
-        note:          orderNote,        // ← tax reason saved to Odoo for reports
+        note:          orderNote,
       }]);
       console.log("[POS] ORDER CREATED:", orderId);
     } catch (err: any) {
       console.error(err);
       return next(new ErrorHandler(err?.message || "Failed to create POS order", 500));
     }
- 
+
     // ─── MARK PAID (non-fatal) ────────────────────────────────────
     try {
       await odooRequest("pos.order", "action_pos_order_paid", [[orderId]]);
@@ -1042,7 +1038,7 @@ export const createOrder = CatchAsyncError(
     } catch (err: any) {
       console.error("[POS PAYMENT ERROR]", err?.message);
     }
- 
+
     // ─── FORCE STOCK DECREASE ─────────────────────────────────────
     try {
       const pickingId = await odooRequest("stock.picking", "create", [{
@@ -1051,7 +1047,7 @@ export const createOrder = CatchAsyncError(
         location_dest_id: destLocationId,
         origin:           odooRef,
       }]);
- 
+
       for (const item of resolvedCart) {
         const moveId = await odooRequest("stock.move", "create", [{
           description_picking: item.realProductName,
@@ -1061,7 +1057,7 @@ export const createOrder = CatchAsyncError(
           location_dest_id:    destLocationId,
           picking_id:          pickingId,
         }]);
- 
+
         await odooRequest("stock.move.line", "create", [{
           move_id:          moveId,
           product_id:       item.realProductId,
@@ -1071,14 +1067,14 @@ export const createOrder = CatchAsyncError(
           picking_id:       pickingId,
         }]);
       }
- 
+
       await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
       await odooRequest("stock.picking", "button_validate", [[pickingId]]);
       console.log("[STOCK UPDATED SUCCESSFULLY]");
     } catch (err: any) {
       console.error("[STOCK UPDATE ERROR]", err?.message);
     }
- 
+
     // ─── SAVE TO MONGODB (shift tracking only) ────────────────────
     try {
       await POSOrder.create({
@@ -1086,10 +1082,10 @@ export const createOrder = CatchAsyncError(
         shiftId:    shift._id,
         cashierId:  cashier._id,
         openedBy:   cashier._id,
- 
+
         odooOrderId:   orderId,
         receiptNumber: odooRef,
- 
+
         cart: resolvedCart.map((item) => ({
           productId: new mongoose.Types.ObjectId(),
           name:      item.realProductName,
@@ -1098,36 +1094,36 @@ export const createOrder = CatchAsyncError(
           discount:  item.discount ?? 0,
           note:      item.note ?? "",
         })),
- 
+
         paymentLines: paymentLines.map((p) => ({
           method: p.method,
           amount: p.amount,
           ...(p.method === "card" && p.cardBrand ? { cardBrand: p.cardBrand } : {}),
         })),
- 
+
         subtotal:       Math.round(subtotal * 100) / 100,
         taxAmount:      Math.round(totalTaxAmount * 100) / 100,
         discountAmount: 0,
         total:          amountTotal,
         amountPaid:     amountPaid,
         change:         amountReturn,
- 
+
         note:   orderNote,
         status: "paid",
- 
+
         ...(customerId ? { customerName: String(customerId) } : {}),
       });
- 
+
       console.log("[POS] POSOrder saved to MongoDB ✓");
     } catch (e) {
       console.warn("[POS] Failed to save POSOrder to MongoDB:", e);
     }
- 
+
     // ─── UPDATE SHIFT ─────────────────────────────────────────────
     await CashierShiftLog.findByIdAndUpdate(shift._id, {
       $inc: { totalOrders: 1, totalSales: amountTotal },
     });
- 
+
     // ─── RESPONSE ─────────────────────────────────────────────────
     res.status(201).json({
       success: true,
