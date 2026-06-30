@@ -923,40 +923,50 @@ export const createOrder = CatchAsyncError(
     // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
     const resolvedCart: any[] = [];
 
-    for (const item of cart) {
-const product = await odooRequest(
-  "product.product",
-  "search_read",
-  [[["product_tmpl_id", "=", Number(item.productId)]]],
-  { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
-);;
+   for (const item of cart) {
+  const product = await odooRequest(
+    "product.product",
+    "search_read",
+    [[["product_tmpl_id", "=", Number(item.productId)]]],
+    { fields: ["id", "name", "uom_id"], limit: 1 },
+  );
 
-      if (!product.length) {
-        return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
-      }
+  if (!product.length) {
+    return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
+  }
 
-      const realProduct  = product[0];
-      const availableQty = Math.max(0, Number(realProduct.qty_available) || 0);
+  const realProduct = product[0];
 
-      console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
+  // ─── Compute available stock from quants, same as product service ───
+  const quants = await odooRequest(
+    "stock.quant",
+    "search_read",
+    [[["product_id", "=", realProduct.id], ["location_id.usage", "=", "internal"]]],
+    { fields: ["quantity"] },
+  );
+  const availableQty = Math.max(
+    0,
+    quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0),
+  );
 
-      if (availableQty <= 0) {
-        return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
-      }
-      if (availableQty < item.qty) {
-        return next(new ErrorHandler(
-          `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
-        ));
-      }
+  console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
 
-      resolvedCart.push({
-        ...item,
-        realProductId:   realProduct.id,
-        realProductName: realProduct.name,
-        uomId:           realProduct.uom_id?.[0],
-      });
-    }
+  if (availableQty <= 0) {
+    return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
+  }
+  if (availableQty < item.qty) {
+    return next(new ErrorHandler(
+      `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
+    ));
+  }
 
+  resolvedCart.push({
+    ...item,
+    realProductId:   realProduct.id,
+    realProductName: realProduct.name,
+    uomId:           realProduct.uom_id?.[0],
+  });
+}
     // ─── TAX RATE ─────────────────────────────────────────────────
 
     const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
