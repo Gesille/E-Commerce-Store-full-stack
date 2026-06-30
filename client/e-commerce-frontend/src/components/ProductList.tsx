@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -7,6 +8,7 @@ import ProductCard from "./ProductCard";
 import Filter from "./Filter";
 import { useSearchParams } from "next/navigation";
 import { useGetProductsQuery } from "@/redux/product/productApi";
+import { useGetEffectiveTaxRateQuery } from "@/redux/tax/taxApi";
 
 const HOMEPAGE_LIMIT = 8;
 
@@ -32,7 +34,8 @@ console.log(allProducts)
     return (
       <p className="text-center py-10 text-red-500">Error loading products</p>
     );
-
+ const { data: taxData } = useGetEffectiveTaxRateQuery();
+  const taxRate = taxData?.rate ?? 0;
   return (
     <div className="w-full">
       <Categories />
@@ -61,6 +64,7 @@ console.log(allProducts)
           return (
             <ProductCard
               key={product.id}
+              taxRate={taxRate}
               product={{
                 id: product.id,
                 reference:product.reference,

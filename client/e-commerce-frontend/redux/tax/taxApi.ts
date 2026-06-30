@@ -90,7 +90,6 @@ export interface EffectiveTaxRate {
   reason: string;       // "normal" | "customer_exempt" | "holiday:<label>"
   isExempt: boolean;
 }
-
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const taxApi = apiSlice.injectEndpoints({
@@ -231,7 +230,7 @@ export const taxApi = apiSlice.injectEndpoints({
       providesTags: ["TaxReports"],
     }),
 
-   getEffectiveTaxRate: builder.query<EffectiveTaxRate, { customerId?: number } | void>({
+    getEffectiveTaxRate: builder.query<EffectiveTaxRate, { customerId?: number } | void>({
   query: (params) => {
     const qs = params?.customerId ? `?customerId=${params.customerId}` : "";
     return {

@@ -9,8 +9,11 @@ export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
     baseUrl: process.env.NEXT_PUBLIC_SERVER_URL,
-    credentials: "include", // ✅ sends cookies automatically on every request
+    credentials: "include",
   }),
+   tagTypes:["Products","Users","Orders","Categories","Customers","Returns","Inventory","HeldOrders",
+    "CashCount","MonthlyReport","DailyReport","Taxes","PurchaseOrders","Suppliers","TaxReports","TaxExemptCustomers","TaxSettings",
+  "TaxHolidays"],
   endpoints: (builder) => ({
     refreshToken: builder.query({
       query: () => ({

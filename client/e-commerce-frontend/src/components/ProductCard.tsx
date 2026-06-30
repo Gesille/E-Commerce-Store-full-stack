@@ -11,9 +11,11 @@ import { toast } from "react-toastify";
 const ProductCard = ({
   product,
   showCartButton = true,
+  taxRate = 0,
 }: {
   product: ProductType;
   showCartButton?: boolean;
+  taxRate?: number;
 }) => {
   const [productTypes, setProductTypes] = useState({
     size: product.sizes[0],
@@ -22,7 +24,7 @@ const ProductCard = ({
   const [isAdding, setIsAdding] = useState(false);
   const { addToCart } = useCartStore();
   const imageUrl = Object.values(product.images)[0] ?? "/placeholder.png";
-
+const priceWithTax = product.price * (1 + taxRate);
   const handleProductType = ({
     type,
     value,
@@ -148,9 +150,14 @@ const ProductCard = ({
         {/* FOOTER */}
         <div className="mt-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
           {/* PRICE */}
-          <p className="text-lg font-semibold text-gray-900">
-            ${product.price.toFixed(2)}
-          </p>
+         <p className="text-lg font-semibold text-gray-900">
+    ${priceWithTax.toFixed(2)}
+    {taxRate > 0 && (
+      <span className="text-xs text-gray-400 font-normal ml-1">
+        (incl. tax)
+      </span>
+    )}
+  </p>
 
           {/* BUTTON */}
 
