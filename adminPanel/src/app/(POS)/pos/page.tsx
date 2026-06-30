@@ -43,7 +43,7 @@ import { Card } from "@/components/ui/card";
 import { fmt } from "@/types/pos";
 import { formatDistanceToNow } from "date-fns";
 import {
-  useGetCategoriesQuery,
+ 
   useGetHeatmapQuery,
   useGetKpiSummaryQuery,
   useGetLowStockQuery,
@@ -58,6 +58,7 @@ import {
   useGetDiscountsQuery,
   useGetCustomerInsightsQuery,
 } from "@/redux/analytics/analyticsApi";
+import { useGetCategoriesQuery } from "@/redux/category/categoryApi";
 
 type Period = "today" | "week" | "month";
 type OrderStatus = "paid" | "refund" | "pending";
@@ -273,7 +274,7 @@ export default function POSDashboardPage() {
     useGetPaymentMethodsQuery({ period, configId });
 
   const { data: categoryData = [], refetch: refetchCategories } =
-    useGetCategoriesQuery({ period, configId });
+    useGetCategoriesQuery();
 
   const { data: staffData = [], refetch: refetchStaff } =
     useGetStaffPerformanceQuery({ period, configId });
