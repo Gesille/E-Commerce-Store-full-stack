@@ -89,7 +89,7 @@ export const analyticsApi = apiSlice.injectEndpoints({
     }),
 
     // Categories
-    getCategories: builder.query({
+    getAnalysicCategories: builder.query({
       query: ({
         period = "today",
         configId,
@@ -225,7 +225,7 @@ export const {
   useGetTopProductsQuery,
   useGetRecentOrdersQuery,
   useGetPaymentMethodsQuery,
-  useGetCategoriesQuery,
+  useGetAnalysicCategoriesQuery,
   useGetStaffPerformanceQuery,
   useGetRevenueTargetQuery,
   useGetSessionInfoQuery,
