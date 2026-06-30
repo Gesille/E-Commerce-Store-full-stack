@@ -211,6 +211,8 @@ function CheckInput({
 // ── Main modal ───────────────────────────────────────────────────────────────
 export function PaymentModal({
   total,
+  taxRate,
+  taxReason,
   orderName,
   customer,
   cart,
@@ -218,7 +220,9 @@ export function PaymentModal({
   onConfirm,
   isSubmitting = false,
 }: {
-  total: number;           // always in XCD
+  total: number; 
+  taxRate:number,  
+  taxReason ?:string      
   orderName: string;
   customer: Customer | null;
   cart: CartItem[];
@@ -226,7 +230,7 @@ export function PaymentModal({
   onConfirm: (lines: PaymentLine[]) => void;  // amounts always in XCD
   isSubmitting?: boolean;
 }) {
-  const subtotalDisplay = round2(total / (1 + TAX_RATE));
+ const subtotalDisplay = round2(total / (1 + taxRate));
   const taxDisplay = round2(total - subtotalDisplay);
 
   // ── Currency state ────────────────────────────────────────────────────────
@@ -433,7 +437,7 @@ const remainingXCD = Math.max(0, round2(total - paidXCD - 0.005));
                 <span>EC${fmt(subtotalDisplay)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b" }}>
-                <span>Tax ({(TAX_RATE * 100).toFixed(0)}%)</span>
+                <span>Tax ({(taxRate * 100).toFixed(0)}%)</span>
                 <span>EC${fmt(taxDisplay)}</span>
               </div>
             </div>

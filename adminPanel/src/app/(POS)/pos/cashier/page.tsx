@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Order,
   CartItem,
-  calcOrderTotals,
+  
   Customer,
   PaymentLine,
+  TAX_RATE,
 } from "@/types/pos";
 import CustomerModal from "@/components/CustomerModal";
 import PaymentModal from "@/components/PaymentModal";
@@ -27,6 +28,7 @@ import { useHeldOrders } from "@/hooks/Useheldorders";
 import { ScanToast, ScanToastState } from "@/components/Scantoast";
 import { useLazyGetProductByBarcodeQuery } from "@/redux/product/productApi";
 import { HeldOrdersDrawer } from "@/components/HeldOrdersDrawer";
+import { useGetEffectiveTaxRateQuery } from "@/redux/tax/taxApi";
 
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
@@ -115,16 +117,19 @@ export default function CashierPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [showNote, setShowNote] = useState(false);
   const [receipt, setReceipt] = useState<{
-    order: Order;
-    paymentLines: PaymentLine[];
-    odooOrderId?: number;
-  } | null>(null);
+  order: Order;
+  paymentLines: PaymentLine[];
+  odooOrderId?: number;
+  taxRate: number;
+  taxReason?: string;
+} | null>(null);
 
   const [paymentTotal, setPaymentTotal] = useState<number>(0);
 
   const activeOrder = orders.find((o) => o.id === activeOrderId);
   const activeMeta = orderMeta[activeOrderId] || { customer: null, note: "" };
-
+const { data: taxData } = useGetEffectiveTaxRateQuery({ customerId: activeMeta.customer?.id });
+const effectiveTaxRate = taxData?.rate ?? TAX_RATE;
   // ── Cart helpers ───────────────────────────────────────────────────────────
   const updateCart = (newCart: CartItem[]) => {
     persistCart(activeOrderId, newCart);
@@ -353,6 +358,8 @@ useEffect(() => {
       order: { ...activeOrder },
       paymentLines: lines,
       odooOrderId: result.orderId,
+      taxRate: effectiveTaxRate,       
+  taxReason: taxData?.reason,
     });
     updateCart([]);
     setMeta({ customer: null, note: "" });
@@ -587,6 +594,8 @@ useEffect(() => {
           onClose={() => setShowPayment(false)}
           onConfirm={handlePaymentConfirm}
           isSubmitting={isSubmitting}
+           taxRate={taxData?.rate ?? TAX_RATE}
+           taxReason={taxData?.reason}
         />
       )}
 
@@ -601,14 +610,16 @@ useEffect(() => {
 
       {/* ── Receipt Modal ──────────────────────────────────────────────────── */}
       {receipt && (
-        <ReceiptModal
-          order={receipt.order}
-          customer={activeMeta.customer}
-          paymentLines={receipt.paymentLines}
-          onClose={() => setReceipt(null)}
-          onNewOrder={handleNewOrderAfterReceipt}
-          odooOrderId={receipt.odooOrderId}
-        />
+      <ReceiptModal
+  order={receipt.order}
+  customer={activeMeta.customer}
+  paymentLines={receipt.paymentLines}
+  taxRate={receipt.taxRate}
+  taxReason={receipt.taxReason}
+  onClose={() => setReceipt(null)}
+  onNewOrder={handleNewOrderAfterReceipt}
+  odooOrderId={receipt.odooOrderId}
+/>
       )}
 
       {/* ── Close Session Confirm Modal ────────────────────────────────────── */}

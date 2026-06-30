@@ -3,22 +3,22 @@ import {
   useCreateOdooInvoiceMutation,
 } from "@/redux/pos/Posapi";
 import { useSendReceiptByEmailMutation } from "@/redux/reciept/recieptApi";
-import { calcOrderTotals, CartItem, Customer, fmt, Order, PaymentLine, TAX_RATE } from "@/types/pos";
-import { useState, useMemo } from "react"; // أضفنا useMemo لثبات رقم الإيصال
+import { calcLineTotal, calcOrderTotals, CartItem, Customer, fmt, Order, PaymentLine, TAX_RATE } from "@/types/pos";
+import { useState, useMemo } from "react"; 
 import { PrintableReceipt, usePrintReceipt } from "./Printablereceipt";
 
-function calcLineTotal(item: CartItem) {
-  return item.price * item.qty * (1 - (item.discount || 0) / 100);
-}
+
 
 
 export function ReceiptModal({
   order,
   customer,
   paymentLines,
-  onClose,
+  
   onNewOrder,
   odooOrderId,
+   taxRate = TAX_RATE,   
+  taxReason,
 }: {
   order: Order;
   customer: Customer | null;
@@ -26,11 +26,16 @@ export function ReceiptModal({
   onClose: () => void;
   onNewOrder: () => void;
   odooOrderId?: number;
+   taxRate?: number;
+  taxReason?: string;
 }) {
-  const { subtotal, tax, total } = calcOrderTotals(order.cart);
+   const { subtotal, tax, total } = calcOrderTotals(order.cart, taxRate);
   const paid = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
-
+const isExempt = taxRate === 0;
+  const taxLabel = isExempt
+    ? `Tax (Exempt${taxReason ? `: ${taxReason}` : ""})`
+    : `Tax (${(taxRate * 100).toFixed(0)}%)`;
 
   const receiptNo = useMemo(() => `RCP-${Date.now().toString().slice(-6)}`, []);
 
@@ -47,12 +52,14 @@ export function ReceiptModal({
   }>({ status: "idle" });
 
   
-  const { printReceipt } = usePrintReceipt({
+ const { printReceipt } = usePrintReceipt({
     cart: order.cart,
     customer,
     paymentLines,
     odooOrderId,
     receiptNo,
+    taxRate,
+    taxReason,
   });
 
   const handlePrint = () => printReceipt();
@@ -144,7 +151,7 @@ export function ReceiptModal({
               <span>${fmt(subtotal)}</span>
             </div>
             <div className="flex justify-between text-[12px] text-gray-500">
-              <span>Tax (17%)</span>
+              <span>{taxLabel}</span>
               <span>${fmt(tax)}</span>
             </div>
             <div className="flex justify-between text-[14px] font-bold text-gray-900 pt-1">
@@ -293,12 +300,14 @@ export function ReceiptModal({
       )}
 
      
-      <PrintableReceipt
+   <PrintableReceipt
         cart={order.cart}
         customer={customer}
         paymentLines={paymentLines}
         odooOrderId={odooOrderId}
         receiptNo={receiptNo}
+        taxRate={taxRate}
+        taxReason={taxReason}
       />
     </div>
   );

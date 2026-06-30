@@ -61,7 +61,7 @@ export function CustomerModal({
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
 
   // Backend returns { customers: [...] }
-  // In CustomerModal — fix the customers mapping
+
   const customers: Customer[] = (data?.customers ?? []).map((c: any) => ({
     id: c.id,
     name: c.name,
@@ -71,6 +71,7 @@ export function CustomerModal({
     street: c.street || undefined,
     city: c.city || undefined,
     country: c.country || undefined,
+    isTaxExempt: c.isTaxExempt ?? false,
   }));
 
   const handleCreate = async () => {
@@ -306,9 +307,14 @@ export function CustomerModal({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <div className="text-[13px] font-medium text-gray-900">
-                        {c.name}
-                      </div>
+                     <div className="text-[13px] font-medium text-gray-900 flex items-center gap-1.5">
+  {c.name}
+  {c.isTaxExempt && (
+    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+      TAX EXEMPT
+    </span>
+  )}
+</div>
                       {current?.id === c.id && (
                         <span className="text-blue-500 text-xs">
                           ✓ Selected

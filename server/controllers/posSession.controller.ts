@@ -1249,14 +1249,15 @@ export const getCustomers = CatchAsyncError(
     const customers = await odooRequest(
       "res.partner",
       "search_read",
-       [[["id", "=", 21]]],
+       [domain],
       {
-        fields: [
+     fields: [
           "id", "name", "phone", "email",
           "street", "city", "country_id",
-          "commercial_company_name", 
-          "parent_id",               
+          "commercial_company_name",
+          "parent_id",
           "is_company",
+          "x_tax_exempt",       
         ],
         limit: 100,
       },
@@ -1274,6 +1275,7 @@ export const getCustomers = CatchAsyncError(
       company: c.parent_id
         ? c.parent_id[1]
         : c.commercial_company_name || undefined,
+        isTaxExempt: c.x_tax_exempt ?? false,
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });

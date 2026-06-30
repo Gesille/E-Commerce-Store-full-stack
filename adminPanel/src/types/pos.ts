@@ -57,6 +57,7 @@ export interface Customer {
   city?: string;         
   country?: string;    
   company?: string;  
+  isTaxExempt?: boolean;
 }
 
 export function fmt(n: number) {
@@ -76,12 +77,12 @@ export function calcLineTotal(item: CartItem) {
 
 export const TAX_RATE = 0.17; 
 
-export function calcOrderTotals(cart: CartItem[]) {
+export function calcOrderTotals(cart: CartItem[], taxRate: number = TAX_RATE) {
   const subtotal = cart.reduce(
     (s, item) => s + item.price * item.qty * (1 - (item.discount ?? 0) / 100),
     0,
   );
-  const tax = Math.round(subtotal * TAX_RATE * 100) / 100;
+  const tax = Math.round(subtotal * taxRate * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
   return { subtotal, tax, total };
 }

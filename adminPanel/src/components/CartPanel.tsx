@@ -5,11 +5,13 @@ import {
   Customer,
   fmt,
   calcLineTotal,
+  TAX_RATE,
 } from "@/types/pos";
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { calcTotal, Discount } from "./posPricing";
 import { LineNoteModal } from "./LineNoteModal";
+import { useGetEffectiveTaxRateQuery } from "@/redux/tax/taxApi";
 
 // ─── Discount Pill Button ───────────────────────────────────────────────────
 function DiscountToggle({
@@ -186,7 +188,10 @@ export function CartPanel({
   const [discountOpen, setDiscountOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { subtotal, discountAmt, afterDiscount, tax, total } = calcTotal(cart, discount);
+  const { data: taxData } = useGetEffectiveTaxRateQuery({ customerId: customer?.id });
+const effectiveTaxRate = taxData?.rate ?? TAX_RATE; 
+
+const { subtotal, discountAmt, afterDiscount, tax, total } = calcTotal(cart, discount, effectiveTaxRate);
 
   const PRESETS_PERCENT = [5, 10, 15, 20];
   const PRESETS_FLAT = [1, 2, 5, 10];

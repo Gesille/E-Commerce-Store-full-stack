@@ -1,4 +1,4 @@
-import { CartItem, Customer, PaymentLine } from "@/types/pos";
+import { calcOrderTotals, CartItem, Customer, PaymentLine } from "@/types/pos";
 
 // ─── Shop Text Configuration ───────────────────────────────────────────────
 const shopName    = "CHEF'S WORLD";
@@ -6,19 +6,13 @@ const shopTagline = "Restaurant, Bar & Kitchen Supplies";
 const shopAddress = "Epicurean Drive ,Saint John ";
 const shopPhone   = "560-2433";
 const shopABST = "0161466";
-const POLICY_URL = process.env.NEXT_PUBLIC_POLICY_URL;
+
 const fmt = (n: number) => n.toFixed(2);
 
 function calcLineTotal(item: CartItem) {
   return item.price * item.qty * (1 - (item.discount || 0) / 100);
 }
 
-function calcOrderTotals(cart: CartItem[]) {
-  const subtotal = cart.reduce((a, i) => a + calcLineTotal(i), 0);
-  const tax      = subtotal * 0.17;
-  const total    = subtotal + tax;
-  return { subtotal, tax, total };
-}
 
 interface PrintableReceiptProps {
   cart:         CartItem[];
@@ -26,6 +20,8 @@ interface PrintableReceiptProps {
   paymentLines: PaymentLine[];
   odooOrderId?: number;
   receiptNo:    string;
+   taxRate:      number;  
+  taxReason?:   string;
 }
 
 export function PrintableReceipt(_props: PrintableReceiptProps) {
@@ -39,11 +35,16 @@ function buildReceiptHTML(
   paymentLines: PaymentLine[],
   odooOrderId: number | undefined,
   receiptNo: string,
+  taxRate: number,
+  taxReason?: string,
 ): string {
-  const { subtotal, tax, total } = calcOrderTotals(cart);
+   const { subtotal, tax, total } = calcOrderTotals(cart, taxRate);
   const paid   = paymentLines.reduce((s, l) => s + l.amount, 0);
   const change = paid - total;
-
+  const isExempt = taxRate === 0;
+  const taxLabel = isExempt
+    ? `Tax (Exempt${taxReason ? `: ${taxReason}` : ""})`
+    : `Tax (${(taxRate * 100).toFixed(0)}%)`;
   const dateStr = new Date().toLocaleString("en-US", {
     month:   "short",
     day:     "2-digit",
@@ -194,8 +195,8 @@ function buildReceiptHTML(
       <span>Subtotal</span>
       <span>$${fmt(subtotal)}</span>
     </div>
-    <div class="flex-row" style="margin-top: 2px;">
-      <span>Tax (17%)</span>
+   <div class="flex-row" style="margin-top: 2px;">
+      <span>${taxLabel}</span>
       <span>$${fmt(tax)}</span>
     </div>
     <div class="flex-row total-row">
@@ -235,8 +236,8 @@ function buildReceiptHTML(
 
 export function usePrintReceipt(options: PrintableReceiptProps) {
   const printReceipt = async () => {
-    const { cart, customer, paymentLines, odooOrderId, receiptNo } = options;
-    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo);
+  const { cart, customer, paymentLines, odooOrderId, receiptNo, taxRate, taxReason } = options;
+    const html = buildReceiptHTML(cart, customer, paymentLines, odooOrderId, receiptNo, taxRate, taxReason);
 
 
     document.getElementById("__print_frame__")?.remove();
