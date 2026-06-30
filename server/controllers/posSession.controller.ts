@@ -586,13 +586,19 @@ export const closeSession = CatchAsyncError(
       const stillDraft: any[] = [];
 
       for (const order of draftOrders) {
+        const diagnostic: any = {
+          reference:   order.pos_reference,
+          amountTotal: order.amount_total,
+          amountPaid:  order.amount_paid,
+        };
+
         try {
-          // Only safe to auto-mark-paid if it was actually fully paid
           if (order.amount_paid >= order.amount_total && order.amount_total > 0) {
             await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
             console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+            continue; // resolved, don't add to stillDraft
           } else {
-            stillDraft.push(order);
+            diagnostic.reason = "underpaid_or_zero_total";
           }
         } catch (err: any) {
           console.error(
@@ -600,19 +606,20 @@ export const closeSession = CatchAsyncError(
             order.pos_reference,
             err?.message,
           );
-          stillDraft.push(order);
+          diagnostic.reason = err?.message || "unknown_odoo_error";
         }
+
+        stillDraft.push(diagnostic);
       }
 
       if (stillDraft.length) {
-        return next(
-          new ErrorHandler(
-            `Cannot close session — ${stillDraft.length} order(s) are still in draft and could not be auto-resolved: ` +
-              stillDraft.map((o: any) => o.pos_reference).join(", ") +
-              ". These likely failed payment confirmation in Odoo and need manual review before closing.",
-            409,
-          ),
-        );
+        console.log("[CLOSE SESSION] Unresolved draft orders detail:", stillDraft);
+
+        return res.status(409).json({
+          success: false,
+          message: `Cannot close session — ${stillDraft.length} order(s) are still in draft and could not be auto-resolved.`,
+          unresolvedOrders: stillDraft,
+        });
       }
     }
 
