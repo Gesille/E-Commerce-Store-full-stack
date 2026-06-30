@@ -477,6 +477,39 @@ export const confirmOpeningBalance = CatchAsyncError(
   },
 );
 
+// Odoo's pos.order.test_paid() requires amount_paid to almost exactly equal
+// amount_total — NOT just be >=. Cash sales with change due (amount_paid >
+// amount_total) get stuck in draft forever because of this. This repairs
+// such orders by trimming the largest payment line down so the sum matches
+// the order total exactly, mirroring how Odoo itself expects change to be
+// handled (recorded as amount_return, not folded into the payment line).
+async function repairOverpaidOrder(
+  orderId: number,
+  amountTotal: number,
+  amountPaid: number,
+): Promise<boolean> {
+  const excess = Math.round((amountPaid - amountTotal) * 100) / 100;
+  if (excess <= 0) return false;
+
+  const payments = await odooRequest(
+    "pos.payment",
+    "search_read",
+    [[["pos_order_id", "=", orderId]]],
+    { fields: ["id", "amount"] },
+  );
+  if (!payments.length) return false;
+
+  const largest = [...payments].sort((a: any, b: any) => b.amount - a.amount)[0];
+  const newAmount = Math.round((largest.amount - excess) * 100) / 100;
+  if (newAmount < 0) return false; // don't push a payment line negative
+
+  await odooRequest("pos.payment", "write", [[largest.id], { amount: newAmount }]);
+  console.log(
+    `[CLOSE SESSION] Trimmed payment ${largest.id} from ${largest.amount} to ${newAmount} (order total ${amountTotal})`,
+  );
+  return true;
+}
+
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -592,24 +625,42 @@ export const closeSession = CatchAsyncError(
           amountPaid:  order.amount_paid,
         };
 
+        let resolved = false;
+
         try {
-          if (order.amount_paid >= order.amount_total && order.amount_total > 0) {
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
-            continue; // resolved, don't add to stillDraft
-          } else {
-            diagnostic.reason = "underpaid_or_zero_total";
-          }
+          await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+          console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+          resolved = true;
         } catch (err: any) {
-          console.error(
-            "[CLOSE SESSION] Could not auto-resolve draft order:",
-            order.pos_reference,
-            err?.message,
-          );
-          diagnostic.reason = err?.message || "unknown_odoo_error";
+          // Overpaid with change due — repair and retry once
+          if (order.amount_paid > order.amount_total) {
+            const repaired = await repairOverpaidOrder(
+              order.id,
+              order.amount_total,
+              order.amount_paid,
+            ).catch((e: any) => {
+              console.error("[CLOSE SESSION] Repair attempt errored:", e?.message);
+              return false;
+            });
+
+            if (repaired) {
+              try {
+                await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                console.log("[CLOSE SESSION] Repaired & recovered:", order.pos_reference);
+                resolved = true;
+              } catch (err2: any) {
+                diagnostic.reason = `Repair attempted but still failed: ${err2?.message}`;
+              }
+            } else {
+              diagnostic.reason = err?.message || "unknown_odoo_error";
+            }
+          } else {
+            // Genuinely underpaid — do not touch, needs manual review
+            diagnostic.reason = err?.message || "unknown_odoo_error";
+          }
         }
 
-        stillDraft.push(diagnostic);
+        if (!resolved) stillDraft.push(diagnostic);
       }
 
       if (stillDraft.length) {
@@ -1102,11 +1153,25 @@ export const createOrder = CatchAsyncError(
     }
 
     // ─── PAYMENTS ─────────────────────────────────────────────────
+    // Odoo's pos.order.test_paid() requires amount_paid to almost exactly
+    // equal amount_total (not just >=). If the customer tenders more than
+    // the total (e.g. cash with change due), we must NOT write the full
+    // tendered amount into the payment lines — only amountTotal worth of
+    // payment should be recorded; the rest is change (already tracked
+    // separately below as amountReturn). Otherwise every cash sale with
+    // change due gets permanently stuck in 'draft' and blocks session close.
     const payment_ids = [];
+    let remainingToAllocate = amountTotal;
 
     for (const p of paymentLines) {
       const methodId = await getPaymentMethodId(p.method, configId, p.cardBrand);
-      payment_ids.push([0, 0, { amount: p.amount, payment_method_id: methodId }]);
+      const allocatedAmount = Math.max(
+        0,
+        Math.min(p.amount, Math.round(remainingToAllocate * 100) / 100),
+      );
+      remainingToAllocate = Math.round((remainingToAllocate - allocatedAmount) * 100) / 100;
+
+      payment_ids.push([0, 0, { amount: allocatedAmount, payment_method_id: methodId }]);
     }
 
     // ─── BUILD ORDER NOTE ─────────────────────────────────────────
