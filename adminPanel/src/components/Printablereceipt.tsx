@@ -222,7 +222,7 @@ function buildReceiptHTML(
     <div class="font-bold" style="margin-bottom: 2px;">Thank you for your visit!</div>
     <div style="color: #222;">Please keep this receipt for your records.</div>
 
-<div class="font-bold" style="text-align: justify; text-align-last: left;">Returns accepted within 7 days with proof of purchase. Items must be unused &amp; in original packaging. Refunds issued in original payment form.</div>
+<div class="font-bold" style="text-align: justify; text-align-last: left;">7-day returns with receipt. Unused items only.</div>
 <div style="margin-top: 6px; font-size: 10pt;">
   <a href="https://e-commerce-store-full-stack-oear.vercel.app/policy" style="color: #000; text-decoration: underline; font-weight: 700;">&#x1F4C4; View our full return policy</a>
 </div>
