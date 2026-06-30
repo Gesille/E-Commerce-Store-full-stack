@@ -202,7 +202,6 @@ export const getProductByIdService = async (id: number) => {
     { fields: ["partner_id", "price"], limit: 1 }
   );
 
-  // ✅ جلب الـ variant
   const variants = await odooRequest(
     "product.product",
     "search_read",
@@ -211,15 +210,28 @@ export const getProductByIdService = async (id: number) => {
   );
 
   let location = null;
+  let stockOverride: number | undefined;
+
   if (variants.length) {
     location = await getProductLocation(variants[0].id);
+
+    const quants = await odooRequest(
+      "stock.quant",
+      "search_read",
+      [[["product_id", "=", variants[0].id], ["location_id.usage", "=", "internal"]]],
+      { fields: ["quantity"] }
+    );
+    if (quants.length) {
+      stockOverride = quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0);
+    }
   }
 
   return toCleanProduct(
     mapProductInput(
       product[0],
       supplierInfos?.[0]?.partner_id?.[1] || null,
-      location
+      location,
+      stockOverride
     ),
     attrs
   );
