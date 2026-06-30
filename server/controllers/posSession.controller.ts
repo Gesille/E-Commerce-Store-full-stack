@@ -924,12 +924,12 @@ export const createOrder = CatchAsyncError(
     const resolvedCart: any[] = [];
 
     for (const item of cart) {
-      const product = await odooRequest(
+const product = await odooRequest(
   "product.product",
   "search_read",
-  [[["id", "=", Number(item.productId)]]],
+  [[["product_tmpl_id", "=", Number(item.productId)]]],
   { fields: ["id", "name", "uom_id", "qty_available"], limit: 1 },
-);
+);;
 
       if (!product.length) {
         return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
@@ -1637,7 +1637,7 @@ export const holdOrderToOdoo = CatchAsyncError(
       const variant = await odooRequest(
   "product.product",
   "search_read",
-  [[["id", "=", item.productId]]],
+  [[["product_tmpl_id", "=", item.productId]]],
   { fields: ["id"], limit: 1 },
 );
 
