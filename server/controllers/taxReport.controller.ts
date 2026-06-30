@@ -215,23 +215,34 @@ export const getTaxReportByRange = CatchAsyncError(
   },
 );
 
+import PDFDocument from "pdfkit";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /reports/taxes/export
 // Query params: dateFrom, dateTo (or date for single day, or year+month)
-// Downloads an Excel file for the accountant
+// Downloads a styled PDF for the accountant
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const exportTaxReportExcel = CatchAsyncError(
+const COLORS = {
+  primary:   "#2D3748",
+  accent:    "#6366F1",
+  green:     "#059669",
+  amber:     "#D97706",
+  textMuted: "#94A3B8",
+  textBody:  "#334155",
+  border:    "#E2E8F0",
+  rowAlt:    "#F8FAFC",
+};
+
+export const exportTaxReportPDF = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    // ── Resolve date range ────────────────────────────────────────────────────
+    // ── Resolve date range ────────────────────────────────────────────────
     let dateFrom: string;
     let dateTo:   string;
 
     if (req.query.date) {
-      // Single day
       dateFrom = dateTo = req.query.date as string;
     } else if (req.query.year && req.query.month) {
-      // Full month
       const year  = Number(req.query.year);
       const month = Number(req.query.month);
       const last  = new Date(year, month, 0).getDate();
@@ -241,203 +252,176 @@ export const exportTaxReportExcel = CatchAsyncError(
       dateFrom = req.query.dateFrom as string;
       dateTo   = req.query.dateTo   as string;
     } else {
-      // Default: today
       const today = toDateStr(new Date());
       dateFrom = dateTo = today;
     }
 
-    // ── Fetch data ────────────────────────────────────────────────────────────
     const rawOrders = await fetchPosOrders(dateFrom, dateTo);
     const orders    = rawOrders.map(mapOrder);
     const summary   = buildSummary(orders);
 
-    // ── Build Excel ───────────────────────────────────────────────────────────
-    const wb   = new ExcelJS.Workbook();
-    wb.creator  = "POS System";
-    wb.created  = new Date();
-
-    // ── SHEET 1: Transaction Detail ───────────────────────────────────────────
-    const ws = wb.addWorksheet("ABCT Tax Report");
-
-    // Title
-    ws.mergeCells("A1:H1");
-    const titleCell   = ws.getCell("A1");
-    titleCell.value   = `ABCT Tax Report — ${dateFrom === dateTo ? dateFrom : `${dateFrom} to ${dateTo}`}`;
-    titleCell.font    = { bold: true, size: 14 };
-    titleCell.alignment = { horizontal: "center" };
-
-    ws.addRow([]);
-
-    // Summary block
-    ws.addRow(["Summary"]).font = { bold: true };
-    ws.addRow(["Total Orders",    summary.totalOrders]);
-    ws.addRow(["Normal Orders",   summary.normalOrders]);
-    ws.addRow(["Exempt Orders",   summary.exemptOrders]);
-    ws.addRow(["Total Subtotal",  summary.totalSubtotal]);
-    ws.addRow(["Total ABCT Tax",  summary.totalTax]);
-    ws.addRow(["Total Revenue",   summary.totalRevenue]);
-
-    ws.addRow([]);
-
-    // Column headers
-    const headerRow = ws.addRow([
-      "#",
-      "Order Ref",
-      "Date & Time",
-      "Customer",
-      "Subtotal (XCD)",
-      "ABCT 17% (XCD)",
-      "Total (XCD)",
-      "Tax Status",
-    ]);
-
-    headerRow.eachCell((cell) => {
-      cell.font      = { bold: true, color: { argb: "FFFFFFFF" } };
-      cell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2D3748" } };
-      cell.alignment = { horizontal: "center" };
-      cell.border    = {
-        top:    { style: "thin" },
-        bottom: { style: "thin" },
-        left:   { style: "thin" },
-        right:  { style: "thin" },
-      };
-    });
-
-    // Data rows
-    orders.forEach((o:any, i:any) => {
-      const row = ws.addRow([
-        i + 1,
-        o.ref,
-        new Date(o.date).toLocaleString("en-AG", { timeZone: "America/Antigua" }),
-        o.customer,
-        o.subtotal,
-        o.taxAmount,
-        o.total,
-        o.isExempt ? `Exempt (${o.taxReason})` : "ABCT 17%",
-      ]);
-
-      // Alternate row color
-      if (i % 2 === 0) {
-        row.eachCell((cell) => {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAFC" } };
-        });
-      }
-
-      // Highlight exempt rows
-      if (o.isExempt) {
-        row.getCell(8).font = { color: { argb: "FFE53E3E" }, bold: true };
-      }
-
-      // Number format for currency columns
-      [5, 6, 7].forEach((col) => {
-        row.getCell(col).numFmt = "#,##0.00";
-      });
-
-      row.eachCell((cell) => {
-        cell.border = {
-          top:    { style: "thin", color: { argb: "FFE2E8F0" } },
-          bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
-          left:   { style: "thin", color: { argb: "FFE2E8F0" } },
-          right:  { style: "thin", color: { argb: "FFE2E8F0" } },
-        };
-      });
-    });
-
-    // Totals footer row
-    ws.addRow([]);
-    const footerRow = ws.addRow([
-      "",
-      "",
-      "",
-      "TOTAL",
-      summary.totalSubtotal,
-      summary.totalTax,
-      summary.totalRevenue,
-      "",
-    ]);
-    footerRow.eachCell((cell, col) => {
-      cell.font = { bold: true };
-      if ([5, 6, 7].includes(col)) {
-        cell.numFmt = "#,##0.00";
-        cell.fill   = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDF2F7" } };
-      }
-    });
-
-    // Column widths
-    ws.getColumn(1).width  = 5;
-    ws.getColumn(2).width  = 18;
-    ws.getColumn(3).width  = 22;
-    ws.getColumn(4).width  = 20;
-    ws.getColumn(5).width  = 16;
-    ws.getColumn(6).width  = 16;
-    ws.getColumn(7).width  = 16;
-    ws.getColumn(8).width  = 22;
-
-    // ── SHEET 2: Daily Breakdown (if date range > 1 day) ─────────────────────
-    if (dateFrom !== dateTo) {
-      const ws2 = wb.addWorksheet("Daily Breakdown");
-
-      ws2.mergeCells("A1:E1");
-      const t2 = ws2.getCell("A1");
-      t2.value = `Daily Breakdown — ${dateFrom} to ${dateTo}`;
-      t2.font  = { bold: true, size: 13 };
-      t2.alignment = { horizontal: "center" };
-
-      ws2.addRow([]);
-
-      const h2 = ws2.addRow(["Date", "Orders", "Subtotal (XCD)", "ABCT Tax (XCD)", "Total (XCD)"]);
-      h2.eachCell((cell) => {
-        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2D3748" } };
-        cell.alignment = { horizontal: "center" };
-      });
-
-      // Group orders by day
-      const byDay: Record<string, { orders: number; tax: number; subtotal: number; total: number }> = {};
-      for (const o of orders) {
-        const d = o.date.slice(0, 10);
-        if (!byDay[d]) byDay[d] = { orders: 0, tax: 0, subtotal: 0, total: 0 };
-        byDay[d].orders++;
-        byDay[d].subtotal = r2(byDay[d].subtotal + o.subtotal);
-        byDay[d].tax      = r2(byDay[d].tax      + o.taxAmount);
-        byDay[d].total    = r2(byDay[d].total     + o.total);
-      }
-
-      Object.entries(byDay).sort().forEach(([date, data], i) => {
-        const row = ws2.addRow([date, data.orders, data.subtotal, data.tax, data.total]);
-        if (i % 2 === 0) {
-          row.eachCell((cell) => {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF7FAFC" } };
-          });
-        }
-        [3, 4, 5].forEach((col) => { row.getCell(col).numFmt = "#,##0.00"; });
-      });
-
-      // Footer
-      ws2.addRow([]);
-      const f2 = ws2.addRow([
-        "TOTAL", summary.totalOrders, summary.totalSubtotal, summary.totalTax, summary.totalRevenue,
-      ]);
-      f2.eachCell((cell) => { cell.font = { bold: true }; });
-      [3, 4, 5].forEach((col) => { f2.getCell(col).numFmt = "#,##0.00"; });
-
-      ws2.getColumn(1).width = 14;
-      ws2.getColumn(2).width = 10;
-      ws2.getColumn(3).width = 18;
-      ws2.getColumn(4).width = 18;
-      ws2.getColumn(5).width = 18;
-    }
-
-    // ── Send file ─────────────────────────────────────────────────────────────
-    const filename = `ABCT_Tax_${dateFrom}_${dateTo}.xlsx`.replace(/\s/g, "_");
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
+    const filename = `ABCT_Tax_${dateFrom}_${dateTo}.pdf`.replace(/\s/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-    await wb.xlsx.write(res);
-    res.end();
+    const doc = new PDFDocument({ size: "A4", margin: 40, bufferPages: true });
+    doc.pipe(res);
+
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const left      = doc.page.margins.left;
+
+    // ── Header band ────────────────────────────────────────────────────────
+    doc.rect(0, 0, doc.page.width, 90).fill(COLORS.primary);
+    doc
+      .fillColor("#FFFFFF")
+      .fontSize(20)
+      .font("Helvetica-Bold")
+      .text("ABCT Tax Report", left, 28);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#CBD5E1")
+      .text(
+        dateFrom === dateTo ? dateFrom : `${dateFrom}  →  ${dateTo}`,
+        left,
+        56,
+      );
+    doc
+      .fontSize(8)
+      .fillColor("#94A3B8")
+      .text(`Generated ${new Date().toLocaleString()}`, left, 72);
+
+    doc.y = 110;
+
+    // ── Summary cards ──────────────────────────────────────────────────────
+    const cardData = [
+      { label: "Total Revenue",   value: `XCD ${summary.totalRevenue.toFixed(2)}`, color: COLORS.accent },
+      { label: "ABCT Tax (17%)",  value: `XCD ${summary.totalTax.toFixed(2)}`,      color: COLORS.green },
+      { label: "Total Orders",    value: `${summary.totalOrders}`,                  color: COLORS.primary },
+      { label: "Exempt Orders",   value: `${summary.exemptOrders}`,                 color: COLORS.amber },
+    ];
+
+    const cardW = (pageWidth - 3 * 10) / 4;
+    const cardY = doc.y;
+
+    cardData.forEach((c, i) => {
+      const x = left + i * (cardW + 10);
+      doc.roundedRect(x, cardY, cardW, 56, 6).fillAndStroke("#FFFFFF", COLORS.border);
+      doc.rect(x, cardY, 4, 56).fill(c.color);
+      doc
+        .fillColor(COLORS.textMuted)
+        .fontSize(8)
+        .font("Helvetica")
+        .text(c.label, x + 12, cardY + 10, { width: cardW - 20 });
+      doc
+        .fillColor(COLORS.textBody)
+        .fontSize(13)
+        .font("Helvetica-Bold")
+        .text(c.value, x + 12, cardY + 26, { width: cardW - 20 });
+    });
+
+    doc.y = cardY + 56 + 24;
+
+    // ── Table ──────────────────────────────────────────────────────────────
+    const cols = [
+      { key: "ref",       label: "Order",    width: 70,  align: "left"  as const },
+      { key: "date",      label: "Date",     width: 95,  align: "left"  as const },
+      { key: "customer",  label: "Customer", width: 95,  align: "left"  as const },
+      { key: "subtotal",  label: "Subtotal", width: 65,  align: "right" as const },
+      { key: "taxAmount", label: "Tax",      width: 60,  align: "right" as const },
+      { key: "total",     label: "Total",    width: 65,  align: "right" as const },
+      { key: "status",    label: "Status",   width: pageWidth - (70+95+95+65+60+65), align: "center" as const },
+    ];
+
+    const rowHeight = 20;
+
+    function drawTableHeader(y: number) {
+      doc.rect(left, y, pageWidth, rowHeight).fill(COLORS.primary);
+      let x = left;
+      doc.fontSize(8).font("Helvetica-Bold").fillColor("#FFFFFF");
+      for (const c of cols) {
+        doc.text(c.label, x + 6, y + 6, { width: c.width - 12, align: c.align });
+        x += c.width;
+      }
+      return y + rowHeight;
+    }
+
+    let y = drawTableHeader(doc.y);
+
+    orders.forEach((o:any, i:any) => {
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 30) {
+        doc.addPage();
+        y = drawTableHeader(doc.page.margins.top);
+      }
+
+      if (i % 2 === 0) {
+        doc.rect(left, y, pageWidth, rowHeight).fill(COLORS.rowAlt);
+      }
+
+      let x = left;
+      doc.fontSize(8).font("Helvetica").fillColor(COLORS.textBody);
+
+      const rowVals: Record<string, string> = {
+        ref:       o.ref,
+        date:      new Date(o.date).toLocaleString("en-AG", {
+          timeZone: "America/Antigua",
+          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+        }),
+        customer:  o.customer,
+        subtotal:  o.subtotal.toFixed(2),
+        taxAmount: o.taxAmount.toFixed(2),
+        total:     o.total.toFixed(2),
+      };
+
+      for (const c of cols) {
+        if (c.key === "status") continue;
+        doc.fillColor(COLORS.textBody).text(rowVals[c.key] ?? "", x + 6, y + 6, {
+          width: c.width - 12,
+          align: c.align,
+        });
+        x += c.width;
+      }
+
+      // Status badge
+      const statusCol = cols[cols.length - 1];
+      const badgeText = o.isExempt ? `Exempt` : "ABCT 17%";
+      doc
+        .fontSize(7.5)
+        .font("Helvetica-Bold")
+        .fillColor(o.isExempt ? COLORS.amber : COLORS.green)
+        .text(badgeText, x + 6, y + 6, { width: statusCol.width - 12, align: "center" });
+
+      y += rowHeight;
+    });
+
+    // Totals row
+    doc.rect(left, y, pageWidth, rowHeight + 2).fill("#EDF2F7");
+    let xt = left;
+    const totalsVals = ["", "", "TOTAL", summary.totalSubtotal.toFixed(2), summary.totalTax.toFixed(2), summary.totalRevenue.toFixed(2), ""];
+    cols.forEach((c, idx) => {
+      doc
+        .fontSize(8.5)
+        .font("Helvetica-Bold")
+        .fillColor(COLORS.primary)
+        .text(totalsVals[idx], xt + 6, y + 7, { width: c.width - 12, align: c.align });
+      xt += c.width;
+    });
+
+    // ── Footer page numbers ───────────────────────────────────────────────
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc
+        .fontSize(7)
+        .fillColor(COLORS.textMuted)
+        .text(
+          `Page ${i + 1} of ${range.count}`,
+          left,
+          doc.page.height - 25,
+          { width: pageWidth, align: "center" },
+        );
+    }
+
+    doc.end();
   },
 );
