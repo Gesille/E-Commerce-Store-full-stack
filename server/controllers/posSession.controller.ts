@@ -857,6 +857,8 @@ export const getActiveShifts = CatchAsyncError(
 );
 
 
+
+
 export const createOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
@@ -919,6 +921,12 @@ export const createOrder = CatchAsyncError(
     if (!sourceLocationId || !destLocationId) {
       return next(new ErrorHandler("Stock locations missing", 500));
     }
+
+    console.log(
+      "[LOCATIONS]",
+      "source:", pickingType?.[0]?.default_location_src_id,
+      "| dest:", pickingType?.[0]?.default_location_dest_id,
+    );
 
     // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
     const resolvedCart: any[] = [];
@@ -1169,6 +1177,11 @@ export const createOrder = CatchAsyncError(
     });
   },
 );
+
+
+
+
+
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const sessionId = Number(req.params.sessionId);
