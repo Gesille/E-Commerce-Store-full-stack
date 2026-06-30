@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
-import ExcelJS from "exceljs";
+
+import PDFDocument from "pdfkit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -215,16 +216,10 @@ export const getTaxReportByRange = CatchAsyncError(
   },
 );
 
-import PDFDocument from "pdfkit";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /reports/taxes/export
-// Query params: dateFrom, dateTo (or date for single day, or year+month)
-// Downloads a styled PDF for the accountant
-// ─────────────────────────────────────────────────────────────────────────────
 
 const COLORS = {
-  primary:   "#2D3748",
+  primary:   "#1E293B", // deeper, more premium navy
   accent:    "#6366F1",
   green:     "#059669",
   amber:     "#D97706",
@@ -232,7 +227,12 @@ const COLORS = {
   textBody:  "#334155",
   border:    "#E2E8F0",
   rowAlt:    "#F8FAFC",
+  headerBg:  "#1E293B",
 };
+
+// Comma-formatted currency, e.g. 1234.5 -> "1,234.50"
+const money = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const exportTaxReportPDF = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -271,76 +271,88 @@ export const exportTaxReportPDF = CatchAsyncError(
     const left      = doc.page.margins.left;
 
     // ── Header band ────────────────────────────────────────────────────────
-    doc.rect(0, 0, doc.page.width, 90).fill(COLORS.primary);
+    doc.rect(0, 0, doc.page.width, 92).fill(COLORS.headerBg);
     doc
       .fillColor("#FFFFFF")
-      .fontSize(20)
+      .fontSize(19)
       .font("Helvetica-Bold")
-      .text("ABCT Tax Report", left, 28);
+      .text("ABCT Tax Report", left, 26);
     doc
       .fontSize(10)
       .font("Helvetica")
       .fillColor("#CBD5E1")
       .text(
-        dateFrom === dateTo ? dateFrom : `${dateFrom}  →  ${dateTo}`,
+        dateFrom === dateTo ? dateFrom : `${dateFrom}   →   ${dateTo}`,
         left,
-        56,
+        52,
       );
     doc
-      .fontSize(8)
-      .fillColor("#94A3B8")
-      .text(`Generated ${new Date().toLocaleString()}`, left, 72);
+      .fontSize(7.5)
+      .fillColor("#64748B")
+      .text(`Generated ${new Date().toLocaleString()}`, left, 70);
 
-    doc.y = 110;
+    doc.y = 116;
 
     // ── Summary cards ──────────────────────────────────────────────────────
     const cardData = [
-      { label: "Total Revenue",   value: `XCD ${summary.totalRevenue.toFixed(2)}`, color: COLORS.accent },
-      { label: "ABCT Tax (17%)",  value: `XCD ${summary.totalTax.toFixed(2)}`,      color: COLORS.green },
-      { label: "Total Orders",    value: `${summary.totalOrders}`,                  color: COLORS.primary },
-      { label: "Exempt Orders",   value: `${summary.exemptOrders}`,                 color: COLORS.amber },
+      { label: "TOTAL REVENUE",  value: `XCD ${money(summary.totalRevenue)}`, color: COLORS.accent },
+      { label: "ABCT TAX (17%)", value: `XCD ${money(summary.totalTax)}`,     color: COLORS.green },
+      { label: "TOTAL ORDERS",   value: `${summary.totalOrders}`,             color: COLORS.primary },
+      { label: "EXEMPT ORDERS",  value: `${summary.exemptOrders}`,            color: COLORS.amber },
     ];
 
-    const cardW = (pageWidth - 3 * 10) / 4;
-    const cardY = doc.y;
+    const cardGap = 12;
+    const cardW   = (pageWidth - 3 * cardGap) / 4;
+    const cardY   = doc.y;
+    const cardH   = 58;
 
     cardData.forEach((c, i) => {
-      const x = left + i * (cardW + 10);
-      doc.roundedRect(x, cardY, cardW, 56, 6).fillAndStroke("#FFFFFF", COLORS.border);
-      doc.rect(x, cardY, 4, 56).fill(c.color);
+      const x = left + i * (cardW + cardGap);
+      doc.roundedRect(x, cardY, cardW, cardH, 6).fillAndStroke("#FFFFFF", COLORS.border);
+      doc.roundedRect(x, cardY, 4, cardH, 2).fill(c.color);
       doc
         .fillColor(COLORS.textMuted)
-        .fontSize(8)
-        .font("Helvetica")
-        .text(c.label, x + 12, cardY + 10, { width: cardW - 20 });
+        .fontSize(7.5)
+        .font("Helvetica-Bold")
+        .text(c.label, x + 14, cardY + 12, { width: cardW - 24, characterSpacing: 0.3 });
       doc
         .fillColor(COLORS.textBody)
-        .fontSize(13)
+        .fontSize(14)
         .font("Helvetica-Bold")
-        .text(c.value, x + 12, cardY + 26, { width: cardW - 20 });
+        .text(c.value, x + 14, cardY + 28, { width: cardW - 24 });
     });
 
-    doc.y = cardY + 56 + 24;
+    doc.y = cardY + cardH + 26;
 
     // ── Table ──────────────────────────────────────────────────────────────
+    // Widths sum to pageWidth. "Order" widened + monospace to stop wrapping
+    // on long refs like POS-1782837315756 (17 chars).
     const cols = [
-      { key: "ref",       label: "Order",    width: 70,  align: "left"  as const },
-      { key: "date",      label: "Date",     width: 95,  align: "left"  as const },
-      { key: "customer",  label: "Customer", width: 95,  align: "left"  as const },
-      { key: "subtotal",  label: "Subtotal", width: 65,  align: "right" as const },
-      { key: "taxAmount", label: "Tax",      width: 60,  align: "right" as const },
-      { key: "total",     label: "Total",    width: 65,  align: "right" as const },
-      { key: "status",    label: "Status",   width: pageWidth - (70+95+95+65+60+65), align: "center" as const },
+      { key: "ref",       label: "ORDER",    width: 95, align: "left"   as const, font: "Courier" },
+      { key: "date",      label: "DATE",     width: 88, align: "left"   as const, font: "Helvetica" },
+      { key: "customer",  label: "CUSTOMER", width: 90, align: "left"   as const, font: "Helvetica" },
+      { key: "subtotal",  label: "SUBTOTAL", width: 65, align: "right"  as const, font: "Helvetica" },
+      { key: "taxAmount", label: "TAX",      width: 58, align: "right"  as const, font: "Helvetica" },
+      { key: "total",     label: "TOTAL",    width: 62, align: "right"  as const, font: "Helvetica" },
+      {
+        key: "status", label: "STATUS",
+        width: pageWidth - (95 + 88 + 90 + 65 + 58 + 62),
+        align: "center" as const, font: "Helvetica",
+      },
     ];
 
-    const rowHeight = 20;
+    const rowHeight = 24;
 
     function drawTableHeader(y: number) {
-      doc.rect(left, y, pageWidth, rowHeight).fill(COLORS.primary);
+      doc.rect(left, y, pageWidth, rowHeight).fill(COLORS.headerBg);
       let x = left;
-      doc.fontSize(8).font("Helvetica-Bold").fillColor("#FFFFFF");
+      doc.fontSize(7.5).font("Helvetica-Bold").fillColor("#E2E8F0");
       for (const c of cols) {
-        doc.text(c.label, x + 6, y + 6, { width: c.width - 12, align: c.align });
+        doc.text(c.label, x + 8, y + 8, {
+          width: c.width - 16,
+          align: c.align,
+          characterSpacing: 0.3,
+        });
         x += c.width;
       }
       return y + rowHeight;
@@ -348,8 +360,8 @@ export const exportTaxReportPDF = CatchAsyncError(
 
     let y = drawTableHeader(doc.y);
 
-    orders.forEach((o:any, i:any) => {
-      if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 30) {
+    orders.forEach((o: any, i: number) => {
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 40) {
         doc.addPage();
         y = drawTableHeader(doc.page.margins.top);
       }
@@ -357,9 +369,11 @@ export const exportTaxReportPDF = CatchAsyncError(
       if (i % 2 === 0) {
         doc.rect(left, y, pageWidth, rowHeight).fill(COLORS.rowAlt);
       }
+      // subtle row divider
+      doc.moveTo(left, y + rowHeight).lineTo(left + pageWidth, y + rowHeight)
+        .strokeColor(COLORS.border).lineWidth(0.5).stroke();
 
       let x = left;
-      doc.fontSize(8).font("Helvetica").fillColor(COLORS.textBody);
 
       const rowVals: Record<string, string> = {
         ref:       o.ref,
@@ -368,42 +382,61 @@ export const exportTaxReportPDF = CatchAsyncError(
           month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
         }),
         customer:  o.customer,
-        subtotal:  o.subtotal.toFixed(2),
-        taxAmount: o.taxAmount.toFixed(2),
-        total:     o.total.toFixed(2),
+        subtotal:  money(o.subtotal),
+        taxAmount: money(o.taxAmount),
+        total:     money(o.total),
       };
 
       for (const c of cols) {
         if (c.key === "status") continue;
-        doc.fillColor(COLORS.textBody).text(rowVals[c.key] ?? "", x + 6, y + 6, {
-          width: c.width - 12,
-          align: c.align,
-        });
+        doc
+          .fontSize(c.key === "ref" ? 7.5 : 8)
+          .font(c.key === "ref" ? "Courier" : "Helvetica")
+          .fillColor(COLORS.textBody)
+          .text(rowVals[c.key] ?? "", x + 8, y + 8, {
+            width: c.width - 16,
+            align: c.align,
+            lineBreak: false,
+            ellipsis: true,
+          });
         x += c.width;
       }
 
-      // Status badge
+      // Status badge — centered pill
       const statusCol = cols[cols.length - 1];
-      const badgeText = o.isExempt ? `Exempt` : "ABCT 17%";
+      const badgeText = o.isExempt ? "EXEMPT" : "ABCT 17%";
+      const badgeColor = o.isExempt ? COLORS.amber : COLORS.green;
       doc
-        .fontSize(7.5)
+        .fontSize(7)
         .font("Helvetica-Bold")
-        .fillColor(o.isExempt ? COLORS.amber : COLORS.green)
-        .text(badgeText, x + 6, y + 6, { width: statusCol.width - 12, align: "center" });
+        .fillColor(badgeColor)
+        .text(badgeText, x + 8, y + 8, {
+          width: statusCol.width - 16,
+          align: "center",
+          characterSpacing: 0.2,
+        });
 
       y += rowHeight;
     });
 
     // Totals row
-    doc.rect(left, y, pageWidth, rowHeight + 2).fill("#EDF2F7");
+    doc.rect(left, y, pageWidth, rowHeight + 2).fill("#EEF2FF");
+    doc.moveTo(left, y).lineTo(left + pageWidth, y)
+      .strokeColor(COLORS.primary).lineWidth(1).stroke();
     let xt = left;
-    const totalsVals = ["", "", "TOTAL", summary.totalSubtotal.toFixed(2), summary.totalTax.toFixed(2), summary.totalRevenue.toFixed(2), ""];
+    const totalsVals = [
+      "", "", "TOTAL",
+      money(summary.totalSubtotal),
+      money(summary.totalTax),
+      money(summary.totalRevenue),
+      "",
+    ];
     cols.forEach((c, idx) => {
       doc
         .fontSize(8.5)
         .font("Helvetica-Bold")
         .fillColor(COLORS.primary)
-        .text(totalsVals[idx], xt + 6, y + 7, { width: c.width - 12, align: c.align });
+        .text(totalsVals[idx], xt + 8, y + 9, { width: c.width - 16, align: c.align });
       xt += c.width;
     });
 
@@ -415,7 +448,7 @@ export const exportTaxReportPDF = CatchAsyncError(
         .fontSize(7)
         .fillColor(COLORS.textMuted)
         .text(
-          `Page ${i + 1} of ${range.count}`,
+          `Page ${i + 1} of ${range.count}  ·  ABCT Tax Report`,
           left,
           doc.page.height - 25,
           { width: pageWidth, align: "center" },
