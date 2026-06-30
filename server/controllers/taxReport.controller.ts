@@ -8,16 +8,11 @@ import ExcelJS from "exceljs";
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Format a JS Date → "YYYY-MM-DD" in local time */
+
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Round to 2 decimal places */
-const r2 = (n: number) => Math.round(n * 100) / 100;
 
-/**
- * Fetch POS orders from Odoo for a given date range.
- * Returns raw Odoo records.
- */
+const r2 = (n: number) => Math.round(n * 100) / 100;
 async function fetchPosOrders(dateFrom: string, dateTo: string) {
   return odooRequest(
     "pos.order",
@@ -35,7 +30,7 @@ async function fetchPosOrders(dateFrom: string, dateTo: string) {
         "amount_total",
         "amount_tax",
         "partner_id",
-        "note",
+        "internal_note",
         "session_id",
       ],
       order: "date_order asc",
@@ -44,11 +39,8 @@ async function fetchPosOrders(dateFrom: string, dateTo: string) {
   );
 }
 
-/**
- * Map a raw Odoo order → clean report row.
- */
 function mapOrder(o: any) {
-  const note: string = o.note || "";
+  const note: string = o.internal_note || "";
   const isExempt     = note.startsWith("TAX_EXEMPT:");
   const taxReason    = isExempt
     ? note.replace("TAX_EXEMPT:", "")
@@ -70,9 +62,8 @@ function mapOrder(o: any) {
   };
 }
 
-/**
- * Build a summary object from mapped rows.
- */
+
+
 function buildSummary(rows: ReturnType<typeof mapOrder>[]) {
   const totalOrders   = rows.length;
   const totalSubtotal = r2(rows.reduce((s, r) => s + r.subtotal,  0));
