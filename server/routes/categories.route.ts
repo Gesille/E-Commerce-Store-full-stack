@@ -10,7 +10,7 @@ const categoryRouter = express.Router();
 
 categoryRouter.post("/create-category",refreshTokenMiddleware,authorizeRoles("admin"),isAuthenticated,createCategory);
 
-categoryRouter.get("/getcategories",refreshTokenMiddleware,isAuthenticated,getCategories)
+categoryRouter.get("/getcategories",isAuthenticated,getCategories)
 
 categoryRouter.put("/update-category/:id",refreshTokenMiddleware,isAuthenticated,authorizeRoles("admin"),updateCategory)
 
