@@ -1079,7 +1079,7 @@ export const createOrder = CatchAsyncError(
           product_id:        item.realProductId,
           qty_done:          item.qty,             // Odoo ≤16
           quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
-          product_uom_id:    item.uomId,
+          uom_id:            item.uomId,           // ← was 'product_uom_id', renamed to 'uom_id' in this Odoo version
           location_id:        sourceLocationId,
           location_dest_id:   destLocationId,
           picking_id:         pickingId,
