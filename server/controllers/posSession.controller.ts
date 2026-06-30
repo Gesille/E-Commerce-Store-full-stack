@@ -923,52 +923,52 @@ export const createOrder = CatchAsyncError(
     // ─── RESOLVE PRODUCTS + STOCK CHECK ───────────────────────────
     const resolvedCart: any[] = [];
 
-   for (const item of cart) {
-  const product = await odooRequest(
-    "product.product",
-    "search_read",
-    [[["product_tmpl_id", "=", Number(item.productId)]]],
-    { fields: ["id", "name", "uom_id"], limit: 1 },
-  );
+    for (const item of cart) {
+      const product = await odooRequest(
+        "product.product",
+        "search_read",
+        [[["product_tmpl_id", "=", Number(item.productId)]]],
+        { fields: ["id", "name", "uom_id"], limit: 1 },
+      );
 
-  if (!product.length) {
-    return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
-  }
+      if (!product.length) {
+        return next(new ErrorHandler(`Product ${item.productId} not found`, 400));
+      }
 
-  const realProduct = product[0];
+      const realProduct = product[0];
 
-  // ─── Compute available stock from quants, same as product service ───
-  const quants = await odooRequest(
-    "stock.quant",
-    "search_read",
-    [[["product_id", "=", realProduct.id], ["location_id.usage", "=", "internal"]]],
-    { fields: ["quantity"] },
-  );
-  const availableQty = Math.max(
-    0,
-    quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0),
-  );
+      // ─── Compute available stock from quants, same as product service ───
+      const quants = await odooRequest(
+        "stock.quant",
+        "search_read",
+        [[["product_id", "=", realProduct.id], ["location_id.usage", "=", "internal"]]],
+        { fields: ["quantity"] },
+      );
+      const availableQty = Math.max(
+        0,
+        quants.reduce((sum: number, q: any) => sum + (q.quantity || 0), 0),
+      );
 
-  console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
+      console.log("[STOCK CHECK]", realProduct.name, "| AVAILABLE:", availableQty, "| REQUESTED:", item.qty);
 
-  if (availableQty <= 0) {
-    return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
-  }
-  if (availableQty < item.qty) {
-    return next(new ErrorHandler(
-      `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
-    ));
-  }
+      if (availableQty <= 0) {
+        return next(new ErrorHandler(`"${realProduct.name}" is out of stock`, 400));
+      }
+      if (availableQty < item.qty) {
+        return next(new ErrorHandler(
+          `"${realProduct.name}" only has ${availableQty} unit(s) left in stock`, 400,
+        ));
+      }
 
-  resolvedCart.push({
-    ...item,
-    realProductId:   realProduct.id,
-    realProductName: realProduct.name,
-    uomId:           realProduct.uom_id?.[0],
-  });
-}
+      resolvedCart.push({
+        ...item,
+        realProductId:   realProduct.id,
+        realProductName: realProduct.name,
+        uomId:           realProduct.uom_id?.[0],
+      });
+    }
+
     // ─── TAX RATE ─────────────────────────────────────────────────
-
     const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
     const abctTaxId = await getABCTTaxId();
     const lineTaxIds =
@@ -991,7 +991,7 @@ export const createOrder = CatchAsyncError(
         qty:                 item.qty,
         price_unit:          item.price,
         discount:            item.discount || 0,
-        tax_ids:             lineTaxIds, 
+        tax_ids:             lineTaxIds,
         price_subtotal:      lineSubtotal,
         price_subtotal_incl: lineSubtotal + lineTax,
         note:                item.note || false,
@@ -1021,8 +1021,7 @@ export const createOrder = CatchAsyncError(
     // ─── CREATE ORDER IN ODOO ─────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;
     let orderId: number;
-const fields = await odooRequest("pos.order", "fields_get", [], { attributes: ["string", "type"] });
-console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
+
     try {
       orderId = await odooRequest("pos.order", "create", [{
         session_id:    session.id,
@@ -1035,8 +1034,8 @@ console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
         amount_total:  amountTotal,
         amount_tax:    totalTaxAmount,
         amount_return: amountReturn,
-         internal_note:        taxNote || false,        // system/audit note
-  general_customer_note: note || false, 
+        internal_note:         taxNote || false, // system/audit note
+        general_customer_note: note || false,
       }]);
       console.log("[POS] ORDER CREATED:", orderId);
     } catch (err: any) {
@@ -1052,93 +1051,65 @@ console.log(Object.keys(fields).filter(f => f.toLowerCase().includes("note")));
       console.error("[POS PAYMENT ERROR]", err?.message);
     }
 
-    // ─── FORCE STOCK DECREASE ─────────────────────────────────────
- 
-try {
-  const pickingId = await odooRequest("stock.picking", "create", [{
-    picking_type_id:  pickingTypeId,
-    location_id:      sourceLocationId,
-    location_dest_id: destLocationId,
-    origin:           odooRef,
-  }]);
+    // ─── FORCE STOCK DECREASE (single attempt, properly tracked) ──
+    let stockUpdateFailed = false;
+    let stockErrorMessage: string | undefined;
 
-  for (const item of resolvedCart) {
-    const moveId = await odooRequest("stock.move", "create", [{
-      description_picking: item.realProductName,
-      product_id:          item.realProductId,
-      product_uom_qty:     item.qty,
-      product_uom:         item.uomId,        // ← was missing, required field
-      location_id:         sourceLocationId,
-      location_dest_id:    destLocationId,
-      picking_id:          pickingId,
-    }]);
+    try {
+      // One-time debug: confirm the real UoM field name(s) stock.move accepts
+      // in this Odoo version. Check server logs for "[stock.move fields]"
+      // and remove this block once confirmed.
+      const moveFields = await odooRequest(
+        "stock.move",
+        "fields_get",
+        [],
+        { attributes: ["string", "type"] },
+      );
+      console.log(
+        "[stock.move fields]",
+        Object.keys(moveFields).filter((f) => f.toLowerCase().includes("uom")),
+      );
 
-    await odooRequest("stock.move.line", "create", [{
-      move_id:           moveId,
-      product_id:        item.realProductId,
-      qty_done:          item.qty,             // Odoo ≤16
-      quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
-      product_uom_id:    item.uomId,
-      location_id:        sourceLocationId,
-      location_dest_id:   destLocationId,
-      picking_id:         pickingId,
-    }]);
-  }
+      const pickingId = await odooRequest("stock.picking", "create", [{
+        picking_type_id:  pickingTypeId,
+        location_id:      sourceLocationId,
+        location_dest_id: destLocationId,
+        origin:           odooRef,
+      }]);
 
-  await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
-  await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
-  await odooRequest("stock.picking", "button_validate", [[pickingId]]);
+      for (const item of resolvedCart) {
+        const moveId = await odooRequest("stock.move", "create", [{
+          description_picking: item.realProductName,
+          product_id:          item.realProductId,
+          product_uom_qty:     item.qty,
+          product_uom:         item.uomId,        // ← verify against moveFields log above
+          location_id:         sourceLocationId,
+          location_dest_id:    destLocationId,
+          picking_id:          pickingId,
+        }]);
 
-  console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
-} catch (err: any) {
-  console.error("[STOCK UPDATE ERROR]", err?.message, err);
- 
-}
+        await odooRequest("stock.move.line", "create", [{
+          move_id:           moveId,
+          product_id:        item.realProductId,
+          qty_done:          item.qty,             // Odoo ≤16
+          quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
+          product_uom_id:    item.uomId,
+          location_id:        sourceLocationId,
+          location_dest_id:   destLocationId,
+          picking_id:         pickingId,
+        }]);
+      }
 
-let stockUpdateFailed = false;
-let stockErrorMessage: string | undefined;
-try {
-  const pickingId = await odooRequest("stock.picking", "create", [{
-    picking_type_id:  pickingTypeId,
-    location_id:      sourceLocationId,
-    location_dest_id: destLocationId,
-    origin:           odooRef,
-  }]);
+      await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
+      await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
+      await odooRequest("stock.picking", "button_validate", [[pickingId]]);
 
-  for (const item of resolvedCart) {
-    const moveId = await odooRequest("stock.move", "create", [{
-      description_picking: item.realProductName,
-      product_id:          item.realProductId,
-      product_uom_qty:     item.qty,
-      product_uom:         item.uomId,        // ← was missing, required field
-      location_id:         sourceLocationId,
-      location_dest_id:    destLocationId,
-      picking_id:          pickingId,
-    }]);
-
-    await odooRequest("stock.move.line", "create", [{
-      move_id:           moveId,
-      product_id:        item.realProductId,
-      qty_done:          item.qty,             // Odoo ≤16
-      quantity:          item.qty,             // Odoo 17+ (harmless extra field if older)
-      product_uom_id:    item.uomId,
-      location_id:        sourceLocationId,
-      location_dest_id:   destLocationId,
-      picking_id:         pickingId,
-    }]);
-  }
-
-  await odooRequest("stock.picking", "action_confirm", [[pickingId]]);
-  await odooRequest("stock.picking", "action_assign", [[pickingId]]); // reserve, helps validate succeed cleanly
-  await odooRequest("stock.picking", "button_validate", [[pickingId]]);
-
-  console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
-} catch (err: any) {
-  console.error("[STOCK UPDATE ERROR]", err?.message, err);
-  stockUpdateFailed = true;
-  stockErrorMessage = err?.message;
- 
-}
+      console.log("[STOCK UPDATED SUCCESSFULLY]", { pickingId });
+    } catch (err: any) {
+      console.error("[STOCK UPDATE ERROR]", err?.message, err);
+      stockUpdateFailed = true;
+      stockErrorMessage = err?.message;
+    }
 
     // ─── SAVE TO MONGODB (shift tracking only) ────────────────────
     try {
@@ -1190,20 +1161,20 @@ try {
     });
 
     // ─── RESPONSE ─────────────────────────────────────────────────
-   res.status(201).json({
-  success: true,
-  message: stockUpdateFailed
-    ? "Order created and paid, but stock update FAILED — check inventory manually"
-    : "Order created successfully and stock updated",
-  orderId,
-  stockUpdateFailed,
-  ...(stockUpdateFailed ? { stockError: stockErrorMessage } : {}),
-  tax: {
-    rate:   TAX_RATE_EFFECTIVE,
-    amount: Math.round(totalTaxAmount * 100) / 100,
-    reason: taxReason,
-  },
-});
+    res.status(201).json({
+      success: true,
+      message: stockUpdateFailed
+        ? "Order created and paid, but stock update FAILED — check inventory manually"
+        : "Order created successfully and stock updated",
+      orderId,
+      stockUpdateFailed,
+      ...(stockUpdateFailed ? { stockError: stockErrorMessage } : {}),
+      tax: {
+        rate:   TAX_RATE_EFFECTIVE,
+        amount: Math.round(totalTaxAmount * 100) / 100,
+        reason: taxReason,
+      },
+    });
   },
 );
 
