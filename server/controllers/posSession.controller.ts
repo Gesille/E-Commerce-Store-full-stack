@@ -1056,20 +1056,6 @@ export const createOrder = CatchAsyncError(
     let stockErrorMessage: string | undefined;
 
     try {
-      // One-time debug: confirm the real UoM field name(s) stock.move accepts
-      // in this Odoo version. Check server logs for "[stock.move fields]"
-      // and remove this block once confirmed.
-      const moveFields = await odooRequest(
-        "stock.move",
-        "fields_get",
-        [],
-        { attributes: ["string", "type"] },
-      );
-      console.log(
-        "[stock.move fields]",
-        Object.keys(moveFields).filter((f) => f.toLowerCase().includes("uom")),
-      );
-
       const pickingId = await odooRequest("stock.picking", "create", [{
         picking_type_id:  pickingTypeId,
         location_id:      sourceLocationId,
@@ -1082,10 +1068,10 @@ export const createOrder = CatchAsyncError(
           description_picking: item.realProductName,
           product_id:          item.realProductId,
           product_uom_qty:     item.qty,
-          product_uom:         item.uomId,        // ← verify against moveFields log above
-          location_id:         sourceLocationId,
-          location_dest_id:    destLocationId,
-          picking_id:          pickingId,
+          uom_id:               item.uomId,        // ← was 'product_uom', this Odoo instance uses 'uom_id'
+          location_id:          sourceLocationId,
+          location_dest_id:     destLocationId,
+          picking_id:           pickingId,
         }]);
 
         await odooRequest("stock.move.line", "create", [{
@@ -1177,7 +1163,6 @@ export const createOrder = CatchAsyncError(
     });
   },
 );
-
 export const getSessionOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const sessionId = Number(req.params.sessionId);
