@@ -12,9 +12,6 @@ const taxReportRouter = express.Router();
 
 taxReportRouter.use(isAuthenticated, authorizeRoles("admin"));
 
-
-
-
 taxReportRouter.get("/taxes-daily", getDailyTaxReport);
 
 taxReportRouter.get("/taxes-monthly", getMonthlyTaxReport);

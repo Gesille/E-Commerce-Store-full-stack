@@ -269,7 +269,7 @@ export const downloadTaxReportPDF = (
     | { year: number; month: number }
     | { dateFrom: string; dateTo: string },
 ) => {
-  const base = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/export`;
+  const base = `${process.env.NEXT_PUBLIC_SERVER_URL}/api/v1/export`;
   const qs   = new URLSearchParams(
     params as Record<string, string>,
   ).toString();
