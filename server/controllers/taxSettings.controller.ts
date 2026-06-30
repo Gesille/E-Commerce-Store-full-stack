@@ -92,18 +92,32 @@ export const deleteHoliday = CatchAsyncError(
 
 
 export const getExemptCustomers = CatchAsyncError(
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response, next: NextFunction) => {
+    const fpId = await getTaxExemptFiscalPositionId();
+
+    if (!fpId) {
+      return res.json({ success: true, count: 0, customers: [] });
+    }
+
     const customers = await odooRequest(
       "res.partner",
       "search_read",
-      [[["x_tax_exempt", "=", true], ["customer_rank", ">", 0]]],
+      [[
+        ["property_account_position_id", "=", fpId],
+        ["customer_rank", ">", 0],
+      ]],
       {
-        fields: ["id", "name", "email", "phone", "is_company", "x_tax_exempt"],
+        fields: ["id", "name", "email", "phone", "is_company", "property_account_position_id"],
         limit: 200,
       },
     );
 
-    res.json({ success: true, count: customers.length, customers });
+    const formatted = customers.map((c: any) => ({
+      ...c,
+      isTaxExempt: true,
+    }));
+
+    res.json({ success: true, count: formatted.length, customers: formatted });
   },
 );
 
@@ -132,17 +146,20 @@ export const setCustomerExemption = CatchAsyncError(
       return next(new ErrorHandler("Customer not found in Odoo", 404));
     }
 
-   
-    const writePayload: Record<string, any> = { x_tax_exempt: exempt };
+    const writePayload: Record<string, any> = {};
 
     if (exempt) {
-   
       const fpId = await getTaxExemptFiscalPositionId();
-      if (fpId) {
-        writePayload.property_account_position_id = fpId;
+      if (!fpId) {
+        return next(
+          new ErrorHandler(
+            "Tax Exempt fiscal position not found in Odoo — create it first",
+            500,
+          ),
+        );
       }
+      writePayload.property_account_position_id = fpId;
     } else {
-     
       writePayload.property_account_position_id = false;
     }
 
