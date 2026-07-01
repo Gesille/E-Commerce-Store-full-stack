@@ -7,7 +7,7 @@ import userModel from "../models/user.model.js";
 import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
 import mongoose from "mongoose";
-import { getABCTTaxId, getTaxExemptFiscalPositionId, resolveTaxRate } from "../services/tax.service.js";
+import { getABCTTaxId, getAllABCTTaxRecords, getTaxExemptFiscalPositionId, resolveTaxRate } from "../services/tax.service.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -512,13 +512,7 @@ export async function getOrCreateWalkInCustomer(): Promise<number> {
   cachedWalkInPartnerId = newId;
   return newId;
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// Refund payment method resolver — a "Return of POS-XXXX" order created via
-// Odoo's return flow lands in draft with amount_total < 0 and amount_paid = 0
-// because no refund payment line was ever attached. We recover it by adding
-// a pos.payment matching the refund amount, preferring the same method used
-// on the original order (so a card refund doesn't get quietly repaid in cash).
-// ─────────────────────────────────────────────────────────────────────────────
+
 async function resolveRefundPaymentMethodId(order: any, sessionId: number): Promise<number> {
   const match = /Return of (\S+)/.exec(order.pos_reference || order.name || "");
   const originalRef = match?.[1];
@@ -564,78 +558,80 @@ async function resolveRefundPaymentMethodId(order: any, sessionId: number): Prom
 
 
 async function diagnoseSessionTaxDelta(sessionId: number) {
-  const abctTaxId = await getABCTTaxId();
-  let currentAbctRate: number | null = null;
-  if (abctTaxId) {
-    const [abctTax] = await odooRequest("account.tax", "read", [[abctTaxId]], {
-      fields: ["id", "amount"],
-    });
-    currentAbctRate = abctTax?.amount ? abctTax.amount / 100 : null;
-  }
- 
+  const abctRecords = await getAllABCTTaxRecords(); // ← all historical ids+rates
+  const abctIds = new Set(abctRecords.map((r) => r.id));
+  const rateById = new Map(abctRecords.map((r) => [r.id, r.amount]));
+
   const orders = await odooRequest(
     "pos.order",
     "search_read",
     [[["session_id", "=", sessionId]]],
-    { fields: ["id", "pos_reference", "amount_total", "amount_tax", "state", "lines", "partner_id"] },
+    { fields: ["id", "pos_reference", "amount_total", "amount_tax", "state", "lines", "partner_id", "internal_note"] },
   );
- 
+
   const allLineIds = orders.flatMap((o: any) => o.lines || []);
   const lines = allLineIds.length
     ? await odooRequest(
         "pos.order.line",
         "search_read",
         [[["id", "in", allLineIds]]],
-        {
-          fields: [
-            "id", "order_id", "product_id",
-            "price_subtotal", "price_subtotal_incl", "tax_ids",
-          ],
-        },
+        { fields: ["id", "order_id", "product_id", "price_subtotal", "price_subtotal_incl", "tax_ids"] },
       )
     : [];
- 
+
   const linesByOrder: Record<number, any[]> = {};
   for (const l of lines) {
     const oid = l.order_id[0];
     (linesByOrder[oid] ||= []).push(l);
   }
- 
-  // Orders in a state Odoo excludes from the accounting moves it posts.
-  // Extend this set if your Odoo version also skips other states (e.g.
-  // "draft" shouldn't reach here since closeSession resolves/blocks those
-  // earlier, but it's harmless to include for safety).
+
   const STATES_EXCLUDED_FROM_POSTING = new Set(["cancel", "draft"]);
- 
+
   const findings = orders.map((o: any) => {
+    // Ground truth if the order was created after the RATE: stamp went in.
+    const noteMatch = /RATE:([\d.]+)/.exec(o.internal_note || "");
+    const stampedRate = noteMatch ? Number(noteMatch[1]) : null;
+
     const orderLines = linesByOrder[o.id] || [];
- 
+
     const lineFindings = orderLines
       .map((l: any) => {
         const storedTax = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
-        const hasAbctTax = Array.isArray(l.tax_ids) && abctTaxId ? l.tax_ids.includes(abctTaxId) : false;
+
+        // Which (if any) historical ABCT record is on this line?
+        const matchedTaxId = (l.tax_ids || []).find((id: number) => abctIds.has(id));
+        const hasAnyAbctTax = matchedTaxId !== undefined;
+
+        // Prefer the stamped rate (ground truth); fall back to whichever
+        // historical ABCT record's rate is on the line; only treat as truly
+        // untaxed if neither is available.
+        const effectiveRate =
+          stampedRate ?? (hasAnyAbctTax ? rateById.get(matchedTaxId)! : null);
+
         const expectedTax =
-          hasAbctTax && currentAbctRate !== null
-            ? Math.round(l.price_subtotal * currentAbctRate * 100) / 100
+          effectiveRate !== null
+            ? Math.round(l.price_subtotal * effectiveRate * 100) / 100
             : 0;
         const delta = Math.round((storedTax - expectedTax) * 100) / 100;
- 
+
         return {
           lineId: l.id,
           product: l.product_id?.[1],
           priceSubtotal: l.price_subtotal,
           storedTax,
-          hasAbctTaxOnLine: hasAbctTax,
-          expectedTaxAtCurrentRate: expectedTax,
+          hasAbctTaxOnLine: hasAnyAbctTax,
+          matchedTaxId: matchedTaxId ?? null,
+          rateSource: stampedRate !== null ? "order_note" : hasAnyAbctTax ? "historical_tax_record" : "none",
+          expectedTaxAtEffectiveRate: expectedTax,
           delta,
           mismatched: Math.abs(delta) > 0.01,
         };
       })
       .filter((f: any) => f.mismatched);
- 
+
     const orderTaxDelta = lineFindings.reduce((s: number, f: any) => s + f.delta, 0);
     const excludedFromTotal = STATES_EXCLUDED_FROM_POSTING.has(o.state);
- 
+
     return {
       orderId: o.id,
       reference: o.pos_reference,
@@ -648,22 +644,20 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
       lines: lineFindings,
     };
   });
- 
-  // Only sum orders Odoo would actually post — this is what needs to line
-  // up against the wizard's amount_to_balance.
+
   const totalDelta = findings
     .filter((f: any) => !f.excludedFromTotal)
     .reduce((s: number, f: any) => s + f.orderTaxDelta, 0);
- 
+
   const flaggedOrders = findings.filter((f: any) => f.mismatchedLineCount > 0);
   const excludedOrderCount = flaggedOrders.filter((f: any) => f.excludedFromTotal).length;
- 
+
   return {
-    currentAbctRate,
+    abctRecords, // now returns every historical rate/id pair for transparency
     totalOrders: orders.length,
     totalTaxDeltaAcrossSession: Math.round(totalDelta * 100) / 100,
     flaggedOrderCount: flaggedOrders.length,
-    excludedOrderCount, // flagged orders (e.g. cancelled) that were kept out of the total above
+    excludedOrderCount,
     flaggedOrders,
   };
 }
@@ -1590,8 +1584,9 @@ export const createOrder = CatchAsyncError(
     }
 
     // ─── BUILD ORDER NOTE ─────────────────────────────────────────
-    const taxNote = taxReason !== "normal" ? `TAX_EXEMPT:${taxReason}` : "";
-    const orderNote = [taxNote, note].filter(Boolean).join(" | ");
+ 
+const taxNote = `RATE:${TAX_RATE_EFFECTIVE}` + (taxReason !== "normal" ? `|${taxReason}` : "");
+const orderNote = [taxNote, note].filter(Boolean).join(" | ");
 
     // ─── CREATE ORDER IN ODOO ─────────────────────────────────────
     const odooRef = `POS-${Date.now()}`;

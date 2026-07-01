@@ -5,7 +5,7 @@ import TaxSettings from "../models/taxSettings.model.js";
 let _abctTaxId: number | null = null;
 let _taxExemptFiscalPositionId: number | null = null;
 let _taxHolidayFiscalPositionId: number | null = null;
-
+let _allAbctTaxRecords: { id: number; amount: number }[] | null = null;
 // ─── ABCT Tax ID ──────────────────────────────────────────────────────────────
 
 export const getABCTTaxId = async (): Promise<number | null> => {
@@ -28,6 +28,25 @@ export const getABCTTaxId = async (): Promise<number | null> => {
   return _abctTaxId;
 };
 
+export const getAllABCTTaxRecords = async (): Promise<{ id: number; amount: number }[]> => {
+  if (_allAbctTaxRecords) return _allAbctTaxRecords;
+
+  const taxes = await odooRequest(
+    "account.tax",
+    "search_read",
+    [[["name", "=", "ABCT"], ["type_tax_use", "=", "sale"]]],
+    { fields: ["id", "amount"], context: { active_test: false } },
+  );
+
+  const records = taxes.map((t: any) => ({ id: t.id, amount: t.amount / 100 }));
+  _allAbctTaxRecords = records;
+
+  console.log(
+    "[TAX] All historical ABCT tax records:",
+    records.map((t:any) => `id=${t.id} rate=${t.amount * 100}%`).join(", "),
+  );
+  return records;
+};
 // ─── Fiscal Position IDs ──────────────────────────────────────────────────────
 
 export const getTaxExemptFiscalPositionId = async (): Promise<number | null> => {
@@ -109,4 +128,5 @@ export const clearTaxCache = () => {
   _abctTaxId = null;
   _taxExemptFiscalPositionId = null;
   _taxHolidayFiscalPositionId = null;
+  _allAbctTaxRecords = null; 
 };
