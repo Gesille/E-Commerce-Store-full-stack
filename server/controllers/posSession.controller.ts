@@ -1932,3 +1932,78 @@ export const removeHeldOrder = CatchAsyncError(
     res.status(200).json({ success: true, message: "Held order removed" });
   }
 );
+
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ONE-TIME REPAIR: fix draft orders where payment_ids sum > amount_total
+// (caused by tendered cash/change never being capped before creation).
+// Run once, then remove.
+// ─────────────────────────────────────────────────────────────────────────────
+export const repairOverpaidDraftOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { sessionId } = req.body; 
+    const domain: any[] = [["state", "=", "draft"]];
+    if (sessionId) domain.push(["session_id", "=", sessionId]);
+
+    const draftOrders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [domain],
+      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids"] },
+    );
+
+    const results: any[] = [];
+
+    for (const order of draftOrders) {
+      // Only touch orders that are overpaid, not genuinely underpaid.
+      if (order.amount_paid < order.amount_total) {
+        results.push({ id: order.id, ref: order.pos_reference, skipped: "genuinely underpaid" });
+        continue;
+      }
+
+      try {
+        const payments = await odooRequest(
+          "pos.payment",
+          "search_read",
+          [[["id", "in", order.payment_ids]]],
+          { fields: ["id", "amount"] },
+        );
+
+        // Cap payment amounts down so their sum == amount_total exactly,
+        // largest-first so rounding remainder lands on the biggest line.
+        let remaining = order.amount_total;
+        const sorted = [...payments].sort((a, b) => b.amount - a.amount);
+
+        for (const p of sorted) {
+          const applied = Math.max(0, Math.min(p.amount, remaining));
+          remaining = Math.round((remaining - applied) * 100) / 100;
+          if (applied !== p.amount) {
+            await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
+          }
+        }
+
+        // Recompute amount_paid on the order to match the corrected payments,
+        // and re-derive amount_return so the change amount is preserved there
+        // instead of inside payment_ids.
+        const correctedPaid = order.amount_total; // now sums exactly
+        const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
+
+        await odooRequest("pos.order", "write", [
+          [order.id],
+          { amount_paid: correctedPaid, amount_return: change },
+        ]);
+
+        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+
+        results.push({ id: order.id, ref: order.pos_reference, status: "repaired", change });
+      } catch (err: any) {
+        results.push({ id: order.id, ref: order.pos_reference, status: "failed", error: err?.message });
+      }
+    }
+
+    res.status(200).json({ success: true, results });
+  },
+);

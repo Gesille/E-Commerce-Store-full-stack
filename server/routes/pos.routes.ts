@@ -25,6 +25,7 @@ import {
   getPosOrderById,
   holdOrderToOdoo,
   getHeldOrders,
+  repairOverpaidDraftOrders,
 } from "../controllers/posSession.controller.js";
 
 const POSRouter = Router();
@@ -154,5 +155,5 @@ POSRouter.get(
   authorizeRoles("admin", "cashier"),
   getHeldOrders,
 );
-
+POSRouter.post("/repair-overpaid-orders", repairOverpaidDraftOrders);
 export default POSRouter;
