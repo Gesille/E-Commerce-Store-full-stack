@@ -812,41 +812,85 @@ export const closeSession = CatchAsyncError(
 
     console.log("[CLOSE SESSION] State after closing_control:", verified?.state);
 
-    // ── Fallback: closing_control ran but didn't actually close ─────────────
-    // If we're still "opened" or stuck in "closing_control", try calling
-    // action_pos_session_close directly — this is the method that actually
-    // posts the closing journal entries and flips the state, and is what
-    // the wizard calls internally after the user confirms in the UI.
-    if (verified?.state !== "closed") {
+    // ── Odoo returned the "Force Close Session" wizard instead of closing ───
+    // This happens when action_pos_session_close hits an internal error it
+    // can't resolve automatically (commonly: an unbalanced cash/bank
+    // statement difference with no default write-off account configured,
+    // or a broken accounting move). Odoo catches that error and opens
+    // pos.close.session.wizard so a human can see WHY and decide whether
+    // to force it through. The wizard's `message` field holds the actual
+    // underlying error — we MUST surface that instead of guessing, because
+    // silently force-closing could post an arbitrary balancing entry
+    // without anyone knowing what discrepancy it's writing off.
+    const isWizardAction = (result: any) =>
+      result?.res_model === "pos.close.session.wizard" && result?.res_id;
+
+    let wizardInfo: any = null;
+    if (isWizardAction(closingControlResult)) {
+      const [wizard] = await odooRequest(
+        "pos.close.session.wizard",
+        "read",
+        [[closingControlResult.res_id]],
+        { fields: ["message", "amount_to_balance", "account_id", "account_readonly"] },
+      );
+      wizardInfo = wizard;
+      console.log("[CLOSE SESSION] Force-close wizard detail:", JSON.stringify(wizard));
+    }
+
+    const { forceClose, balancingAccountId } = req.body as {
+      forceClose?: boolean;
+      balancingAccountId?: number;
+    };
+
+    if (verified?.state !== "closed" && wizardInfo) {
+      if (!forceClose) {
+        // Do NOT auto-force. Surface the real reason so a human decides.
+        return res.status(409).json({
+          success: false,
+          message:
+            "Odoo cannot close this session automatically — it needs a manual decision " +
+            "on a cash/accounting discrepancy before it can close.",
+          odooReason: wizardInfo.message || "No message provided by Odoo",
+          amountToBalance: wizardInfo.amount_to_balance ?? null,
+          suggestedAccountId: wizardInfo.account_id?.[0] ?? null,
+          suggestedAccountName: wizardInfo.account_id?.[1] ?? null,
+          accountIsEditable: wizardInfo.account_readonly === false,
+          howToResolve:
+            "Either close this session from the Odoo backend UI (Point of Sale > Orders > " +
+            "Sessions), where the wizard will let you review and confirm the balancing " +
+            "account, or resend this request with { forceClose: true } (and " +
+            "balancingAccountId if accountIsEditable is true) to accept the suggested entry.",
+        });
+      }
+
+      // ── Explicit admin override: force through the wizard ────────────────
       try {
-        const closeResult = await odooRequest(
-          "pos.session",
-          "action_pos_session_close",
-          [[sessionId]],
+        if (balancingAccountId) {
+          await odooRequest("pos.close.session.wizard", "write", [
+            [closingControlResult.res_id],
+            { account_id: balancingAccountId },
+          ]);
+        }
+        const forceResult = await odooRequest(
+          "pos.close.session.wizard",
+          "action_close_session",
+          [[closingControlResult.res_id]],
         );
         console.log(
-          "[CLOSE SESSION] action_pos_session_close result:",
-          JSON.stringify(closeResult),
+          "[CLOSE SESSION] Wizard action_close_session (forced) result:",
+          JSON.stringify(forceResult),
         );
       } catch (err: any) {
-        console.error(
-          "[CLOSE SESSION] action_pos_session_close fallback failed:",
-          err?.message,
-        );
+        console.error("[CLOSE SESSION] Forced close via wizard failed:", err?.message);
         return next(
-          new ErrorHandler(
-            err?.message ||
-              `Session is stuck in "${verified?.state}" and could not be force-closed. ` +
-              `It likely needs manual cash-difference confirmation in the Odoo backend.`,
-            409,
-          ),
+          new ErrorHandler(err?.message || "Failed to force-close session via wizard", 409),
         );
       }
 
       [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
         fields: ["id", "state"],
       });
-      console.log("[CLOSE SESSION] State after action_pos_session_close:", verified?.state);
+      console.log("[CLOSE SESSION] State after forced wizard close:", verified?.state);
     }
 
     // ── Final verification ────────────────────────────────────────────────
@@ -858,7 +902,7 @@ export const closeSession = CatchAsyncError(
       );
       return next(
         new ErrorHandler(
-          `Session is still "${verified?.state}" in Odoo after both closing attempts. ` +
+          `Session is still "${verified?.state}" in Odoo. ` +
           `It likely needs a manual cash-difference confirmation in the Odoo backend before it can fully close.`,
           409,
         ),
