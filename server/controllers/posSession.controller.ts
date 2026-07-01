@@ -479,11 +479,6 @@ export const confirmOpeningBalance = CatchAsyncError(
 
 
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Walk-in customer resolver (same find-or-create pattern as resolveOrCreateSupplier)
-// ─────────────────────────────────────────────────────────────────────────────
-
 let cachedWalkInPartnerId: number | null = null;
 
 export async function getOrCreateWalkInCustomer(): Promise<number> {
@@ -557,8 +552,53 @@ async function resolveRefundPaymentMethodId(order: any, sessionId: number): Prom
 }
 
 
+async function backfillMissingTaxOnSession(sessionId: number) {
+  const abctRecords = await getAllABCTTaxRecords();
+  if (!abctRecords.length) {
+    console.warn("[CLOSE SESSION] No ABCT tax record found — skipping tax backfill");
+    return { checked: 0, fixed: 0, fixedLineIds: [] as number[] };
+  }
+  const abctId = abctRecords[0].id;
+
+  const orders = await odooRequest(
+    "pos.order",
+    "search_read",
+    [[["session_id", "=", sessionId]]],
+    { fields: ["id", "lines"] },
+  );
+
+  const allLineIds = orders.flatMap((o: any) => o.lines || []);
+  if (!allLineIds.length) return { checked: 0, fixed: 0, fixedLineIds: [] as number[] };
+
+  const lines = await odooRequest(
+    "pos.order.line",
+    "search_read",
+    [[["id", "in", allLineIds]]],
+    { fields: ["id", "price_subtotal", "price_subtotal_incl", "tax_ids"] },
+  );
+
+  const toFix = lines.filter((l: any) => {
+    const taxCharged = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
+    const hasNoTaxId = !Array.isArray(l.tax_ids) || l.tax_ids.length === 0;
+    return taxCharged > 0.01 && hasNoTaxId;
+  });
+
+  if (toFix.length) {
+    await odooRequest("pos.order.line", "write", [
+      toFix.map((l: any) => l.id),
+      { tax_ids: [[6, 0, [abctId]]] },
+    ]);
+    console.log(
+      `[CLOSE SESSION] Tax backfill: fixed ${toFix.length}/${lines.length} lines missing tax_ids`,
+      toFix.map((l: any) => l.id),
+    );
+  }
+
+  return { checked: lines.length, fixed: toFix.length, fixedLineIds: toFix.map((l: any) => l.id) };
+}
+
 async function diagnoseSessionTaxDelta(sessionId: number) {
-  const abctRecords = await getAllABCTTaxRecords(); // ← all historical ids+rates
+  const abctRecords = await getAllABCTTaxRecords();
   const abctIds = new Set(abctRecords.map((r) => r.id));
   const rateById = new Map(abctRecords.map((r) => [r.id, r.amount]));
 
@@ -588,7 +628,6 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
   const STATES_EXCLUDED_FROM_POSTING = new Set(["cancel", "draft"]);
 
   const findings = orders.map((o: any) => {
-    // Ground truth if the order was created after the RATE: stamp went in.
     const noteMatch = /RATE:([\d.]+)/.exec(o.internal_note || "");
     const stampedRate = noteMatch ? Number(noteMatch[1]) : null;
 
@@ -597,14 +636,9 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
     const lineFindings = orderLines
       .map((l: any) => {
         const storedTax = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
-
-        // Which (if any) historical ABCT record is on this line?
         const matchedTaxId = (l.tax_ids || []).find((id: number) => abctIds.has(id));
         const hasAnyAbctTax = matchedTaxId !== undefined;
 
-        // Prefer the stamped rate (ground truth); fall back to whichever
-        // historical ABCT record's rate is on the line; only treat as truly
-        // untaxed if neither is available.
         const effectiveRate =
           stampedRate ?? (hasAnyAbctTax ? rateById.get(matchedTaxId)! : null);
 
@@ -653,7 +687,7 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
   const excludedOrderCount = flaggedOrders.filter((f: any) => f.excludedFromTotal).length;
 
   return {
-    abctRecords, // now returns every historical rate/id pair for transparency
+    abctRecords,
     totalOrders: orders.length,
     totalTaxDeltaAcrossSession: Math.round(totalDelta * 100) / 100,
     flaggedOrderCount: flaggedOrders.length,
@@ -661,6 +695,7 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
     flaggedOrders,
   };
 }
+
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -763,120 +798,119 @@ export const closeSession = CatchAsyncError(
 
       const stillDraft: any[] = [];
 
-     for (const order of draftOrders) {
-  const diagnostic: any = {
-    reference:   order.pos_reference,
-    amountTotal: order.amount_total,
-    amountPaid:  order.amount_paid,
-  };
+      for (const order of draftOrders) {
+        const diagnostic: any = {
+          reference:   order.pos_reference,
+          amountTotal: order.amount_total,
+          amountPaid:  order.amount_paid,
+        };
 
-  try {
-    const isRefund = order.amount_total < 0;
+        try {
+          const isRefund = order.amount_total < 0;
 
-    // ── Return/refund order missing its refund payment line ──────────────
-    if (isRefund && order.amount_paid === 0) {
-      const refundMethodId = await resolveRefundPaymentMethodId(order, Number(sessionId));
+          if (isRefund && order.amount_paid === 0) {
+            const refundMethodId = await resolveRefundPaymentMethodId(order, Number(sessionId));
 
-      await odooRequest("pos.payment", "create", [{
-        pos_order_id:       order.id,
-        amount:              order.amount_total,
-        payment_method_id:   refundMethodId,
-      }]);
+            await odooRequest("pos.payment", "create", [{
+              pos_order_id:       order.id,
+              amount:              order.amount_total,
+              payment_method_id:   refundMethodId,
+            }]);
 
-      await odooRequest("pos.order", "write", [
-        [order.id],
-        { amount_paid: order.amount_total, amount_return: 0 },
-      ]);
+            await odooRequest("pos.order", "write", [
+              [order.id],
+              { amount_paid: order.amount_total, amount_return: 0 },
+            ]);
 
-      try {
-        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-        console.log("[CLOSE SESSION] Recovered refund order:", order.pos_reference);
-        continue;
-      } catch (payErr: any) {
-        const msg: string = payErr?.message || "";
+            try {
+              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+              console.log("[CLOSE SESSION] Recovered refund order:", order.pos_reference);
+              continue;
+            } catch (payErr: any) {
+              const msg: string = payErr?.message || "";
 
-        if (msg.includes("does not contain a customer")) {
-          if (!order.partner_id) {
-            const walkInId = await getOrCreateWalkInCustomer();
-            await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered refund order via walk-in customer:", order.pos_reference);
-            continue;
+              if (msg.includes("does not contain a customer")) {
+                if (!order.partner_id) {
+                  const walkInId = await getOrCreateWalkInCustomer();
+                  await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                  console.log("[CLOSE SESSION] Recovered refund order via walk-in customer:", order.pos_reference);
+                  continue;
+                }
+                diagnostic.reason = "missing_customer_for_account_payment";
+                diagnostic.detail = msg;
+                stillDraft.push(diagnostic);
+                continue;
+              }
+
+              throw payErr;
+            }
           }
-          diagnostic.reason = "missing_customer_for_account_payment";
-          diagnostic.detail = msg;
-          stillDraft.push(diagnostic);
-          continue;
-        }
 
-        throw payErr;
-      }
-    }
+          const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
+          const isExactPaid = order.amount_paid === order.amount_total && order.amount_total !== 0;
 
-    const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
-    const isExactPaid = order.amount_paid === order.amount_total && order.amount_total !== 0;
+          if (isOverpaid) {
+            const payments = await odooRequest(
+              "pos.payment",
+              "search_read",
+              [[["id", "in", order.payment_ids]]],
+              { fields: ["id", "amount"] },
+            );
 
-    if (isOverpaid) {
-      const payments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["id", "in", order.payment_ids]]],
-        { fields: ["id", "amount"] },
-      );
+            let remaining = order.amount_total;
+            const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
 
-      let remaining = order.amount_total;
-      const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
+            for (const p of sorted) {
+              const applied = Math.max(0, Math.min(p.amount, remaining));
+              remaining = Math.round((remaining - applied) * 100) / 100;
+              if (applied !== p.amount) {
+                await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
+              }
+            }
 
-      for (const p of sorted) {
-        const applied = Math.max(0, Math.min(p.amount, remaining));
-        remaining = Math.round((remaining - applied) * 100) / 100;
-        if (applied !== p.amount) {
-          await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
-        }
-      }
+            const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
 
-      const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
-
-      await odooRequest("pos.order", "write", [
-        [order.id],
-        { amount_paid: order.amount_total, amount_return: change },
-      ]);
-    }
-
-    if (isOverpaid || isExactPaid) {
-      try {
-        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-        console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
-        continue;
-      } catch (payErr: any) {
-        const msg: string = payErr?.message || "";
-
-        if (msg.includes("does not contain a customer")) {
-          if (!order.partner_id) {
-            const walkInId = await getOrCreateWalkInCustomer();
-            await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered draft order via walk-in customer:", order.pos_reference);
-            continue;
+            await odooRequest("pos.order", "write", [
+              [order.id],
+              { amount_paid: order.amount_total, amount_return: change },
+            ]);
           }
-          diagnostic.reason = "missing_customer_for_account_payment";
-          diagnostic.detail = msg;
-          stillDraft.push(diagnostic);
-          continue;
+
+          if (isOverpaid || isExactPaid) {
+            try {
+              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+              console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+              continue;
+            } catch (payErr: any) {
+              const msg: string = payErr?.message || "";
+
+              if (msg.includes("does not contain a customer")) {
+                if (!order.partner_id) {
+                  const walkInId = await getOrCreateWalkInCustomer();
+                  await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                  console.log("[CLOSE SESSION] Recovered draft order via walk-in customer:", order.pos_reference);
+                  continue;
+                }
+                diagnostic.reason = "missing_customer_for_account_payment";
+                diagnostic.detail = msg;
+                stillDraft.push(diagnostic);
+                continue;
+              }
+
+              throw payErr;
+            }
+          }
+
+          diagnostic.reason = "underpaid_or_zero_total";
+        } catch (err: any) {
+          console.error("[CLOSE SESSION] Could not auto-resolve draft order:", order.pos_reference, err?.message);
+          diagnostic.reason = err?.message || "unknown_odoo_error";
         }
 
-        throw payErr;
+        stillDraft.push(diagnostic);
       }
-    }
-
-    diagnostic.reason = "underpaid_or_zero_total";
-  } catch (err: any) {
-    console.error("[CLOSE SESSION] Could not auto-resolve draft order:", order.pos_reference, err?.message);
-    diagnostic.reason = err?.message || "unknown_odoo_error";
-  }
-
-  stillDraft.push(diagnostic);
-}
 
       if (stillDraft.length) {
         console.log("[CLOSE SESSION] Unresolved draft orders detail:", stillDraft);
@@ -890,12 +924,6 @@ export const closeSession = CatchAsyncError(
     }
 
     // ── SESSION-WIDE CUSTOMER-ACCOUNT SWEEP ─────────────────────────────────
-    // action_pos_session_closing_control revalidates ALL orders in the
-    // session (any state) against the "Identify Customer" rule for the
-    // Customer Account payment method — not just the ones that were stuck
-    // in draft. Backfill any paid/done order using that payment method that
-    // still has no partner_id before calling closing control, or the same
-    // error resurfaces even after every draft is cleared.
     try {
       const accountMethods = await odooRequest(
         "pos.payment.method",
@@ -941,27 +969,27 @@ export const closeSession = CatchAsyncError(
       }
     } catch (sweepErr: any) {
       console.error("[CLOSE SESSION] Customer-account sweep failed:", sweepErr?.message);
-      // non-fatal — fall through and let closing control surface the real error if this didn't catch everything
+    }
+
+    // ── SESSION-WIDE TAX BACKFILL ────────────────────────────────────────────
+    // Repair any lines that charged tax but never got tax_ids attached
+    // (the historical root cause of "amounts to post" vs "amounts of the
+    // orders" mismatches). Must run BEFORE closing_control, since Odoo
+    // computes the accounting moves to post based on tax_ids at that point —
+    // fixing lines after the moves are posted wouldn't help.
+    try {
+      const backfillResult = await backfillMissingTaxOnSession(Number(sessionId));
+      if (backfillResult.fixed > 0) {
+        console.log(
+          `[CLOSE SESSION] Tax backfill repaired ${backfillResult.fixed} line(s) before closing control.`,
+        );
+      }
+    } catch (backfillErr: any) {
+      console.error("[CLOSE SESSION] Tax backfill failed:", backfillErr?.message);
+      // non-fatal — fall through, closing_control will surface any remaining issue
     }
 
     // ── Close active session in Odoo ─────────────────────────────────────────
-    // IMPORTANT: We do NOT touch Mongo (CashierShiftLog) until we've verified
-    // Odoo actually transitioned the session to "closed". Previously this
-    // marked shifts closed *before* calling Odoo, so any failure (cash
-    // discrepancy, missing journal config, unposted move, etc.) left Mongo
-    // saying "closed" while Odoo silently stayed "opened" — and the next
-    // "Open Session" click would just reattach to that same stale Odoo
-    // session instead of creating a new one, corrupting totals.
-    //
-    // NOTE ON ODOO BEHAVIOR: action_pos_session_closing_control does not
-    // always close the session by itself. In many Odoo versions it only
-    // computes the cash/theoretical difference and, when everything lines
-    // up, internally calls action_pos_session_close(). If it instead
-    // returns an action (e.g. a confirmation wizard for a cash difference)
-    // that action is meaningless over headless RPC — nothing happens and
-    // the session silently stays "opened". We log the raw return value so
-    // this is visible, and explicitly fall back to calling
-    // action_pos_session_close() ourselves when the state didn't move.
     let closingControlResult: any;
     try {
       closingControlResult = await odooRequest(
@@ -989,16 +1017,6 @@ export const closeSession = CatchAsyncError(
 
     console.log("[CLOSE SESSION] State after closing_control:", verified?.state);
 
-    // ── Odoo returned the "Force Close Session" wizard instead of closing ───
-    // This happens when action_pos_session_close hits an internal error it
-    // can't resolve automatically (commonly: an unbalanced cash/bank
-    // statement difference with no default write-off account configured,
-    // or a broken accounting move). Odoo catches that error and opens
-    // pos.close.session.wizard so a human can see WHY and decide whether
-    // to force it through. The wizard's `message` field holds the actual
-    // underlying error — we MUST surface that instead of guessing, because
-    // silently force-closing could post an arbitrary balancing entry
-    // without anyone knowing what discrepancy it's writing off.
     const isWizardAction = (result: any) =>
       result?.res_model === "pos.close.session.wizard" && result?.res_id;
 
@@ -1019,10 +1037,8 @@ export const closeSession = CatchAsyncError(
       balancingAccountId?: number;
     };
 
-   if (verified?.state !== "closed" && wizardInfo) {
+    if (verified?.state !== "closed" && wizardInfo) {
       if (!forceClose) {
-        // Do NOT auto-force. Run the tax-delta diagnostic inline so the
-        // reason for the discrepancy is visible without a second request.
         let taxDiagnostic: any = null;
         try {
           taxDiagnostic = await diagnoseSessionTaxDelta(Number(sessionId));
@@ -1053,9 +1069,9 @@ export const closeSession = CatchAsyncError(
               "See taxDiagnostic.flaggedOrders for the specific orders/lines priced under a different ABCT rate " +
               "than what's currently configured."
             : taxDiagnostic
-              ? "Tax-rate drift does NOT explain the gap (delta doesn't match amount_to_balance). " +
-                "This is likely a different accounting/config issue — safe to review and force-close with " +
-                "the suggested account if you don't see a pricing bug elsewhere."
+              ? "Tax backfill already ran on this session — remaining gap is NOT explained by missing tax_ids. " +
+                "This is likely a different accounting/config issue (e.g. manually-recovered refund payments) — " +
+                "safe to review and force-close with the suggested account if you don't see a pricing bug elsewhere."
               : "Tax diagnostic could not run — investigate manually before forcing.",
           howToResolve:
             "Either close this session from the Odoo backend UI (Point of Sale > Orders > " +
@@ -1065,7 +1081,6 @@ export const closeSession = CatchAsyncError(
         });
       }
 
-      // ── Explicit admin override: force through the wizard ────────────────
       try {
         if (balancingAccountId) {
           await odooRequest("pos.close.session.wizard", "write", [
@@ -1096,7 +1111,6 @@ export const closeSession = CatchAsyncError(
     }
 
     // ── Final verification ────────────────────────────────────────────────
-    // Never mark Mongo closed unless Odoo genuinely reports "closed".
     if (verified?.state !== "closed") {
       console.error(
         "[CLOSE SESSION] Session did not reach closed state. Current state:",
@@ -1538,11 +1552,18 @@ export const createOrder = CatchAsyncError(
     }
 
     // ─── TAX RATE ─────────────────────────────────────────────────
-    const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
-    const abctTaxId = await getABCTTaxId();
-    const lineTaxIds =
-      TAX_RATE_EFFECTIVE > 0 && abctTaxId ? [[6, 0, [abctTaxId]]] : [[6, 0, []]];
+  const { rate: TAX_RATE_EFFECTIVE, reason: taxReason } = await resolveTaxRate(customerId);
+const abctTaxId = await getABCTTaxId();
+   if (TAX_RATE_EFFECTIVE > 0 && !abctTaxId) {
+  return next(new ErrorHandler(
+    "ABCT tax rate is nonzero but the ABCT tax record could not be resolved in Odoo. " +
+    "Refusing to create an order that would charge tax with no tax_ids attached — " +
+    "this previously caused session close-out discrepancies. Check Odoo's ABCT tax config.",
+    500,
+  ));
+}
 
+const lineTaxIds = TAX_RATE_EFFECTIVE > 0 ? [[6, 0, [abctTaxId!]]] : [[6, 0, []]];
     console.log(`[TAX] rate=${TAX_RATE_EFFECTIVE * 100}% | reason=${taxReason} | abctTaxId=${abctTaxId}`);
 
     // ─── TOTALS ───────────────────────────────────────────────────
