@@ -562,14 +562,7 @@ async function resolveRefundPaymentMethodId(order: any, sessionId: number): Prom
   throw new Error(`Could not resolve a payment method for refund order ${order.pos_reference}`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tax-delta diagnostic — used inline by closeSession when Odoo's closing
-// control returns the Force-Close wizard. Recomputes what each order line's
-// tax SHOULD be at the CURRENT ABCT rate and compares it against what's
-// actually stored, to reveal whether a mid-session rate/exempt-status change
-// is what's driving the wizard's amount_to_balance, before anyone decides
-// whether to force through it.
-// ─────────────────────────────────────────────────────────────────────────────
+
 async function diagnoseSessionTaxDelta(sessionId: number) {
   const abctTaxId = await getABCTTaxId();
   let currentAbctRate: number | null = null;
@@ -608,6 +601,12 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
     (linesByOrder[oid] ||= []).push(l);
   }
 
+  // Orders in a state Odoo excludes from the accounting moves it posts.
+  // Extend this set if your Odoo version also skips other states (e.g.
+  // "draft" shouldn't reach here since closeSession resolves/blocks those
+  // earlier, but it's harmless to include for safety).
+  const STATES_EXCLUDED_FROM_POSTING = new Set(["cancel", "draft"]);
+
   const findings = orders.map((o: any) => {
     const orderLines = linesByOrder[o.id] || [];
 
@@ -635,6 +634,7 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
       .filter((f: any) => f.mismatched);
 
     const orderTaxDelta = lineFindings.reduce((s: number, f: any) => s + f.delta, 0);
+    const excludedFromTotal = STATES_EXCLUDED_FROM_POSTING.has(o.state);
 
     return {
       orderId: o.id,
@@ -644,18 +644,26 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
       amountTax: o.amount_tax,
       orderTaxDelta: Math.round(orderTaxDelta * 100) / 100,
       mismatchedLineCount: lineFindings.length,
+      excludedFromTotal,
       lines: lineFindings,
     };
   });
 
-  const totalDelta = findings.reduce((s: number, f: any) => s + f.orderTaxDelta, 0);
+  // Only sum orders Odoo would actually post — this is what needs to line
+  // up against the wizard's amount_to_balance.
+  const totalDelta = findings
+    .filter((f: any) => !f.excludedFromTotal)
+    .reduce((s: number, f: any) => s + f.orderTaxDelta, 0);
+
   const flaggedOrders = findings.filter((f: any) => f.mismatchedLineCount > 0);
+  const excludedOrderCount = flaggedOrders.filter((f: any) => f.excludedFromTotal).length;
 
   return {
     currentAbctRate,
     totalOrders: orders.length,
     totalTaxDeltaAcrossSession: Math.round(totalDelta * 100) / 100,
     flaggedOrderCount: flaggedOrders.length,
+    excludedOrderCount, // flagged orders (e.g. cancelled) that were kept out of the total above
     flaggedOrders,
   };
 }
