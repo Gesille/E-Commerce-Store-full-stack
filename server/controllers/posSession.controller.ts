@@ -153,523 +153,9 @@ async function populateShift(shiftId: any) {
     .lean();
 }
 
-// ── NEW: is this Odoo session from "today" (server-local calendar day)? ─────
-// Odoo returns start_at in UTC ("YYYY-MM-DD HH:MM:SS"). We compare calendar
-// dates in UTC to decide whether a still-"opened" session is a leftover from
-// a previous day (stale) vs. one genuinely opened earlier today.
-function isSessionFromToday(startAt: string | false | undefined): boolean {
-  if (!startAt) return true; // if we don't know, don't treat as stale
-  const sessionDate = String(startAt).slice(0, 10); // "YYYY-MM-DD"
-  const todayDate = new Date().toISOString().slice(0, 10);
-  return sessionDate === todayDate;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW: closeSessionCore — the actual close logic, extracted so it can be
-// called both from the closeSession endpoint AND from openSession when it
-// needs to auto-close a stale session before starting a fresh one.
-// Returns { status, body } instead of writing to res directly.
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function closeSessionCore(
-  sessionId: number,
-  opts?: { forceClose?: boolean; balancingAccountId?: number },
-): Promise<{ status: number; body: any }> {
-  const forceClose = opts?.forceClose ?? false;
-  const balancingAccountId = opts?.balancingAccountId;
-
-  const sessions = await odooRequest(
-    "pos.session",
-    "search_read",
-    [
-      [
-        ["id", "=", sessionId],
-        [
-          "state",
-          "in",
-          ["opening_control", "opened", "closing_control", "closed"],
-        ],
-      ],
-    ],
-    { fields: ["id", "name", "state"], limit: 1 },
-  );
-
-  if (!sessions?.length) {
-    return { status: 404, body: { success: false, message: "Session not found in Odoo" } };
-  }
-
-  const session = sessions[0];
-
-  // ── Stuck in opening_control — never really opened ───────────────────────
-  if (session.state === "opening_control") {
-    await CashierShiftLog.updateMany(
-      { odooSessionId: sessionId, state: { $ne: "closed" } },
-      {
-        $set: { endTime: new Date(), state: "closed" },
-        $push: {
-          stateHistory: {
-            toState: "closed",
-            at: new Date(),
-            reason: "Session closed before opening balance was confirmed",
-          },
-        },
-      },
-    );
-
-    try {
-      await odooRequest("pos.session", "unlink", [[sessionId]]);
-    } catch (_) {
-      // Odoo may reject unlink on a non-new session — that's fine
-    }
-
-    return {
-      status: 200,
-      body: {
-        status: "success",
-        message:
-          "Session was in opening_control and has been abandoned. No orders were taken.",
-        sessionId,
-        cashierReport: [],
-      },
-    };
-  }
-
-  // ── Already closed ───────────────────────────────────────────────────────
-  if (session.state === "closed") {
-    await CashierShiftLog.updateMany(
-      { odooSessionId: sessionId, state: { $ne: "closed" } },
-      {
-        $set: { endTime: new Date(), state: "closed" },
-        $push: {
-          stateHistory: {
-            toState: "closed",
-            at: new Date(),
-            reason: "Session already closed in Odoo",
-          },
-        },
-      },
-    );
-
-    return {
-      status: 200,
-      body: {
-        status: "success",
-        message: "Session was already closed",
-        sessionId,
-        cashierReport: [],
-      },
-    };
-  }
-
-  // ── DRAFT ORDER CHECK ──────────────────────────────────────────────────
-  const draftOrders = await odooRequest(
-    "pos.order",
-    "search_read",
-    [[
-      ["session_id", "=", Number(sessionId)],
-      ["state", "=", "draft"],
-    ]],
-    { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids", "partner_id"] },
-  );
-
-  if (draftOrders.length) {
-    console.log(
-      "[CLOSE SESSION] Found draft orders, attempting to resolve:",
-      draftOrders.map((o: any) => o.pos_reference),
-    );
-
-    const stillDraft: any[] = [];
-
-    for (const order of draftOrders) {
-      const diagnostic: any = {
-        reference:   order.pos_reference,
-        amountTotal: order.amount_total,
-        amountPaid:  order.amount_paid,
-      };
-
-      try {
-        const isRefund = order.amount_total < 0;
-
-        if (isRefund && order.amount_paid === 0) {
-          const refundMethodId = await resolveRefundPaymentMethodId(order, Number(sessionId));
-
-          await odooRequest("pos.payment", "create", [{
-            pos_order_id:       order.id,
-            amount:              order.amount_total,
-            payment_method_id:   refundMethodId,
-          }]);
-
-          await odooRequest("pos.order", "write", [
-            [order.id],
-            { amount_paid: order.amount_total, amount_return: 0 },
-          ]);
-
-          try {
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered refund order:", order.pos_reference);
-            continue;
-          } catch (payErr: any) {
-            const msg: string = payErr?.message || "";
-
-            if (msg.includes("does not contain a customer")) {
-              if (!order.partner_id) {
-                const walkInId = await getOrCreateWalkInCustomer();
-                await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
-                await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-                console.log("[CLOSE SESSION] Recovered refund order via walk-in customer:", order.pos_reference);
-                continue;
-              }
-              diagnostic.reason = "missing_customer_for_account_payment";
-              diagnostic.detail = msg;
-              stillDraft.push(diagnostic);
-              continue;
-            }
-
-            throw payErr;
-          }
-        }
-
-        const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
-        const isExactPaid = order.amount_paid === order.amount_total && order.amount_total !== 0;
-
-        if (isOverpaid) {
-          const payments = await odooRequest(
-            "pos.payment",
-            "search_read",
-            [[["id", "in", order.payment_ids]]],
-            { fields: ["id", "amount"] },
-          );
-
-          let remaining = order.amount_total;
-          const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
-
-          for (const p of sorted) {
-            const applied = Math.max(0, Math.min(p.amount, remaining));
-            remaining = Math.round((remaining - applied) * 100) / 100;
-            if (applied !== p.amount) {
-              await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
-            }
-          }
-
-          const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
-
-          await odooRequest("pos.order", "write", [
-            [order.id],
-            { amount_paid: order.amount_total, amount_return: change },
-          ]);
-        }
-
-        if (isOverpaid || isExactPaid) {
-          try {
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
-            continue;
-          } catch (payErr: any) {
-            const msg: string = payErr?.message || "";
-
-            if (msg.includes("does not contain a customer")) {
-              if (!order.partner_id) {
-                const walkInId = await getOrCreateWalkInCustomer();
-                await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
-                await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-                console.log("[CLOSE SESSION] Recovered draft order via walk-in customer:", order.pos_reference);
-                continue;
-              }
-              diagnostic.reason = "missing_customer_for_account_payment";
-              diagnostic.detail = msg;
-              stillDraft.push(diagnostic);
-              continue;
-            }
-
-            throw payErr;
-          }
-        }
-
-        diagnostic.reason = "underpaid_or_zero_total";
-      } catch (err: any) {
-        console.error("[CLOSE SESSION] Could not auto-resolve draft order:", order.pos_reference, err?.message);
-        diagnostic.reason = err?.message || "unknown_odoo_error";
-      }
-
-      stillDraft.push(diagnostic);
-    }
-
-    if (stillDraft.length) {
-      console.log("[CLOSE SESSION] Unresolved draft orders detail:", stillDraft);
-
-      return {
-        status: 409,
-        body: {
-          success: false,
-          message: `Cannot close session — ${stillDraft.length} order(s) are still in draft and could not be auto-resolved.`,
-          unresolvedOrders: stillDraft,
-        },
-      };
-    }
-  }
-
-  // ── SESSION-WIDE CUSTOMER-ACCOUNT SWEEP ─────────────────────────────────
-  try {
-    const accountMethods = await odooRequest(
-      "pos.payment.method",
-      "search_read",
-      [[["name", "ilike", "Customer Account"]]],
-      { fields: ["id"] },
-    );
-    const accountMethodIds = accountMethods.map((m: any) => m.id);
-
-    if (accountMethodIds.length) {
-      const paymentsOnAccount = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["payment_method_id", "in", accountMethodIds], ["pos_order_id.session_id", "=", Number(sessionId)]]],
-        { fields: ["pos_order_id"] },
-      );
-
-      const candidateOrderIds = [
-        ...new Set(paymentsOnAccount.map((p: any) => p.pos_order_id?.[0]).filter(Boolean)),
-      ];
-
-      if (candidateOrderIds.length) {
-        const ordersMissingCustomer = await odooRequest(
-          "pos.order",
-          "search_read",
-          [[["id", "in", candidateOrderIds], ["partner_id", "=", false]]],
-          { fields: ["id", "pos_reference"] },
-        );
-
-        if (ordersMissingCustomer.length) {
-          const walkInId = await getOrCreateWalkInCustomer();
-          await odooRequest(
-            "pos.order",
-            "write",
-            [ordersMissingCustomer.map((o: any) => o.id), { partner_id: walkInId }],
-          );
-          console.log(
-            "[CLOSE SESSION] Backfilled walk-in customer on:",
-            ordersMissingCustomer.map((o: any) => o.pos_reference),
-          );
-        }
-      }
-    }
-  } catch (sweepErr: any) {
-    console.error("[CLOSE SESSION] Customer-account sweep failed:", sweepErr?.message);
-  }
-
-  // ── SESSION-WIDE TAX BACKFILL ────────────────────────────────────────────
-  try {
-    const backfillResult = await backfillMissingTaxOnSession(Number(sessionId));
-    if (backfillResult.fixed > 0) {
-      console.log(
-        `[CLOSE SESSION] Tax backfill repaired ${backfillResult.fixed} line(s) before closing control.`,
-      );
-    }
-  } catch (backfillErr: any) {
-    console.error("[CLOSE SESSION] Tax backfill failed:", backfillErr?.message);
-    // non-fatal — fall through, closing_control will surface any remaining issue
-  }
-
-  // ── Close active session in Odoo ─────────────────────────────────────────
-  let closingControlResult: any;
-  try {
-    closingControlResult = await odooRequest(
-      "pos.session",
-      "action_pos_session_closing_control",
-      [[sessionId]],
-    );
-    console.log(
-      "[CLOSE SESSION] action_pos_session_closing_control result:",
-      JSON.stringify(closingControlResult),
-    );
-  } catch (err: any) {
-    console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
-    return {
-      status: 409,
-      body: { success: false, message: err?.message || "Failed to close POS session in Odoo" },
-    };
-  }
-
-  let [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
-    fields: ["id", "state"],
-  });
-
-  console.log("[CLOSE SESSION] State after closing_control:", verified?.state);
-
-  const isWizardAction = (result: any) =>
-    result?.res_model === "pos.close.session.wizard" && result?.res_id;
-
-  let wizardInfo: any = null;
-  if (isWizardAction(closingControlResult)) {
-    const [wizard] = await odooRequest(
-      "pos.close.session.wizard",
-      "read",
-      [[closingControlResult.res_id]],
-      { fields: ["message", "amount_to_balance", "account_id", "account_readonly"] },
-    );
-    wizardInfo = wizard;
-    console.log("[CLOSE SESSION] Force-close wizard detail:", JSON.stringify(wizard));
-  }
-
-  if (verified?.state !== "closed" && wizardInfo) {
-    if (!forceClose) {
-      let taxDiagnostic: any = null;
-      try {
-        taxDiagnostic = await diagnoseSessionTaxDelta(Number(sessionId));
-      } catch (diagErr: any) {
-        console.error("[CLOSE SESSION] Tax diagnostic failed:", diagErr?.message);
-      }
-
-      const diagnosticMatchesGap =
-        taxDiagnostic &&
-        Math.abs(
-          Math.abs(taxDiagnostic.totalTaxDeltaAcrossSession) -
-            Math.abs(wizardInfo.amount_to_balance ?? 0),
-        ) < 1;
-
-      return {
-        status: 409,
-        body: {
-          success: false,
-          message:
-            "Odoo cannot close this session automatically — it needs a manual decision " +
-            "on a cash/accounting discrepancy before it can close.",
-          odooReason: wizardInfo.message || "No message provided by Odoo",
-          amountToBalance: wizardInfo.amount_to_balance ?? null,
-          suggestedAccountId: wizardInfo.account_id?.[0] ?? null,
-          suggestedAccountName: wizardInfo.account_id?.[1] ?? null,
-          accountIsEditable: wizardInfo.account_readonly === false,
-          taxDiagnostic,
-          likelyCause: diagnosticMatchesGap
-            ? "Tax-rate drift confirmed: totalTaxDeltaAcrossSession closely matches Odoo's amount_to_balance. " +
-              "See taxDiagnostic.flaggedOrders for the specific orders/lines priced under a different ABCT rate " +
-              "than what's currently configured."
-            : taxDiagnostic
-              ? "Tax backfill already ran on this session — remaining gap is NOT explained by missing tax_ids. " +
-                "This is likely a different accounting/config issue (e.g. manually-recovered refund payments) — " +
-                "safe to review and force-close with the suggested account if you don't see a pricing bug elsewhere."
-              : "Tax diagnostic could not run — investigate manually before forcing.",
-          howToResolve:
-            "Either close this session from the Odoo backend UI (Point of Sale > Orders > " +
-            "Sessions), where the wizard will let you review and confirm the balancing " +
-            "account, or resend this request with { forceClose: true } (and " +
-            "balancingAccountId if accountIsEditable is true) to accept the suggested entry.",
-        },
-      };
-    }
-
-    try {
-      if (balancingAccountId) {
-        await odooRequest("pos.close.session.wizard", "write", [
-          [closingControlResult.res_id],
-          { account_id: balancingAccountId },
-        ]);
-      }
-      const forceResult = await odooRequest(
-        "pos.close.session.wizard",
-        "action_close_session",
-        [[closingControlResult.res_id]],
-      );
-      console.log(
-        "[CLOSE SESSION] Wizard action_close_session (forced) result:",
-        JSON.stringify(forceResult),
-      );
-    } catch (err: any) {
-      console.error("[CLOSE SESSION] Forced close via wizard failed:", err?.message);
-      return {
-        status: 409,
-        body: { success: false, message: err?.message || "Failed to force-close session via wizard" },
-      };
-    }
-
-    [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
-      fields: ["id", "state"],
-    });
-    console.log("[CLOSE SESSION] State after forced wizard close:", verified?.state);
-  }
-
-  // ── Final verification ────────────────────────────────────────────────
-  if (verified?.state !== "closed") {
-    console.error(
-      "[CLOSE SESSION] Session did not reach closed state. Current state:",
-      verified?.state,
-    );
-    return {
-      status: 409,
-      body: {
-        success: false,
-        message:
-          `Session is still "${verified?.state}" in Odoo. ` +
-          `It likely needs a manual cash-difference confirmation in the Odoo backend before it can fully close.`,
-      },
-    };
-  }
-
-  // ── Only now mark shifts closed in Mongo ─────────────────────────────────
-  const now = new Date();
-
-  await CashierShiftLog.updateMany(
-    { odooSessionId: sessionId, state: { $ne: "closed" } },
-    {
-      $set: { endTime: now, state: "closed" },
-      $push: {
-        stateHistory: {
-          toState: "closed",
-          at: now,
-          reason: "Session closed",
-        },
-      },
-    },
-  );
-
-  const shiftLogs = await CashierShiftLog.find({ odooSessionId: sessionId })
-    .populate("cashierId", "name email role")
-    .lean();
-
-  const cashierReport = await Promise.all(
-    shiftLogs.map(async (log) => {
-      const accurate = await computeShiftTotalsFromOrders(String(log._id));
-      return {
-        shiftId: log._id,
-        cashier: log.cashierId,
-        odooPartnerId: log.odooPartnerId,
-        state: log.state,
-        startTime: log.startTime,
-        endTime: log.endTime,
-        totalOrders: accurate.totalOrders,
-        totalSales: accurate.totalSales,
-      };
-    }),
-  );
-
-  return {
-    status: 200,
-    body: {
-      status: "success",
-      message: "Session closed successfully",
-      sessionId,
-      cashierReport,
-    },
-  };
-}
-
 export const openSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const {
-      configId,
-      cashierId,
-      // ── NEW ──────────────────────────────────────────────────────────────
-      // "block"     (default): if a leftover session from a previous day is
-      //              still "opened" in Odoo, refuse to join it and tell the
-      //              caller to close it first (via /close-session).
-      // "autoclose": auto-close that stale session (forceClose) then create
-      //              a brand-new session, so totals start at 0. No manual
-      //              decision point — use with care, see note below.
-      staleSessionAction = "block",
-    }: {
-      configId: number;
-      cashierId: string;
-      staleSessionAction?: "block" | "autoclose";
-    } = req.body;
+    const { configId, cashierId } = req.body;
 
     if (!configId) return next(new ErrorHandler("configId is required", 400));
     if (!cashierId) return next(new ErrorHandler("cashierId is required", 400));
@@ -686,108 +172,63 @@ export const openSession = CatchAsyncError(
           ["config_id", "=", configId],
         ],
       ],
-      { fields: ["id", "name", "state", "start_at"], limit: 1 },
+      { fields: ["id", "name", "state"], limit: 1 },
     );
 
     if (existing?.length) {
       const existingSession = existing[0];
-      const stale = !isSessionFromToday(existingSession.start_at);
 
-      // ── NEW: stale-session branch ────────────────────────────────────────
-      if (stale) {
-        console.log(
-          `[OPEN SESSION] Found stale session ${existingSession.id} ` +
-          `(state=${existingSession.state}, start_at=${existingSession.start_at}). ` +
-          `staleSessionAction=${staleSessionAction}`,
-        );
+      if (existingSession.state === "opening_control") {
+        return res.status(200).json({
+          success: true,
+          requiresOpeningBalance: true,
+          sessionId: existingSession.id,
+          state: existingSession.state,
+          message:
+            "An existing session is awaiting opening balance confirmation",
+        });
+      }
 
-        if (staleSessionAction === "block") {
-          return res.status(409).json({
-            success: false,
-            staleSession: true,
-            sessionId: existingSession.id,
-            sessionState: existingSession.state,
-            startAt: existingSession.start_at,
-            message:
-              `Register #${configId} still has an open session from ${existingSession.start_at} ` +
-              `that was never closed. Close it first (this resets its totals for accounting), ` +
-              `then open a new one — or resend with { staleSessionAction: "autoclose" } to close ` +
-              `it automatically and start fresh in one step.`,
-          });
-        }
+      const existingShift = await CashierShiftLog.findOne({
+        odooSessionId: existingSession.id,
+        cashierId: cashier._id,
+        state: { $in: ["active", "paused"] },
+      });
 
-        // staleSessionAction === "autoclose"
-        const closeResult = await closeSessionCore(existingSession.id, { forceClose: true });
-
-        if (closeResult.status >= 400) {
-          // Could not even force-close it (e.g. genuinely unresolved draft orders
-          // with a missing-customer error). Surface that instead of silently
-          // creating a second session on top of it.
-          return res.status(closeResult.status).json({
-            ...closeResult.body,
-            staleSessionAutoCloseFailed: true,
-            staleSessionId: existingSession.id,
-          });
-        }
-
-        console.log(`[OPEN SESSION] Auto-closed stale session ${existingSession.id}, proceeding to open new session.`);
-        // fall through to "create a brand new session" below — do NOT return here
-      } else {
-        // ── Existing behavior: session from today — join it as before ──────
-        if (existingSession.state === "opening_control") {
-          return res.status(200).json({
-            success: true,
-            requiresOpeningBalance: true,
-            sessionId: existingSession.id,
-            state: existingSession.state,
-            message:
-              "An existing session is awaiting opening balance confirmation",
-          });
-        }
-
-        const existingShift = await CashierShiftLog.findOne({
+      if (!existingShift) {
+        const newShift = await CashierShiftLog.create({
           odooSessionId: existingSession.id,
           cashierId: cashier._id,
-          state: { $in: ["active", "paused"] },
+          odooPartnerId: cashier.odooPartnerId,
+          state: "active" as ShiftState,
+          stateHistory: [
+            {
+              toState: "active",
+              at: new Date(),
+              reason: "Joined existing open session",
+            },
+          ],
         });
-
-        if (!existingShift) {
-          const newShift = await CashierShiftLog.create({
-            odooSessionId: existingSession.id,
-            cashierId: cashier._id,
-            odooPartnerId: cashier.odooPartnerId,
-            state: "active" as ShiftState,
-            stateHistory: [
-              {
-                toState: "active",
-                at: new Date(),
-                reason: "Joined existing open session",
-              },
-            ],
-          });
-          const populated = await populateShift(newShift._id);
-          return res.status(200).json({
-            success: true,
-            requiresOpeningBalance: false,
-            session: existingSession,
-            activeShift: populated,
-            message: "Joined existing open session",
-          });
-        }
-
-        const populatedExisting = await populateShift(existingShift._id);
+        const populated = await populateShift(newShift._id);
         return res.status(200).json({
           success: true,
           requiresOpeningBalance: false,
           session: existingSession,
-          activeShift: populatedExisting,
-          message: "Resumed existing session and shift",
+          activeShift: populated,
+          message: "Joined existing open session",
         });
       }
+
+      const populatedExisting = await populateShift(existingShift._id);
+      return res.status(200).json({
+        success: true,
+        requiresOpeningBalance: false,
+        session: existingSession,
+        activeShift: populatedExisting,
+        message: "Resumed existing session and shift",
+      });
     }
 
-    // ── Create a brand new session (no existing session, or stale one was
-    //    just auto-closed above) ──────────────────────────────────────────
     const sessionId = await odooRequest("pos.session", "create", [
       { config_id: configId },
     ]);
@@ -1255,19 +696,478 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
   };
 }
 
-// ── closeSession export now just delegates to closeSessionCore ─────────────
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { sessionId, forceClose, balancingAccountId } = req.body as {
-      sessionId?: number;
+    const { sessionId } = req.body;
+
+    if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
+
+    const sessions = await odooRequest(
+      "pos.session",
+      "search_read",
+      [
+        [
+          ["id", "=", sessionId],
+          [
+            "state",
+            "in",
+            ["opening_control", "opened", "closing_control", "closed"],
+          ],
+        ],
+      ],
+      { fields: ["id", "name", "state"], limit: 1 },
+    );
+
+    if (!sessions?.length) {
+      return next(new ErrorHandler("Session not found in Odoo", 404));
+    }
+
+    const session = sessions[0];
+
+    // ── Stuck in opening_control — never really opened ───────────────────────
+    if (session.state === "opening_control") {
+      await CashierShiftLog.updateMany(
+        { odooSessionId: sessionId, state: { $ne: "closed" } },
+        {
+          $set: { endTime: new Date(), state: "closed" },
+          $push: {
+            stateHistory: {
+              toState: "closed",
+              at: new Date(),
+              reason: "Session closed before opening balance was confirmed",
+            },
+          },
+        },
+      );
+
+      try {
+        await odooRequest("pos.session", "unlink", [[sessionId]]);
+      } catch (_) {
+        // Odoo may reject unlink on a non-new session — that's fine
+      }
+
+      return res.status(200).json({
+        status: "success",
+        message:
+          "Session was in opening_control and has been abandoned. No orders were taken.",
+        sessionId,
+        cashierReport: [],
+      });
+    }
+
+    // ── Already closed ───────────────────────────────────────────────────────
+    if (session.state === "closed") {
+      await CashierShiftLog.updateMany(
+        { odooSessionId: sessionId, state: { $ne: "closed" } },
+        {
+          $set: { endTime: new Date(), state: "closed" },
+          $push: {
+            stateHistory: {
+              toState: "closed",
+              at: new Date(),
+              reason: "Session already closed in Odoo",
+            },
+          },
+        },
+      );
+
+      return res.status(200).json({
+        status: "success",
+        message: "Session was already closed",
+        sessionId,
+        cashierReport: [],
+      });
+    }
+
+    // ── DRAFT ORDER CHECK ──────────────────────────────────────────────────
+    const draftOrders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[
+        ["session_id", "=", Number(sessionId)],
+        ["state", "=", "draft"],
+      ]],
+      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids", "partner_id"] },
+    );
+
+    if (draftOrders.length) {
+      console.log(
+        "[CLOSE SESSION] Found draft orders, attempting to resolve:",
+        draftOrders.map((o: any) => o.pos_reference),
+      );
+
+      const stillDraft: any[] = [];
+
+      for (const order of draftOrders) {
+        const diagnostic: any = {
+          reference:   order.pos_reference,
+          amountTotal: order.amount_total,
+          amountPaid:  order.amount_paid,
+        };
+
+        try {
+          const isRefund = order.amount_total < 0;
+
+          if (isRefund && order.amount_paid === 0) {
+            const refundMethodId = await resolveRefundPaymentMethodId(order, Number(sessionId));
+
+            await odooRequest("pos.payment", "create", [{
+              pos_order_id:       order.id,
+              amount:              order.amount_total,
+              payment_method_id:   refundMethodId,
+            }]);
+
+            await odooRequest("pos.order", "write", [
+              [order.id],
+              { amount_paid: order.amount_total, amount_return: 0 },
+            ]);
+
+            try {
+              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+              console.log("[CLOSE SESSION] Recovered refund order:", order.pos_reference);
+              continue;
+            } catch (payErr: any) {
+              const msg: string = payErr?.message || "";
+
+              if (msg.includes("does not contain a customer")) {
+                if (!order.partner_id) {
+                  const walkInId = await getOrCreateWalkInCustomer();
+                  await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                  console.log("[CLOSE SESSION] Recovered refund order via walk-in customer:", order.pos_reference);
+                  continue;
+                }
+                diagnostic.reason = "missing_customer_for_account_payment";
+                diagnostic.detail = msg;
+                stillDraft.push(diagnostic);
+                continue;
+              }
+
+              throw payErr;
+            }
+          }
+
+          const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
+          const isExactPaid = order.amount_paid === order.amount_total && order.amount_total !== 0;
+
+          if (isOverpaid) {
+            const payments = await odooRequest(
+              "pos.payment",
+              "search_read",
+              [[["id", "in", order.payment_ids]]],
+              { fields: ["id", "amount"] },
+            );
+
+            let remaining = order.amount_total;
+            const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
+
+            for (const p of sorted) {
+              const applied = Math.max(0, Math.min(p.amount, remaining));
+              remaining = Math.round((remaining - applied) * 100) / 100;
+              if (applied !== p.amount) {
+                await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
+              }
+            }
+
+            const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
+
+            await odooRequest("pos.order", "write", [
+              [order.id],
+              { amount_paid: order.amount_total, amount_return: change },
+            ]);
+          }
+
+          if (isOverpaid || isExactPaid) {
+            try {
+              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+              console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+              continue;
+            } catch (payErr: any) {
+              const msg: string = payErr?.message || "";
+
+              if (msg.includes("does not contain a customer")) {
+                if (!order.partner_id) {
+                  const walkInId = await getOrCreateWalkInCustomer();
+                  await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                  console.log("[CLOSE SESSION] Recovered draft order via walk-in customer:", order.pos_reference);
+                  continue;
+                }
+                diagnostic.reason = "missing_customer_for_account_payment";
+                diagnostic.detail = msg;
+                stillDraft.push(diagnostic);
+                continue;
+              }
+
+              throw payErr;
+            }
+          }
+
+          diagnostic.reason = "underpaid_or_zero_total";
+        } catch (err: any) {
+          console.error("[CLOSE SESSION] Could not auto-resolve draft order:", order.pos_reference, err?.message);
+          diagnostic.reason = err?.message || "unknown_odoo_error";
+        }
+
+        stillDraft.push(diagnostic);
+      }
+
+      if (stillDraft.length) {
+        console.log("[CLOSE SESSION] Unresolved draft orders detail:", stillDraft);
+
+        return res.status(409).json({
+          success: false,
+          message: `Cannot close session — ${stillDraft.length} order(s) are still in draft and could not be auto-resolved.`,
+          unresolvedOrders: stillDraft,
+        });
+      }
+    }
+
+    // ── SESSION-WIDE CUSTOMER-ACCOUNT SWEEP ─────────────────────────────────
+    try {
+      const accountMethods = await odooRequest(
+        "pos.payment.method",
+        "search_read",
+        [[["name", "ilike", "Customer Account"]]],
+        { fields: ["id"] },
+      );
+      const accountMethodIds = accountMethods.map((m: any) => m.id);
+
+      if (accountMethodIds.length) {
+        const paymentsOnAccount = await odooRequest(
+          "pos.payment",
+          "search_read",
+          [[["payment_method_id", "in", accountMethodIds], ["pos_order_id.session_id", "=", Number(sessionId)]]],
+          { fields: ["pos_order_id"] },
+        );
+
+        const candidateOrderIds = [
+          ...new Set(paymentsOnAccount.map((p: any) => p.pos_order_id?.[0]).filter(Boolean)),
+        ];
+
+        if (candidateOrderIds.length) {
+          const ordersMissingCustomer = await odooRequest(
+            "pos.order",
+            "search_read",
+            [[["id", "in", candidateOrderIds], ["partner_id", "=", false]]],
+            { fields: ["id", "pos_reference"] },
+          );
+
+          if (ordersMissingCustomer.length) {
+            const walkInId = await getOrCreateWalkInCustomer();
+            await odooRequest(
+              "pos.order",
+              "write",
+              [ordersMissingCustomer.map((o: any) => o.id), { partner_id: walkInId }],
+            );
+            console.log(
+              "[CLOSE SESSION] Backfilled walk-in customer on:",
+              ordersMissingCustomer.map((o: any) => o.pos_reference),
+            );
+          }
+        }
+      }
+    } catch (sweepErr: any) {
+      console.error("[CLOSE SESSION] Customer-account sweep failed:", sweepErr?.message);
+    }
+
+    // ── SESSION-WIDE TAX BACKFILL ────────────────────────────────────────────
+    // Repair any lines that charged tax but never got tax_ids attached
+    // (the historical root cause of "amounts to post" vs "amounts of the
+    // orders" mismatches). Must run BEFORE closing_control, since Odoo
+    // computes the accounting moves to post based on tax_ids at that point —
+    // fixing lines after the moves are posted wouldn't help.
+    try {
+      const backfillResult = await backfillMissingTaxOnSession(Number(sessionId));
+      if (backfillResult.fixed > 0) {
+        console.log(
+          `[CLOSE SESSION] Tax backfill repaired ${backfillResult.fixed} line(s) before closing control.`,
+        );
+      }
+    } catch (backfillErr: any) {
+      console.error("[CLOSE SESSION] Tax backfill failed:", backfillErr?.message);
+      // non-fatal — fall through, closing_control will surface any remaining issue
+    }
+
+    // ── Close active session in Odoo ─────────────────────────────────────────
+    let closingControlResult: any;
+    try {
+      closingControlResult = await odooRequest(
+        "pos.session",
+        "action_pos_session_closing_control",
+        [[sessionId]],
+      );
+      console.log(
+        "[CLOSE SESSION] action_pos_session_closing_control result:",
+        JSON.stringify(closingControlResult),
+      );
+    } catch (err: any) {
+      console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
+      return next(
+        new ErrorHandler(
+          err?.message || "Failed to close POS session in Odoo",
+          409,
+        ),
+      );
+    }
+
+    let [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
+      fields: ["id", "state"],
+    });
+
+    console.log("[CLOSE SESSION] State after closing_control:", verified?.state);
+
+    const isWizardAction = (result: any) =>
+      result?.res_model === "pos.close.session.wizard" && result?.res_id;
+
+    let wizardInfo: any = null;
+    if (isWizardAction(closingControlResult)) {
+      const [wizard] = await odooRequest(
+        "pos.close.session.wizard",
+        "read",
+        [[closingControlResult.res_id]],
+        { fields: ["message", "amount_to_balance", "account_id", "account_readonly"] },
+      );
+      wizardInfo = wizard;
+      console.log("[CLOSE SESSION] Force-close wizard detail:", JSON.stringify(wizard));
+    }
+
+    const { forceClose, balancingAccountId } = req.body as {
       forceClose?: boolean;
       balancingAccountId?: number;
     };
 
-    if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
+    if (verified?.state !== "closed" && wizardInfo) {
+      if (!forceClose) {
+        let taxDiagnostic: any = null;
+        try {
+          taxDiagnostic = await diagnoseSessionTaxDelta(Number(sessionId));
+        } catch (diagErr: any) {
+          console.error("[CLOSE SESSION] Tax diagnostic failed:", diagErr?.message);
+        }
 
-    const result = await closeSessionCore(sessionId, { forceClose, balancingAccountId });
-    return res.status(result.status).json(result.body);
+        const diagnosticMatchesGap =
+          taxDiagnostic &&
+          Math.abs(
+            Math.abs(taxDiagnostic.totalTaxDeltaAcrossSession) -
+              Math.abs(wizardInfo.amount_to_balance ?? 0),
+          ) < 1;
+
+        return res.status(409).json({
+          success: false,
+          message:
+            "Odoo cannot close this session automatically — it needs a manual decision " +
+            "on a cash/accounting discrepancy before it can close.",
+          odooReason: wizardInfo.message || "No message provided by Odoo",
+          amountToBalance: wizardInfo.amount_to_balance ?? null,
+          suggestedAccountId: wizardInfo.account_id?.[0] ?? null,
+          suggestedAccountName: wizardInfo.account_id?.[1] ?? null,
+          accountIsEditable: wizardInfo.account_readonly === false,
+          taxDiagnostic,
+          likelyCause: diagnosticMatchesGap
+            ? "Tax-rate drift confirmed: totalTaxDeltaAcrossSession closely matches Odoo's amount_to_balance. " +
+              "See taxDiagnostic.flaggedOrders for the specific orders/lines priced under a different ABCT rate " +
+              "than what's currently configured."
+            : taxDiagnostic
+              ? "Tax backfill already ran on this session — remaining gap is NOT explained by missing tax_ids. " +
+                "This is likely a different accounting/config issue (e.g. manually-recovered refund payments) — " +
+                "safe to review and force-close with the suggested account if you don't see a pricing bug elsewhere."
+              : "Tax diagnostic could not run — investigate manually before forcing.",
+          howToResolve:
+            "Either close this session from the Odoo backend UI (Point of Sale > Orders > " +
+            "Sessions), where the wizard will let you review and confirm the balancing " +
+            "account, or resend this request with { forceClose: true } (and " +
+            "balancingAccountId if accountIsEditable is true) to accept the suggested entry.",
+        });
+      }
+
+      try {
+        if (balancingAccountId) {
+          await odooRequest("pos.close.session.wizard", "write", [
+            [closingControlResult.res_id],
+            { account_id: balancingAccountId },
+          ]);
+        }
+        const forceResult = await odooRequest(
+          "pos.close.session.wizard",
+          "action_close_session",
+          [[closingControlResult.res_id]],
+        );
+        console.log(
+          "[CLOSE SESSION] Wizard action_close_session (forced) result:",
+          JSON.stringify(forceResult),
+        );
+      } catch (err: any) {
+        console.error("[CLOSE SESSION] Forced close via wizard failed:", err?.message);
+        return next(
+          new ErrorHandler(err?.message || "Failed to force-close session via wizard", 409),
+        );
+      }
+
+      [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
+        fields: ["id", "state"],
+      });
+      console.log("[CLOSE SESSION] State after forced wizard close:", verified?.state);
+    }
+
+    // ── Final verification ────────────────────────────────────────────────
+    if (verified?.state !== "closed") {
+      console.error(
+        "[CLOSE SESSION] Session did not reach closed state. Current state:",
+        verified?.state,
+      );
+      return next(
+        new ErrorHandler(
+          `Session is still "${verified?.state}" in Odoo. ` +
+          `It likely needs a manual cash-difference confirmation in the Odoo backend before it can fully close.`,
+          409,
+        ),
+      );
+    }
+
+    // ── Only now mark shifts closed in Mongo ─────────────────────────────────
+    const now = new Date();
+
+    await CashierShiftLog.updateMany(
+      { odooSessionId: sessionId, state: { $ne: "closed" } },
+      {
+        $set: { endTime: now, state: "closed" },
+        $push: {
+          stateHistory: {
+            toState: "closed",
+            at: now,
+            reason: "Session closed",
+          },
+        },
+      },
+    );
+
+    const shiftLogs = await CashierShiftLog.find({ odooSessionId: sessionId })
+      .populate("cashierId", "name email role")
+      .lean();
+
+    const cashierReport = await Promise.all(
+      shiftLogs.map(async (log) => {
+        const accurate = await computeShiftTotalsFromOrders(String(log._id));
+        return {
+          shiftId: log._id,
+          cashier: log.cashierId,
+          odooPartnerId: log.odooPartnerId,
+          state: log.state,
+          startTime: log.startTime,
+          endTime: log.endTime,
+          totalOrders: accurate.totalOrders,
+          totalSales: accurate.totalSales,
+        };
+      }),
+    );
+
+    res.status(200).json({
+      status: "success",
+      message: "Session closed successfully",
+      sessionId,
+      cashierReport,
+    });
   },
 );
 
@@ -1860,3 +1760,676 @@ const orderNote = [taxNote, note].filter(Boolean).join(" | ");
     });
   },
 );
+
+
+
+
+
+export const getSessionOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const sessionId = Number(req.params.sessionId);
+    if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
+
+    const orders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["session_id", "=", sessionId]]],
+      {
+        fields: [
+          "id",
+          "name",
+          "date_order",
+          "partner_id",
+          "user_id",
+          "pos_reference",
+          "amount_total",
+          "amount_paid",
+          "amount_return",
+          "state",
+          "lines",
+          "payment_ids",
+        ],
+        order: "date_order desc",
+      },
+    );
+
+    res.status(200).json({ status: "success", count: orders.length, orders });
+  },
+);
+
+export const getSessionReport = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const sessionId = Number(req.params.sessionId);
+    if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
+
+    const shiftLogs = await CashierShiftLog.find({ odooSessionId: sessionId })
+      .populate("cashierId", "name email role")
+      .lean();
+
+    const cashierSummaries = await Promise.all(
+      shiftLogs.map(async (log) => {
+        const accurate = await computeShiftTotalsFromOrders(String(log._id));
+        return {
+          shiftId: log._id,
+          cashier: log.cashierId,
+          odooPartnerId: log.odooPartnerId,
+          state: log.state,
+          startTime: log.startTime,
+          endTime: log.endTime ?? null,
+          stateHistory: log.stateHistory,
+          totalOrders: accurate.totalOrders,
+          totalSales: accurate.totalSales,
+          cachedTotalOrders: log.totalOrders,
+          cachedTotalSales: log.totalSales,
+        };
+      }),
+    );
+
+    const totalOrders = cashierSummaries.reduce((s, l) => s + l.totalOrders, 0);
+    const totalSales = cashierSummaries.reduce((s, l) => s + l.totalSales, 0);
+
+    res.status(200).json({
+      status: "success",
+      odooSessionId: sessionId,
+      summary: { totalOrders, totalSales, cashierCount: shiftLogs.length },
+      cashierBreakdown: cashierSummaries,
+    });
+  },
+);
+
+export const getProducts = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const products = await odooRequest(
+      "product.product",
+      "search_read",
+      [
+        [
+          ["available_in_pos", "=", true],
+          ["active", "=", true],
+        ],
+      ],
+      {
+        fields: [
+          "id",
+          "name",
+          "list_price",
+          "barcode",
+          "categ_id",
+          "uom_id",
+          "image_128",
+        ],
+        limit: 500,
+      },
+    );
+    res
+      .status(200)
+      .json({ status: "success", count: products.length, products });
+  },
+);
+
+export const getCustomers = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const search = (req.query.search as string) ?? "";
+    const domain: any[] = [["customer_rank", ">", 0]];
+    if (search) domain.push(["name", "ilike", search]);
+const exemptFiscalPositionId = await getTaxExemptFiscalPositionId();
+    const customers = await odooRequest(
+      "res.partner",
+      "search_read",
+       [domain],
+      {
+     fields: [
+          "id", "name", "phone", "email",
+          "street", "city", "country_id",
+          "commercial_company_name",
+          "parent_id",
+          "is_company",
+          "property_account_position_id",       
+        ],
+        limit: 100,
+      },
+    );
+
+    const formatted = customers.map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone || undefined,
+      email: c.email || undefined,
+      street: c.street || undefined,
+      city: c.city || undefined,
+      country: c.country_id ? c.country_id[1] : undefined,
+      // Show parent company name, or the commercial_company_name fallback
+      company: c.parent_id
+        ? c.parent_id[1]
+        : c.commercial_company_name || undefined,
+       isTaxExempt: exemptFiscalPositionId
+    ? c.property_account_position_id?.[0] === exemptFiscalPositionId
+    : false,
+    }));
+
+    res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
+  },
+);
+
+export const createCustomer = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const {
+      name, phone, email, street, city, country, company,
+      isTaxExempt = false,   // ← NEW: boolean, default false
+    } = req.body;
+ 
+    if (!name) return next(new ErrorHandler("Customer name is required", 400));
+ 
+    // ── Country ────────────────────────────────────────────────────────────
+    let countryId: number | false = false;
+    if (country) {
+      const countryMatch = await odooRequest(
+        "res.country",
+        "search_read",
+        [[["name", "ilike", country]]],
+        { fields: ["id"], limit: 1 },
+      );
+      countryId = countryMatch[0]?.id ?? false;
+    }
+ 
+    // ── Parent company ─────────────────────────────────────────────────────
+    let parentId: number | false = false;
+    if (company) {
+      const existingCompany = await odooRequest(
+        "res.partner",
+        "search_read",
+        [[["name", "=", company], ["is_company", "=", true]]],
+        { fields: ["id"], limit: 1 },
+      );
+ 
+      if (existingCompany.length > 0) {
+        parentId = existingCompany[0].id;
+      } else {
+        parentId = await odooRequest("res.partner", "create", [
+          { name: company, is_company: true, customer_rank: 1 },
+        ]);
+      }
+    }
+ 
+    // ── Fiscal position for exempt customers ───────────────────────────────
+    let fiscalPositionId: number | false = false;
+    if (isTaxExempt) {
+      const fpId = await getTaxExemptFiscalPositionId();
+      if (fpId) fiscalPositionId = fpId;
+    }
+ 
+    // ── Create partner in Odoo ─────────────────────────────────────────────
+    const customerId = await odooRequest("res.partner", "create", [
+      {
+        name,
+        phone:        phone ?? false,
+        email:        email ?? false,
+        street:       street ?? false,
+        city:         city ?? false,
+        country_id:   countryId,
+        parent_id:    parentId,
+        customer_rank: 1,
+        // ── Tax Exemption ────────────────────────────────────────────
+       
+        ...(fiscalPositionId && {
+          property_account_position_id: fiscalPositionId,
+        }),
+      },
+    ]);
+ 
+    res.status(201).json({
+      status: "success",
+      message: "Customer created successfully",
+      customerId,
+      isTaxExempt,
+    });
+  },
+);
+
+export const getPaymentMethods = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const methods = await odooRequest(
+      "pos.payment.method",
+      "search_read",
+      [[]],
+      { fields: ["id", "name", "is_cash_count", "journal_id"] }
+    );
+ 
+    // Normalise into a shape the frontend can easily consume
+    const result = methods.map((m: any) => ({
+      id: m.id,
+      name: m.name as string,
+      isCash: m.is_cash_count as boolean,
+      journalId: Array.isArray(m.journal_id) ? m.journal_id[0] : null,
+    }));
+ 
+    res.status(200).json({ success: true, paymentMethods: result });
+  }
+);
+
+export const getPOSConfigs = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const configs = await odooRequest(
+      "pos.config",
+      "search_read",
+      [[["active", "=", true]]],
+      { fields: ["id", "name", "currency_id"] },
+    );
+    res.status(200).json({ status: "success", configs });
+  },
+);
+
+export const debugPOSConfig = CatchAsyncError(
+  async (req: Request, res: Response) => {
+    const { configId } = req.body;
+    const config = await odooRequest("pos.config", "read", [[configId]], {
+      fields: ["id", "name", "cash_control", "payment_method_ids"],
+    });
+    res.json(config);
+  },
+);
+
+export const createOdooInvoice = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { odooOrderId } = req.body;
+    if (!odooOrderId)
+      return next(new ErrorHandler("odooOrderId is required", 400));
+
+    const orders = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["id", "=", odooOrderId]]],
+      { fields: ["id", "partner_id", "lines", "amount_total", "amount_tax"], limit: 1 },
+    );
+    const order = orders?.[0];
+    if (!order) return next(new ErrorHandler("Order not found in Odoo", 404));
+
+    // Resolve the canonical ABCT tax record once — don't trust whatever
+    // tax_ids happen to be stored on the POS line, since those can include
+    // a product's default "Customer Taxes" tax in addition to (or instead of)
+    // the ABCT tax actually applied at sale time.
+    const abctTaxRecords = await odooRequest(
+      "account.tax",
+      "search_read",
+      [[["name", "=", "ABCT"], ["type_tax_use", "=", "sale"]]], // adjust name/domain to match your actual ABCT tax record
+      { fields: ["id", "amount"], limit: 1 },
+    );
+    const abctTax = abctTaxRecords?.[0];
+    if (!abctTax) {
+      return next(new ErrorHandler("ABCT tax record not found in Odoo", 500));
+    }
+
+    const lines = await odooRequest(
+      "pos.order.line",
+      "search_read",
+      [[["id", "in", order.lines]]],
+      { fields: ["product_id", "qty", "price_unit", "discount", "tax_ids"] },
+    );
+
+    // Determine per-line whether the ABCT tax was actually applied at sale,
+    // by checking if the known ABCT tax ID is present — not by forwarding
+    // the raw tax_ids array, which may contain other/duplicate taxes.
+    const invoiceLines = lines.map((line: any) => {
+      const wasTaxed = Array.isArray(line.tax_ids) && line.tax_ids.includes(abctTax.id);
+      return [
+        0,
+        0,
+        {
+          product_id: line.product_id[0],
+          quantity: line.qty,
+          price_unit: line.price_unit,
+          discount: line.discount ?? 0,
+          tax_ids: wasTaxed ? [[6, 0, [abctTax.id]]] : [[6, 0, []]],
+        },
+      ];
+    });
+
+    const invoiceId = await odooRequest("account.move", "create", [
+      {
+        move_type: "out_invoice",
+        partner_id: order.partner_id ? order.partner_id[0] : false,
+        invoice_line_ids: invoiceLines,
+      },
+    ]);
+
+    if (!invoiceId)
+      return next(new ErrorHandler("Failed to create invoice", 500));
+
+    res.status(201).json({
+      status: "success",
+      invoiceId,
+      pdfUrl: `${process.env.ODOO_URL}/report/pdf/account.report_invoice/${invoiceId}`,
+    });
+  },
+);
+export const getPosOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const status = req.query.status as string | undefined; // "paid" | "invoiced" | "nothing"
+    const search = req.query.search as string | undefined;
+    const dateFrom = req.query.date_from as string | undefined;
+    const dateTo = req.query.date_to as string | undefined;
+
+    const domain: any[] = [];
+
+    if (status) domain.push(["state", "=", status]);
+    if (dateFrom) domain.push(["date_order", ">=", `${dateFrom} 00:00:00`]);
+    if (dateTo) domain.push(["date_order", "<=", `${dateTo} 23:59:59`]);
+    if (search) domain.push(["name", "ilike", search]);
+
+    const orders = await odooRequest("pos.order", "search_read", [domain], {
+      fields: [
+        "name",
+        "date_order",
+        "state",
+        "amount_total",
+        "amount_tax",
+        "lines",
+        "session_id",
+        "user_id",
+        "payment_ids",
+      ],
+      order: "date_order desc, id desc",
+      limit,
+      offset: (page - 1) * limit,
+    });
+
+    const total = await odooRequest("pos.order", "search_count", [domain]);
+
+    // Enrich with payment method names
+    const paymentIds = orders.flatMap((o: any) => o.payment_ids ?? []);
+    const payments = paymentIds.length
+      ? await odooRequest(
+          "pos.payment",
+          "search_read",
+          [[["id", "in", paymentIds]]],
+          { fields: ["id", "payment_method_id", "amount", "pos_order_id"] },
+        )
+      : [];
+
+    const paymentMap: Record<number, any[]> = {};
+    for (const p of payments) {
+      const oid = p.pos_order_id[0];
+      if (!paymentMap[oid]) paymentMap[oid] = [];
+      paymentMap[oid].push({
+        method: p.payment_method_id?.[1] ?? "Unknown",
+        amount: p.amount,
+      });
+    }
+
+    const items = orders.map((o: any) => ({
+      id: o.id,
+      ref: o.name,
+      date: o.date_order,
+      status: o.state,
+      total: o.amount_total,
+      tax: o.amount_tax,
+      lineCount: (o.lines ?? []).length,
+      session: o.session_id?.[1] ?? "—",
+      cashier: o.user_id?.[1] ?? "—",
+      payments: paymentMap[o.id] ?? [],
+    }));
+
+    res.status(200).json({
+      success: true,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      orders: items,
+    });
+  },
+);
+
+export const getPosOrderById = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const id = Number(req.params.id);
+
+    const [order] = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["id", "=", id]]],
+      {
+        fields: [
+          "name",
+          "date_order",
+          "state",
+          "amount_total",
+          "amount_tax",
+          "lines",
+          "session_id",
+          "user_id",
+          "payment_ids",
+        ],
+      },
+    );
+
+    if (!order) return next(new ErrorHandler("Order not found", 404));
+
+    // Lines detail - UPDATED FIELDS ARRAY HERE
+    const lines = order.lines?.length
+      ? await odooRequest(
+          "pos.order.line",
+          "search_read",
+          [[["id", "in", order.lines]]],
+          {
+            fields: [
+              "product_id",
+              "qty",
+              "price_unit",
+              "price_subtotal_incl",
+              "discount",
+            ],
+          },
+        )
+      : [];
+
+    // Payments detail
+    const payments = order.payment_ids?.length
+      ? await odooRequest(
+          "pos.payment",
+          "search_read",
+          [[["id", "in", order.payment_ids]]],
+          { fields: ["payment_method_id", "amount"] },
+        )
+      : [];
+
+    res.status(200).json({
+      success: true,
+      order: {
+        id: order.id,
+        ref: order.name,
+        date: order.date_order,
+        status: order.state,
+        total: order.amount_total,
+        tax: order.amount_tax,
+        session: order.session_id?.[1] ?? "—",
+        cashier: order.user_id?.[1] ?? "—",
+        lines: lines.map((l: any) => ({
+          product: l.product_id?.[1] ?? "—",
+          qty: l.qty,
+          price: l.price_unit,
+          subtotal: l.price_subtotal_incl,
+          discount: l.discount,
+        })),
+        payments: payments.map((p: any) => ({
+          method: p.payment_method_id?.[1] ?? "Unknown",
+          amount: p.amount,
+        })),
+      },
+    });
+  },
+);
+
+
+
+// Save held order to Odoo as draft quotation
+export const holdOrderToOdoo = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { cart, customerId, orderName } = req.body;
+
+    if (!customerId)
+      return next(new ErrorHandler("Customer required to hold order", 400));
+    if (!cart?.length) return next(new ErrorHandler("Cart is empty", 400));
+
+    // 1. Create draft sale order
+    const saleOrderId = await odooRequest("sale.order", "create", [
+      {
+        partner_id: customerId,
+        state: "draft", // quotation = unpaid held order
+        origin: `POS_HOLD:${orderName || "Unnamed"}`,
+        note: `Held POS order: ${orderName}`,
+      },
+    ]);
+
+    // 2. Add lines
+    for (const item of cart) {
+      // get variant
+      const variant = await odooRequest(
+  "product.product",
+  "search_read",
+  [[["product_tmpl_id", "=", item.productId]]],
+  { fields: ["id"], limit: 1 },
+);
+
+      if (!variant[0]) continue;
+
+      await odooRequest("sale.order.line", "create", [
+        {
+          order_id: saleOrderId,
+          product_id: variant[0].id,
+          product_uom_qty: item.qty,
+          price_unit: item.price,
+          discount: item.discount || 0,
+          name: item.note ? `${item.name} - ${item.note}` : item.name,
+        },
+      ]);
+    }
+
+    res.json({
+      success: true,
+      message: "Order held in Odoo",
+      odooOrderId: saleOrderId,
+    });
+  },
+);
+
+export const getHeldOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const orders = await odooRequest(
+      "sale.order",
+      "search_read",
+      [
+        [
+          ["state", "=", "draft"],
+          ["origin", "like", "POS_HOLD:%"],
+        ],
+      ],
+      {
+        fields: [
+          "id",
+          "name",
+          "partner_id",
+          "date_order",
+          "amount_total",
+          "origin",
+          "order_line",
+        ],
+        order: "date_order desc",
+        limit: 50,
+      },
+    );
+
+    if (!orders.length) {
+      return res.json({ success: true, orders: [] });
+    }
+
+    // Fetch lines for each order
+    const allLineIds = orders.flatMap((o: any) => o.order_line ?? []);
+    const lines = allLineIds.length
+      ? await odooRequest(
+          "sale.order.line",
+          "search_read",
+          [[["id", "in", allLineIds]]],
+          {
+            fields: [
+              "id",
+              "order_id",
+              "product_id",
+              "product_uom_qty",
+              "price_unit",
+              "discount",
+              "name",
+            ],
+          },
+        )
+      : [];
+
+    // Group lines by order
+    const linesByOrder: Record<number, any[]> = {};
+    for (const line of lines) {
+      const oid = line.order_id[0];
+      if (!linesByOrder[oid]) linesByOrder[oid] = [];
+      linesByOrder[oid].push({
+        productName: line.product_id?.[1] ?? line.name,
+        qty: line.product_uom_qty,
+        price: line.price_unit,
+        discount: line.discount,
+      });
+    }
+
+    const result = orders.map((o: any) => ({
+      odooOrderId: o.id,
+      name: o.name,
+      customer: o.partner_id
+        ? { id: o.partner_id[0], name: o.partner_id[1] }
+        : null,
+      date: o.date_order,
+      total: o.amount_total,
+      lines: linesByOrder[o.id] ?? [],
+    }));
+
+    res.json({ success: true, orders: result });
+  },
+);
+
+
+
+// remove hold order id
+export const removeHeldOrder = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const id = Number(req.params.id);
+
+    if (!id || isNaN(id)) {
+      return next(new ErrorHandler("Invalid order ID", 400));
+    }
+
+    // Check the order state first
+    const orders = await odooRequest(
+      "sale.order",
+      "search_read",
+      [[["id", "=", id]]],
+      { fields: ["id", "state"], limit: 1 }
+    );
+
+    if (!orders.length) {
+      return next(new ErrorHandler("Order not found in Odoo", 404));
+    }
+
+    const state = orders[0].state;
+
+   
+    if (state !== "draft" && state !== "cancel") {
+      await odooRequest("sale.order", "action_cancel", [[id]]);
+    }
+
+    await odooRequest("sale.order", "unlink", [[id]]);
+
+    res.status(200).json({ success: true, message: "Held order removed" });
+  }
+);
+
+
+
+
+
