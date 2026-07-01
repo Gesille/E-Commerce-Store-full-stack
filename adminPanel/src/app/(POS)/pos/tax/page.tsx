@@ -33,7 +33,7 @@ import {
   ShieldOff,
   Search,
 } from "lucide-react";
-
+import { useGetCustomersQuery } from "@/redux/pos/Posapi";
 // ─── Status banner ─────────────────────────────────────────────────────────
 function DiagnosticsBanner() {
   const { data, isLoading, refetch } = useGetTaxStatusQuery();
@@ -190,88 +190,9 @@ function HolidayDialog({
     </Dialog>
   );
 }
-import { useGetCustomersQuery } from "@/redux/pos/Posapi";
 
-function AddExemptionSection() {
-  const [search, setSearch] = useState("");
-  const { data, isLoading } = useGetCustomersQuery(search, { skip: search.length < 2 });
-  const [setExemption, { isLoading: saving }] = useSetCustomerExemptionMutation();
 
-  const customers = data?.customers ?? [];
 
-  const handleToggle = async (id: number, name: string, current: boolean) => {
-    try {
-      await setExemption({ odooPartnerId: id, exempt: !current }).unwrap();
-      toast.success(current ? `Removed exemption for ${name}` : `${name} is now tax exempt`);
-    } catch {
-      toast.error("Failed to update exemption");
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-          <Plus size={15} className="text-indigo-600" /> Add / Remove Exemption
-        </h3>
-        <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-2.5 h-8">
-          <Search size={12} className="text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search customer by name…"
-            className="bg-transparent border-none outline-none text-xs w-48"
-          />
-        </div>
-      </div>
-
-      <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
-        {search.length < 2 && (
-          <div className="px-4 py-6 text-sm text-slate-400 text-center">
-            Type at least 2 characters to search
-          </div>
-        )}
-        {isLoading && (
-          <div className="px-4 py-6 text-sm text-slate-400 text-center">Searching…</div>
-        )}
-        {!isLoading && search.length >= 2 && customers.length === 0 && (
-          <div className="px-4 py-6 text-sm text-slate-400 text-center">No customers found</div>
-        )}
-        {customers.map((c: any) => (
-          <div
-            key={c.id}
-            className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
-          >
-            <div>
-              <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                {c.name}
-                {c.isTaxExempt && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                    EXEMPT
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-slate-400">
-                {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact info"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={saving}
-              onClick={() => handleToggle(c.id, c.name, !!c.isTaxExempt)}
-              className={c.isTaxExempt
-                ? "text-xs text-red-500 border-red-200 hover:bg-red-50"
-                : "text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"}
-            >
-              {c.isTaxExempt ? "Remove exemption" : "Grant exemption"}
-            </Button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 // ─── Holidays list ───────────────────────────────────────────────────────────
 function HolidaysSection() {
   const { data: holidays = [], isLoading } = useGetHolidaysQuery();
@@ -392,29 +313,32 @@ function HolidaysSection() {
     </div>
   );
 }
-
-// ─── Exempt customers ────────────────────────────────────────────────────────
+// ─── Exempt customers (search-and-toggle) ────────────────────────────────────
 function ExemptCustomersSection() {
-  const { data: customers = [], isLoading } = useGetExemptCustomersQuery();
-  const [setExemption] = useSetCustomerExemptionMutation();
   const [search, setSearch] = useState("");
+  const isSearching = search.trim().length >= 2;
 
-  // Note: this endpoint only returns customers already marked exempt.
-  // For adding NEW exemptions you'll want a customer search + toggle —
-  // wiring that needs a generic "search all customers" endpoint
-  // (your CustomerModal's useGetCustomersQuery works for this).
+  const { data: exemptList = [], isLoading: loadingExempt } =
+    useGetExemptCustomersQuery(undefined, { skip: isSearching });
 
-  const filtered = customers.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  const { data: searchData, isLoading: loadingSearch } =
+    useGetCustomersQuery(search, { skip: !isSearching });
 
-  const handleRemove = async (id: number, name: string) => {
-    if (!confirm(`Remove tax exemption for ${name}?`)) return;
+  const [setExemption, { isLoading: saving }] = useSetCustomerExemptionMutation();
+
+  const rows = isSearching
+    ? (searchData?.customers ?? [])
+    : exemptList.map((c) => ({ ...c, isTaxExempt: true }));
+
+  const isLoading = isSearching ? loadingSearch : loadingExempt;
+
+  const handleToggle = async (id: number, name: string, current: boolean) => {
+    if (current && !confirm(`Remove tax exemption for ${name}?`)) return;
     try {
-      await setExemption({ odooPartnerId: id, exempt: false }).unwrap();
-      toast.success("Exemption removed");
+      await setExemption({ odooPartnerId: id, exempt: !current }).unwrap();
+      toast.success(current ? `Removed exemption for ${name}` : `${name} is now tax exempt`);
     } catch {
-      toast.error("Failed to update");
+      toast.error("Failed to update exemption");
     }
   };
 
@@ -429,48 +353,64 @@ function ExemptCustomersSection() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter…"
-            className="bg-transparent border-none outline-none text-xs w-32"
+            placeholder="Search any customer to grant/remove…"
+            className="bg-transparent border-none outline-none text-xs w-56"
           />
         </div>
       </div>
 
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-slate-50 max-h-72 overflow-y-auto">
         {isLoading && (
           <div className="px-4 py-6 text-sm text-slate-400 text-center">Loading…</div>
         )}
-        {!isLoading && filtered.length === 0 && (
+
+        {!isLoading && rows.length === 0 && (
           <div className="px-4 py-6 text-sm text-slate-400 text-center">
-            No exempt customers found
+            {isSearching ? "No customers found" : "No exempt customers yet — search above to grant one"}
           </div>
         )}
-        {filtered.map((c) => (
-          <div
-            key={c.id}
-            className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
-          >
-            <div>
-              <p className="text-sm font-medium text-slate-800">{c.name}</p>
-              <p className="text-xs text-slate-400">
-                {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact info"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRemove(c.id, c.name)}
-              className="text-xs text-red-500 border-red-200 hover:bg-red-50"
+
+        {!isLoading &&
+          rows.map((c: any) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
             >
-              Remove exemption
-            </Button>
-          </div>
-        ))}
+              <div>
+                <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                  {c.name}
+                  {c.isTaxExempt && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                      EXEMPT
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact info"}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={() => handleToggle(c.id, c.name, !!c.isTaxExempt)}
+                className={
+                  c.isTaxExempt
+                    ? "text-xs text-red-500 border-red-200 hover:bg-red-50"
+                    : "text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                }
+              >
+                {c.isTaxExempt ? "Remove exemption" : "Grant exemption"}
+              </Button>
+            </div>
+          ))}
       </div>
 
-      <p className="px-4 py-2.5 text-[11px] text-slate-400 border-t border-slate-50">
-        To grant a new exemption, use the customer's profile or POS customer
-        picker — search-and-toggle isn't wired here yet.
-      </p>
+      {!isSearching && (
+        <p className="px-4 py-2.5 text-[11px] text-slate-400 border-t border-slate-50">
+          Showing currently exempt customers. Search above to find any customer and grant a new exemption.
+        </p>
+      )}
     </div>
   );
 }
@@ -489,7 +429,6 @@ export default function TaxSettingsPage() {
 
       <DiagnosticsBanner />
       <HolidaysSection />
-      <AddExemptionSection />
       <ExemptCustomersSection />
     </div>
   );

@@ -55,7 +55,7 @@ export function CustomerModal({
   const [newCity, setNewCity] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [createError, setCreateError] = useState("");
-const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
+  const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
   // ── live search from Odoo via backend ────────────────────────────────────
   const { data, isLoading } = useGetCustomersQuery(search);
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
@@ -89,7 +89,7 @@ const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
         street: newStreet.trim() || undefined,
         city: newCity.trim() || undefined,
         country: newCountry.trim() || undefined,
-        isTaxExempt: newIsTaxExempt, 
+        isTaxExempt: newIsTaxExempt,
       }).unwrap();
 
       const created: Customer = {
@@ -219,23 +219,25 @@ const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
                 />
               </div>
-              {/* Tax exempt toggle */}
-<div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
-  <input
-    id="newIsTaxExempt"
-    type="checkbox"
-    checked={newIsTaxExempt}
-    onChange={(e) => setNewIsTaxExempt(e.target.checked)}
-    className="h-4 w-4 accent-amber-600 cursor-pointer"
-  />
-  <label
-    htmlFor="newIsTaxExempt"
-    className="text-[12px] font-medium text-amber-700 cursor-pointer select-none"
-  >
-    Tax exempt customer (ABCT will not be applied at checkout)
-  </label>
-</div>
             </div>
+            <label
+              htmlFor="newIsTaxExempt"
+              className="flex items-center gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3 cursor-pointer select-none hover:bg-amber-100/60 transition-colors"
+            >
+              <input
+                id="newIsTaxExempt"
+                type="checkbox"
+                checked={newIsTaxExempt}
+                onChange={(e) => setNewIsTaxExempt(e.target.checked)}
+                className="h-4 w-4 accent-amber-600 cursor-pointer shrink-0"
+              />
+              <span className="text-[12px] font-medium text-amber-700">
+                Tax exempt customer
+                <span className="block text-[10.5px] font-normal text-amber-600/80 mt-0.5">
+                  ABCT will not be applied to this customer's orders at checkout
+                </span>
+              </span>
+            </label>
             {createError && (
               <div className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">
                 {createError}
@@ -325,21 +327,21 @@ const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                     <div className="text-[13px] font-medium text-gray-900 flex items-center gap-1.5">
-  {c.name}
-  {c.isTaxExempt && (
-    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
-      TAX EXEMPT
-    </span>
-  )}
-</div>
+                      <div className="text-[13px] font-medium text-gray-900 flex items-center gap-1.5">
+                        {c.name}
+                        {c.isTaxExempt && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            TAX EXEMPT
+                          </span>
+                        )}
+                      </div>
                       {current?.id === c.id && (
                         <span className="text-blue-500 text-xs">
                           ✓ Selected
                         </span>
                       )}
                     </div>
-                  
+
                     <div className="text-[11px] text-gray-400 mt-0.5 space-y-0.5">
                       <div>
                         {c.email} · {c.phone}
