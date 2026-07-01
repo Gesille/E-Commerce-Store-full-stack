@@ -767,7 +767,53 @@ export const closeSession = CatchAsyncError(
       // non-fatal — fall through and let closing control surface the real error if this didn't catch everything
     }
 
-    // ── Close active session ─────────────────────────────────────────────────
+    // ── Close active session in Odoo ─────────────────────────────────────────
+    // IMPORTANT: We do NOT touch Mongo (CashierShiftLog) until we've verified
+    // Odoo actually transitioned the session to "closed". Previously this
+    // marked shifts closed *before* calling Odoo, so any failure (cash
+    // discrepancy, missing journal config, unposted move, etc.) left Mongo
+    // saying "closed" while Odoo silently stayed "opened" — and the next
+    // "Open Session" click would just reattach to that same stale Odoo
+    // session instead of creating a new one, corrupting totals.
+    try {
+      await odooRequest("pos.session", "action_pos_session_closing_control", [
+        [sessionId],
+      ]);
+    } catch (err: any) {
+      console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
+      return next(
+        new ErrorHandler(
+          err?.message || "Failed to close POS session in Odoo",
+          409,
+        ),
+      );
+    }
+
+    // ── Verify Odoo actually reached "closed" ────────────────────────────────
+    // action_pos_session_closing_control does not guarantee a full close on
+    // its own — Odoo can leave the session in "closing_control" pending a
+    // manual cash-difference confirmation in the backend UI. Treat anything
+    // other than "closed" as a failure so we never mark Mongo closed for a
+    // session that's still open in Odoo.
+    const [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
+      fields: ["id", "state"],
+    });
+
+    if (verified?.state !== "closed") {
+      console.error(
+        "[CLOSE SESSION] Session did not reach closed state. Current state:",
+        verified?.state,
+      );
+      return next(
+        new ErrorHandler(
+          `Session closing control ran but the session is still "${verified?.state}" in Odoo. ` +
+          `It likely needs a manual cash-difference confirmation in the Odoo backend before it can fully close.`,
+          409,
+        ),
+      );
+    }
+
+    // ── Only now mark shifts closed in Mongo ─────────────────────────────────
     const now = new Date();
 
     await CashierShiftLog.updateMany(
@@ -783,20 +829,6 @@ export const closeSession = CatchAsyncError(
         },
       },
     );
-
-    try {
-      await odooRequest("pos.session", "action_pos_session_closing_control", [
-        [sessionId],
-      ]);
-    } catch (err: any) {
-      console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
-      return next(
-        new ErrorHandler(
-          err?.message || "Failed to close POS session in Odoo",
-          409,
-        ),
-      );
-    }
 
     const shiftLogs = await CashierShiftLog.find({ odooSessionId: sessionId })
       .populate("cashierId", "name email role")
