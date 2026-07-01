@@ -55,7 +55,7 @@ export function CustomerModal({
   const [newCity, setNewCity] = useState("");
   const [newCountry, setNewCountry] = useState("");
   const [createError, setCreateError] = useState("");
-
+const [newIsTaxExempt, setNewIsTaxExempt] = useState(false);
   // ── live search from Odoo via backend ────────────────────────────────────
   const { data, isLoading } = useGetCustomersQuery(search);
   const [createCustomer, { isLoading: creating }] = useCreateCustomerMutation();
@@ -89,6 +89,7 @@ export function CustomerModal({
         street: newStreet.trim() || undefined,
         city: newCity.trim() || undefined,
         country: newCountry.trim() || undefined,
+        isTaxExempt: newIsTaxExempt, 
       }).unwrap();
 
       const created: Customer = {
@@ -100,6 +101,7 @@ export function CustomerModal({
         street: newStreet.trim() || undefined,
         city: newCity.trim() || undefined,
         country: newCountry.trim() || undefined,
+        isTaxExempt: newIsTaxExempt,
       };
       onSelect(created);
       onClose();
@@ -217,6 +219,22 @@ export function CustomerModal({
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] text-gray-700 outline-none focus:border-blue-400"
                 />
               </div>
+              {/* Tax exempt toggle */}
+<div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+  <input
+    id="newIsTaxExempt"
+    type="checkbox"
+    checked={newIsTaxExempt}
+    onChange={(e) => setNewIsTaxExempt(e.target.checked)}
+    className="h-4 w-4 accent-amber-600 cursor-pointer"
+  />
+  <label
+    htmlFor="newIsTaxExempt"
+    className="text-[12px] font-medium text-amber-700 cursor-pointer select-none"
+  >
+    Tax exempt customer (ABCT will not be applied at checkout)
+  </label>
+</div>
             </div>
             {createError && (
               <div className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">

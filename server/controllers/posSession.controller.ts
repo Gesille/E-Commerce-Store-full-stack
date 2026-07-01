@@ -1872,19 +1872,19 @@ export const getCustomers = CatchAsyncError(
     const search = (req.query.search as string) ?? "";
     const domain: any[] = [["customer_rank", ">", 0]];
     if (search) domain.push(["name", "ilike", search]);
-const exemptFiscalPositionId = await getTaxExemptFiscalPositionId();
+
     const customers = await odooRequest(
       "res.partner",
       "search_read",
-       [domain],
+      [domain],
       {
-     fields: [
+        fields: [
           "id", "name", "phone", "email",
           "street", "city", "country_id",
           "commercial_company_name",
           "parent_id",
           "is_company",
-          "property_account_position_id",       
+          "x_tax_exempt",  
         ],
         limit: 100,
       },
@@ -1898,13 +1898,10 @@ const exemptFiscalPositionId = await getTaxExemptFiscalPositionId();
       street: c.street || undefined,
       city: c.city || undefined,
       country: c.country_id ? c.country_id[1] : undefined,
-      // Show parent company name, or the commercial_company_name fallback
       company: c.parent_id
         ? c.parent_id[1]
         : c.commercial_company_name || undefined,
-       isTaxExempt: exemptFiscalPositionId
-    ? c.property_account_position_id?.[0] === exemptFiscalPositionId
-    : false,
+      isTaxExempt: !!c.x_tax_exempt,   // ← now matches resolveTaxRate()
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });

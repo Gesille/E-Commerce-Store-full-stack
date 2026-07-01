@@ -190,7 +190,88 @@ function HolidayDialog({
     </Dialog>
   );
 }
+import { useGetCustomersQuery } from "@/redux/pos/Posapi";
 
+function AddExemptionSection() {
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useGetCustomersQuery(search, { skip: search.length < 2 });
+  const [setExemption, { isLoading: saving }] = useSetCustomerExemptionMutation();
+
+  const customers = data?.customers ?? [];
+
+  const handleToggle = async (id: number, name: string, current: boolean) => {
+    try {
+      await setExemption({ odooPartnerId: id, exempt: !current }).unwrap();
+      toast.success(current ? `Removed exemption for ${name}` : `${name} is now tax exempt`);
+    } catch {
+      toast.error("Failed to update exemption");
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <Plus size={15} className="text-indigo-600" /> Add / Remove Exemption
+        </h3>
+        <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-2.5 h-8">
+          <Search size={12} className="text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search customer by name…"
+            className="bg-transparent border-none outline-none text-xs w-48"
+          />
+        </div>
+      </div>
+
+      <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
+        {search.length < 2 && (
+          <div className="px-4 py-6 text-sm text-slate-400 text-center">
+            Type at least 2 characters to search
+          </div>
+        )}
+        {isLoading && (
+          <div className="px-4 py-6 text-sm text-slate-400 text-center">Searching…</div>
+        )}
+        {!isLoading && search.length >= 2 && customers.length === 0 && (
+          <div className="px-4 py-6 text-sm text-slate-400 text-center">No customers found</div>
+        )}
+        {customers.map((c: any) => (
+          <div
+            key={c.id}
+            className="flex items-center justify-between px-4 py-3 hover:bg-slate-50/60 transition-colors"
+          >
+            <div>
+              <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                {c.name}
+                {c.isTaxExempt && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                    EXEMPT
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-slate-400">
+                {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact info"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => handleToggle(c.id, c.name, !!c.isTaxExempt)}
+              className={c.isTaxExempt
+                ? "text-xs text-red-500 border-red-200 hover:bg-red-50"
+                : "text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"}
+            >
+              {c.isTaxExempt ? "Remove exemption" : "Grant exemption"}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 // ─── Holidays list ───────────────────────────────────────────────────────────
 function HolidaysSection() {
   const { data: holidays = [], isLoading } = useGetHolidaysQuery();
@@ -408,6 +489,7 @@ export default function TaxSettingsPage() {
 
       <DiagnosticsBanner />
       <HolidaysSection />
+      <AddExemptionSection />
       <ExemptCustomersSection />
     </div>
   );

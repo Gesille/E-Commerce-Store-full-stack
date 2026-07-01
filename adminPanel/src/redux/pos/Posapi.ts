@@ -158,6 +158,7 @@ export const posApi = apiSlice.injectEndpoints({
         city?: string;
         country?: string;
         company?: string;
+        isTaxExempt?: boolean; 
       }
     >({
       query: (body) => ({
