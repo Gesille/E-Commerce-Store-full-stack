@@ -156,5 +156,5 @@ POSRouter.get(
   authorizeRoles("admin", "cashier"),
   getHeldOrders,
 );
-POSRouter.get("/session/:sessionId/diagnose-tax", diagnoseSessionTaxMismatch);
+POSRouter.get("/session/:sessionId", diagnoseSessionTaxMismatch);
 export default POSRouter;
