@@ -477,6 +477,42 @@ export const confirmOpeningBalance = CatchAsyncError(
   },
 );
 
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Walk-in customer resolver (same find-or-create pattern as resolveOrCreateSupplier)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let cachedWalkInPartnerId: number | null = null;
+
+async function getOrCreateWalkInCustomer(): Promise<number> {
+  if (cachedWalkInPartnerId) return cachedWalkInPartnerId;
+
+  const existing = await odooRequest(
+    "res.partner",
+    "search_read",
+    [[["name", "=", "Walk-in Customer"]]],
+    { fields: ["id"], limit: 1 },
+  );
+
+  if (existing.length) {
+    cachedWalkInPartnerId = existing[0].id;
+    return cachedWalkInPartnerId!;
+  }
+
+  const newId = await odooRequest("res.partner", "create", [
+    {
+      name: "Walk-in Customer",
+      customer_rank: 1,
+      comment: "Auto-created fallback partner for POS orders missing a customer on Identify-Customer payment methods.",
+    },
+  ]);
+
+  cachedWalkInPartnerId = newId;
+  return newId;
+}
+
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -561,16 +597,6 @@ export const closeSession = CatchAsyncError(
     }
 
     // ── DRAFT ORDER CHECK ──────────────────────────────────────────────────
-    // Odoo refuses to close a session while any pos.order tied to it is still
-    // in state 'draft'. This happens two ways:
-    //   1. action_pos_order_paid failed silently during order creation (see
-    //      createOrder's non-fatal try/catch around that call).
-    //   2. The order is OVERPAID (amount_paid > amount_total, i.e. change was
-    //      given back). Odoo's test_paid() requires amount_paid to equal
-    //      amount_total almost exactly — >= is not good enough, so calling
-    //      action_pos_order_paid directly on an overpaid order fails with a
-    //      misleading "not fully paid" error. These must have their
-    //      pos.payment lines capped down to amount_total first.
     const draftOrders = await odooRequest(
       "pos.order",
       "search_read",
@@ -578,7 +604,7 @@ export const closeSession = CatchAsyncError(
         ["session_id", "=", Number(sessionId)],
         ["state", "=", "draft"],
       ]],
-      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids"] },
+      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids", "partner_id"] },
     );
 
     if (draftOrders.length) {
@@ -601,8 +627,6 @@ export const closeSession = CatchAsyncError(
           const isExactPaid = order.amount_paid === order.amount_total && order.amount_total > 0;
 
           if (isOverpaid) {
-            // Cap pos.payment amounts down so their sum == amount_total exactly,
-            // largest-first so any rounding remainder lands on the biggest line.
             const payments = await odooRequest(
               "pos.payment",
               "search_read",
@@ -627,20 +651,41 @@ export const closeSession = CatchAsyncError(
               [order.id],
               { amount_paid: order.amount_total, amount_return: change },
             ]);
-
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log(
-              "[CLOSE SESSION] Recovered overpaid draft order:",
-              order.pos_reference,
-              "change:", change,
-            );
-            continue; // resolved, don't add to stillDraft
           }
 
-          if (isExactPaid) {
-            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-            console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
-            continue; // resolved, don't add to stillDraft
+          if (isOverpaid || isExactPaid) {
+            try {
+              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+              console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+              continue; // resolved, don't add to stillDraft
+            } catch (payErr: any) {
+              const msg: string = payErr?.message || "";
+
+              // Payment method requires an identified customer.
+              if (msg.includes("does not contain a customer")) {
+                if (!order.partner_id) {
+                  const walkInId = await getOrCreateWalkInCustomer();
+                  await odooRequest("pos.order", "write", [
+                    [order.id],
+                    { partner_id: walkInId },
+                  ]);
+                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+                  console.log(
+                    "[CLOSE SESSION] Recovered draft order via walk-in customer:",
+                    order.pos_reference,
+                  );
+                  continue; // resolved, don't add to stillDraft
+                }
+
+                diagnostic.reason = "missing_customer_for_account_payment";
+                diagnostic.detail = msg;
+                stillDraft.push(diagnostic);
+                continue;
+              }
+
+              // Unknown failure on an otherwise-paid order — surface as-is.
+              throw payErr;
+            }
           }
 
           diagnostic.reason = "underpaid_or_zero_total";
@@ -665,6 +710,61 @@ export const closeSession = CatchAsyncError(
           unresolvedOrders: stillDraft,
         });
       }
+    }
+
+    // ── SESSION-WIDE CUSTOMER-ACCOUNT SWEEP ─────────────────────────────────
+    // action_pos_session_closing_control revalidates ALL orders in the
+    // session (any state) against the "Identify Customer" rule for the
+    // Customer Account payment method — not just the ones that were stuck
+    // in draft. Backfill any paid/done order using that payment method that
+    // still has no partner_id before calling closing control, or the same
+    // error resurfaces even after every draft is cleared.
+    try {
+      const accountMethods = await odooRequest(
+        "pos.payment.method",
+        "search_read",
+        [[["name", "ilike", "Customer Account"]]],
+        { fields: ["id"] },
+      );
+      const accountMethodIds = accountMethods.map((m: any) => m.id);
+
+      if (accountMethodIds.length) {
+        const paymentsOnAccount = await odooRequest(
+          "pos.payment",
+          "search_read",
+          [[["payment_method_id", "in", accountMethodIds], ["pos_order_id.session_id", "=", Number(sessionId)]]],
+          { fields: ["pos_order_id"] },
+        );
+
+        const candidateOrderIds = [
+          ...new Set(paymentsOnAccount.map((p: any) => p.pos_order_id?.[0]).filter(Boolean)),
+        ];
+
+        if (candidateOrderIds.length) {
+          const ordersMissingCustomer = await odooRequest(
+            "pos.order",
+            "search_read",
+            [[["id", "in", candidateOrderIds], ["partner_id", "=", false]]],
+            { fields: ["id", "pos_reference"] },
+          );
+
+          if (ordersMissingCustomer.length) {
+            const walkInId = await getOrCreateWalkInCustomer();
+            await odooRequest(
+              "pos.order",
+              "write",
+              [ordersMissingCustomer.map((o: any) => o.id), { partner_id: walkInId }],
+            );
+            console.log(
+              "[CLOSE SESSION] Backfilled walk-in customer on:",
+              ordersMissingCustomer.map((o: any) => o.pos_reference),
+            );
+          }
+        }
+      }
+    } catch (sweepErr: any) {
+      console.error("[CLOSE SESSION] Customer-account sweep failed:", sweepErr?.message);
+      // non-fatal — fall through and let closing control surface the real error if this didn't catch everything
     }
 
     // ── Close active session ─────────────────────────────────────────────────
