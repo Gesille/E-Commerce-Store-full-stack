@@ -429,17 +429,16 @@ export const getReturns = CatchAsyncError(
       [domain],
       {
         fields: [
-          "id",
-          "name",
-          "pos_reference",
-          "date_order",
-          "amount_total",
-          "amount_tax",
-          "amount_untaxed",
-          "state",
-          "user_id",
-          "lines",
-        ],
+  "id",
+  "name",
+  "pos_reference",
+  "date_order",
+  "amount_total",
+  "amount_tax",
+  "state",
+  "user_id",
+  "lines",
+],
         limit,
         offset: (page - 1) * limit,
         order: "date_order desc",
@@ -599,9 +598,9 @@ export const getReturnById = CatchAsyncError(
         status: mapState(o.state),
         createdAt: o.date_order,
         updatedAt: o.date_order,
-      items: lines.map((l: any) => {
-  const lineSubtotal     = l.price_subtotal ?? 0;
-  const lineSubtotalIncl = l.price_subtotal_incl ?? 0;
+items: lines.map((l: any) => {
+  const lineSubtotal     = Math.abs(l.price_subtotal ?? 0);
+  const lineSubtotalIncl = Math.abs(l.price_subtotal_incl ?? 0);
   const realRate = lineSubtotal > 0
     ? (lineSubtotalIncl - lineSubtotal) / lineSubtotal
     : 0;
