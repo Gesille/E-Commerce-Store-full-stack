@@ -25,7 +25,6 @@ import {
   getPosOrderById,
   holdOrderToOdoo,
   getHeldOrders,
-  diagnoseSessionTaxMismatch,
  
 } from "../controllers/posSession.controller.js";
 
@@ -156,5 +155,5 @@ POSRouter.get(
   authorizeRoles("admin", "cashier"),
   getHeldOrders,
 );
-POSRouter.get("/session/:sessionId", diagnoseSessionTaxMismatch);
+
 export default POSRouter;

@@ -561,6 +561,104 @@ async function resolveRefundPaymentMethodId(order: any, sessionId: number): Prom
 
   throw new Error(`Could not resolve a payment method for refund order ${order.pos_reference}`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tax-delta diagnostic — used inline by closeSession when Odoo's closing
+// control returns the Force-Close wizard. Recomputes what each order line's
+// tax SHOULD be at the CURRENT ABCT rate and compares it against what's
+// actually stored, to reveal whether a mid-session rate/exempt-status change
+// is what's driving the wizard's amount_to_balance, before anyone decides
+// whether to force through it.
+// ─────────────────────────────────────────────────────────────────────────────
+async function diagnoseSessionTaxDelta(sessionId: number) {
+  const abctTaxId = await getABCTTaxId();
+  let currentAbctRate: number | null = null;
+  if (abctTaxId) {
+    const [abctTax] = await odooRequest("account.tax", "read", [[abctTaxId]], {
+      fields: ["id", "amount"],
+    });
+    currentAbctRate = abctTax?.amount ? abctTax.amount / 100 : null;
+  }
+
+  const orders = await odooRequest(
+    "pos.order",
+    "search_read",
+    [[["session_id", "=", sessionId]]],
+    { fields: ["id", "pos_reference", "amount_total", "amount_tax", "state", "lines", "partner_id"] },
+  );
+
+  const allLineIds = orders.flatMap((o: any) => o.lines || []);
+  const lines = allLineIds.length
+    ? await odooRequest(
+        "pos.order.line",
+        "search_read",
+        [[["id", "in", allLineIds]]],
+        {
+          fields: [
+            "id", "order_id", "product_id",
+            "price_subtotal", "price_subtotal_incl", "tax_ids",
+          ],
+        },
+      )
+    : [];
+
+  const linesByOrder: Record<number, any[]> = {};
+  for (const l of lines) {
+    const oid = l.order_id[0];
+    (linesByOrder[oid] ||= []).push(l);
+  }
+
+  const findings = orders.map((o: any) => {
+    const orderLines = linesByOrder[o.id] || [];
+
+    const lineFindings = orderLines
+      .map((l: any) => {
+        const storedTax = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
+        const hasAbctTax = Array.isArray(l.tax_ids) && abctTaxId ? l.tax_ids.includes(abctTaxId) : false;
+        const expectedTax =
+          hasAbctTax && currentAbctRate !== null
+            ? Math.round(l.price_subtotal * currentAbctRate * 100) / 100
+            : 0;
+        const delta = Math.round((storedTax - expectedTax) * 100) / 100;
+
+        return {
+          lineId: l.id,
+          product: l.product_id?.[1],
+          priceSubtotal: l.price_subtotal,
+          storedTax,
+          hasAbctTaxOnLine: hasAbctTax,
+          expectedTaxAtCurrentRate: expectedTax,
+          delta,
+          mismatched: Math.abs(delta) > 0.01,
+        };
+      })
+      .filter((f: any) => f.mismatched);
+
+    const orderTaxDelta = lineFindings.reduce((s: number, f: any) => s + f.delta, 0);
+
+    return {
+      orderId: o.id,
+      reference: o.pos_reference,
+      state: o.state,
+      amountTotal: o.amount_total,
+      amountTax: o.amount_tax,
+      orderTaxDelta: Math.round(orderTaxDelta * 100) / 100,
+      mismatchedLineCount: lineFindings.length,
+      lines: lineFindings,
+    };
+  });
+
+  const totalDelta = findings.reduce((s: number, f: any) => s + f.orderTaxDelta, 0);
+  const flaggedOrders = findings.filter((f: any) => f.mismatchedLineCount > 0);
+
+  return {
+    currentAbctRate,
+    totalOrders: orders.length,
+    totalTaxDeltaAcrossSession: Math.round(totalDelta * 100) / 100,
+    flaggedOrderCount: flaggedOrders.length,
+    flaggedOrders,
+  };
+}
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -919,9 +1017,24 @@ export const closeSession = CatchAsyncError(
       balancingAccountId?: number;
     };
 
-    if (verified?.state !== "closed" && wizardInfo) {
+   if (verified?.state !== "closed" && wizardInfo) {
       if (!forceClose) {
-        // Do NOT auto-force. Surface the real reason so a human decides.
+        // Do NOT auto-force. Run the tax-delta diagnostic inline so the
+        // reason for the discrepancy is visible without a second request.
+        let taxDiagnostic: any = null;
+        try {
+          taxDiagnostic = await diagnoseSessionTaxDelta(Number(sessionId));
+        } catch (diagErr: any) {
+          console.error("[CLOSE SESSION] Tax diagnostic failed:", diagErr?.message);
+        }
+
+        const diagnosticMatchesGap =
+          taxDiagnostic &&
+          Math.abs(
+            Math.abs(taxDiagnostic.totalTaxDeltaAcrossSession) -
+              Math.abs(wizardInfo.amount_to_balance ?? 0),
+          ) < 1;
+
         return res.status(409).json({
           success: false,
           message:
@@ -932,6 +1045,16 @@ export const closeSession = CatchAsyncError(
           suggestedAccountId: wizardInfo.account_id?.[0] ?? null,
           suggestedAccountName: wizardInfo.account_id?.[1] ?? null,
           accountIsEditable: wizardInfo.account_readonly === false,
+          taxDiagnostic,
+          likelyCause: diagnosticMatchesGap
+            ? "Tax-rate drift confirmed: totalTaxDeltaAcrossSession closely matches Odoo's amount_to_balance. " +
+              "See taxDiagnostic.flaggedOrders for the specific orders/lines priced under a different ABCT rate " +
+              "than what's currently configured."
+            : taxDiagnostic
+              ? "Tax-rate drift does NOT explain the gap (delta doesn't match amount_to_balance). " +
+                "This is likely a different accounting/config issue — safe to review and force-close with " +
+                "the suggested account if you don't see a pricing bug elsewhere."
+              : "Tax diagnostic could not run — investigate manually before forcing.",
           howToResolve:
             "Either close this session from the Odoo backend UI (Point of Sale > Orders > " +
             "Sessions), where the wizard will let you review and confirm the balancing " +
@@ -2284,117 +2407,5 @@ export const removeHeldOrder = CatchAsyncError(
 
 
 
-export const diagnoseSessionTaxMismatch = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const sessionId = Number(req.params.sessionId);
-    if (!sessionId) return next(new ErrorHandler("sessionId is required", 400));
 
-    // ── Current ABCT tax config ─────────────────────────────────────────────
-    const abctTaxId = await getABCTTaxId();
-    let currentAbctRate: number | null = null;
-    if (abctTaxId) {
-      const [abctTax] = await odooRequest(
-        "account.tax",
-        "read",
-        [[abctTaxId]],
-        { fields: ["id", "amount", "name"] },
-      );
-      currentAbctRate = abctTax?.amount ? abctTax.amount / 100 : null;
-    }
-
-    // ── All orders in this session ──────────────────────────────────────────
-    const orders = await odooRequest(
-      "pos.order",
-      "search_read",
-      [[["session_id", "=", sessionId]]],
-      { fields: ["id", "pos_reference", "amount_total", "amount_tax", "amount_paid", "state", "lines", "partner_id"] },
-    );
-
-    const allLineIds = orders.flatMap((o: any) => o.lines || []);
-    const lines = allLineIds.length
-      ? await odooRequest(
-          "pos.order.line",
-          "search_read",
-          [[["id", "in", allLineIds]]],
-          {
-            fields: [
-              "id", "order_id", "product_id",
-              "price_subtotal", "price_subtotal_incl",
-              "qty", "price_unit", "discount", "tax_ids",
-            ],
-          },
-        )
-      : [];
-
-    const linesByOrder: Record<number, any[]> = {};
-    for (const l of lines) {
-      const oid = l.order_id[0];
-      (linesByOrder[oid] ||= []).push(l);
-    }
-
-    // ── Per-order: recompute what tax SHOULD be at the current ABCT rate,
-    //    and compare against what's actually stored on the line. Any line
-    //    with a nonzero delta was priced under a different tax config than
-    //    what's active now (rate changed, holiday toggled, or fiscal
-    //    position changed) between when it was created and today. ────────
-    const findings = orders.map((o: any) => {
-      const orderLines = linesByOrder[o.id] || [];
-
-      const lineFindings = orderLines.map((l: any) => {
-        const storedTax = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
-        const hasAbctTax = Array.isArray(l.tax_ids) && abctTaxId ? l.tax_ids.includes(abctTaxId) : false;
-
-        const expectedTax =
-          hasAbctTax && currentAbctRate !== null
-            ? Math.round(l.price_subtotal * currentAbctRate * 100) / 100
-            : 0;
-
-        const delta = Math.round((storedTax - expectedTax) * 100) / 100;
-
-        return {
-          lineId: l.id,
-          product: l.product_id?.[1],
-          priceSubtotal: l.price_subtotal,
-          storedTax,
-          hasAbctTaxOnLine: hasAbctTax,
-          expectedTaxAtCurrentRate: expectedTax,
-          delta,
-          mismatched: Math.abs(delta) > 0.01,
-        };
-      });
-
-      const orderTaxDelta = lineFindings.reduce((s, f) => s + f.delta, 0);
-
-      return {
-        orderId: o.id,
-        reference: o.pos_reference,
-        state: o.state,
-        amountTotal: o.amount_total,
-        amountTax: o.amount_tax,
-        customerId: o.partner_id?.[0] ?? null,
-        orderTaxDelta: Math.round(orderTaxDelta * 100) / 100,
-        mismatchedLineCount: lineFindings.filter((f) => f.mismatched).length,
-        lines: lineFindings.filter((f) => f.mismatched), // only show problem lines
-      };
-    });
-
-    const totalDelta = findings.reduce((s:any, f:any) => s + f.orderTaxDelta, 0);
-    const flaggedOrders = findings.filter((f:any) => f.mismatchedLineCount > 0);
-
-    res.status(200).json({
-      status: "success",
-      sessionId,
-      currentAbctRate,
-      totalOrders: orders.length,
-      totalTaxDeltaAcrossSession: Math.round(totalDelta * 100) / 100,
-      flaggedOrderCount: flaggedOrders.length,
-      flaggedOrders, // sorted worst-first below
-      note:
-        "orderTaxDelta is the gap between what tax was actually stored on each line " +
-        "vs what the CURRENT ABCT rate would produce. A large totalTaxDeltaAcrossSession " +
-        "close to the wizard's amount_to_balance strongly suggests the ABCT rate (or " +
-        "exempt/holiday status) changed mid-session, and the orders below are the cause.",
-    });
-  },
-);
 
