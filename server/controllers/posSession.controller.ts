@@ -562,19 +562,23 @@ export const closeSession = CatchAsyncError(
 
     // ── DRAFT ORDER CHECK ──────────────────────────────────────────────────
     // Odoo refuses to close a session while any pos.order tied to it is still
-    // in state 'draft'. This usually happens when action_pos_order_paid
-    // failed silently during order creation (see createOrder's non-fatal
-    // try/catch around that call) and the order never advanced past draft.
-    // Try to recover those orders here; if any can't be fixed, report them
-    // explicitly instead of letting Odoo's generic error surface.
+    // in state 'draft'. This happens two ways:
+    //   1. action_pos_order_paid failed silently during order creation (see
+    //      createOrder's non-fatal try/catch around that call).
+    //   2. The order is OVERPAID (amount_paid > amount_total, i.e. change was
+    //      given back). Odoo's test_paid() requires amount_paid to equal
+    //      amount_total almost exactly — >= is not good enough, so calling
+    //      action_pos_order_paid directly on an overpaid order fails with a
+    //      misleading "not fully paid" error. These must have their
+    //      pos.payment lines capped down to amount_total first.
     const draftOrders = await odooRequest(
       "pos.order",
       "search_read",
       [[
-        ["session_id", "=", sessionId],
+        ["session_id", "=", Number(sessionId)],
         ["state", "=", "draft"],
       ]],
-      { fields: ["id", "pos_reference", "amount_total", "amount_paid"] },
+      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids"] },
     );
 
     if (draftOrders.length) {
@@ -593,13 +597,53 @@ export const closeSession = CatchAsyncError(
         };
 
         try {
-          if (order.amount_paid >= order.amount_total && order.amount_total > 0) {
+          const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
+          const isExactPaid = order.amount_paid === order.amount_total && order.amount_total > 0;
+
+          if (isOverpaid) {
+            // Cap pos.payment amounts down so their sum == amount_total exactly,
+            // largest-first so any rounding remainder lands on the biggest line.
+            const payments = await odooRequest(
+              "pos.payment",
+              "search_read",
+              [[["id", "in", order.payment_ids]]],
+              { fields: ["id", "amount"] },
+            );
+
+            let remaining = order.amount_total;
+            const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
+
+            for (const p of sorted) {
+              const applied = Math.max(0, Math.min(p.amount, remaining));
+              remaining = Math.round((remaining - applied) * 100) / 100;
+              if (applied !== p.amount) {
+                await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
+              }
+            }
+
+            const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
+
+            await odooRequest("pos.order", "write", [
+              [order.id],
+              { amount_paid: order.amount_total, amount_return: change },
+            ]);
+
+            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+            console.log(
+              "[CLOSE SESSION] Recovered overpaid draft order:",
+              order.pos_reference,
+              "change:", change,
+            );
+            continue; // resolved, don't add to stillDraft
+          }
+
+          if (isExactPaid) {
             await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
             console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
             continue; // resolved, don't add to stillDraft
-          } else {
-            diagnostic.reason = "underpaid_or_zero_total";
           }
+
+          diagnostic.reason = "underpaid_or_zero_total";
         } catch (err: any) {
           console.error(
             "[CLOSE SESSION] Could not auto-resolve draft order:",
@@ -1934,76 +1978,3 @@ export const removeHeldOrder = CatchAsyncError(
 );
 
 
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ONE-TIME REPAIR: fix draft orders where payment_ids sum > amount_total
-// (caused by tendered cash/change never being capped before creation).
-// Run once, then remove.
-// ─────────────────────────────────────────────────────────────────────────────
-export const repairOverpaidDraftOrders = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const { sessionId } = req.body; 
-    const domain: any[] = [["state", "=", "draft"]];
-    if (sessionId) domain.push(["session_id", "=", sessionId]);
-
-    const draftOrders = await odooRequest(
-      "pos.order",
-      "search_read",
-      [domain],
-      { fields: ["id", "pos_reference", "amount_total", "amount_paid", "payment_ids"] },
-    );
-
-    const results: any[] = [];
-
-    for (const order of draftOrders) {
-      // Only touch orders that are overpaid, not genuinely underpaid.
-      if (order.amount_paid < order.amount_total) {
-        results.push({ id: order.id, ref: order.pos_reference, skipped: "genuinely underpaid" });
-        continue;
-      }
-
-      try {
-        const payments = await odooRequest(
-          "pos.payment",
-          "search_read",
-          [[["id", "in", order.payment_ids]]],
-          { fields: ["id", "amount"] },
-        );
-
-        // Cap payment amounts down so their sum == amount_total exactly,
-        // largest-first so rounding remainder lands on the biggest line.
-        let remaining = order.amount_total;
-        const sorted = [...payments].sort((a, b) => b.amount - a.amount);
-
-        for (const p of sorted) {
-          const applied = Math.max(0, Math.min(p.amount, remaining));
-          remaining = Math.round((remaining - applied) * 100) / 100;
-          if (applied !== p.amount) {
-            await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
-          }
-        }
-
-        // Recompute amount_paid on the order to match the corrected payments,
-        // and re-derive amount_return so the change amount is preserved there
-        // instead of inside payment_ids.
-        const correctedPaid = order.amount_total; // now sums exactly
-        const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
-
-        await odooRequest("pos.order", "write", [
-          [order.id],
-          { amount_paid: correctedPaid, amount_return: change },
-        ]);
-
-        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-
-        results.push({ id: order.id, ref: order.pos_reference, status: "repaired", change });
-      } catch (err: any) {
-        results.push({ id: order.id, ref: order.pos_reference, status: "failed", error: err?.message });
-      }
-    }
-
-    res.status(200).json({ success: true, results });
-  },
-);
