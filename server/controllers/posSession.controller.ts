@@ -775,10 +775,27 @@ export const closeSession = CatchAsyncError(
     // saying "closed" while Odoo silently stayed "opened" — and the next
     // "Open Session" click would just reattach to that same stale Odoo
     // session instead of creating a new one, corrupting totals.
+    //
+    // NOTE ON ODOO BEHAVIOR: action_pos_session_closing_control does not
+    // always close the session by itself. In many Odoo versions it only
+    // computes the cash/theoretical difference and, when everything lines
+    // up, internally calls action_pos_session_close(). If it instead
+    // returns an action (e.g. a confirmation wizard for a cash difference)
+    // that action is meaningless over headless RPC — nothing happens and
+    // the session silently stays "opened". We log the raw return value so
+    // this is visible, and explicitly fall back to calling
+    // action_pos_session_close() ourselves when the state didn't move.
+    let closingControlResult: any;
     try {
-      await odooRequest("pos.session", "action_pos_session_closing_control", [
-        [sessionId],
-      ]);
+      closingControlResult = await odooRequest(
+        "pos.session",
+        "action_pos_session_closing_control",
+        [[sessionId]],
+      );
+      console.log(
+        "[CLOSE SESSION] action_pos_session_closing_control result:",
+        JSON.stringify(closingControlResult),
+      );
     } catch (err: any) {
       console.error("[CLOSE SESSION] Odoo closing control failed:", err?.message);
       return next(
@@ -789,16 +806,51 @@ export const closeSession = CatchAsyncError(
       );
     }
 
-    // ── Verify Odoo actually reached "closed" ────────────────────────────────
-    // action_pos_session_closing_control does not guarantee a full close on
-    // its own — Odoo can leave the session in "closing_control" pending a
-    // manual cash-difference confirmation in the backend UI. Treat anything
-    // other than "closed" as a failure so we never mark Mongo closed for a
-    // session that's still open in Odoo.
-    const [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
+    let [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
       fields: ["id", "state"],
     });
 
+    console.log("[CLOSE SESSION] State after closing_control:", verified?.state);
+
+    // ── Fallback: closing_control ran but didn't actually close ─────────────
+    // If we're still "opened" or stuck in "closing_control", try calling
+    // action_pos_session_close directly — this is the method that actually
+    // posts the closing journal entries and flips the state, and is what
+    // the wizard calls internally after the user confirms in the UI.
+    if (verified?.state !== "closed") {
+      try {
+        const closeResult = await odooRequest(
+          "pos.session",
+          "action_pos_session_close",
+          [[sessionId]],
+        );
+        console.log(
+          "[CLOSE SESSION] action_pos_session_close result:",
+          JSON.stringify(closeResult),
+        );
+      } catch (err: any) {
+        console.error(
+          "[CLOSE SESSION] action_pos_session_close fallback failed:",
+          err?.message,
+        );
+        return next(
+          new ErrorHandler(
+            err?.message ||
+              `Session is stuck in "${verified?.state}" and could not be force-closed. ` +
+              `It likely needs manual cash-difference confirmation in the Odoo backend.`,
+            409,
+          ),
+        );
+      }
+
+      [verified] = await odooRequest("pos.session", "read", [[sessionId]], {
+        fields: ["id", "state"],
+      });
+      console.log("[CLOSE SESSION] State after action_pos_session_close:", verified?.state);
+    }
+
+    // ── Final verification ────────────────────────────────────────────────
+    // Never mark Mongo closed unless Odoo genuinely reports "closed".
     if (verified?.state !== "closed") {
       console.error(
         "[CLOSE SESSION] Session did not reach closed state. Current state:",
@@ -806,7 +858,7 @@ export const closeSession = CatchAsyncError(
       );
       return next(
         new ErrorHandler(
-          `Session closing control ran but the session is still "${verified?.state}" in Odoo. ` +
+          `Session is still "${verified?.state}" in Odoo after both closing attempts. ` +
           `It likely needs a manual cash-difference confirmation in the Odoo backend before it can fully close.`,
           409,
         ),
