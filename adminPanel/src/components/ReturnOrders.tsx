@@ -10,10 +10,7 @@ import {
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "./ui/select";
-import { RotateCcw, Hash, Tag, FileText, CreditCard } from "lucide-react";
+import { RotateCcw, Hash, Tag, FileText } from "lucide-react";
 import { useReturnOrderMutation } from "@/redux/order/orderApi";
 import toast from "react-hot-toast";
 
@@ -21,9 +18,6 @@ const formSchema = z.object({
   orderId: z.string().min(1, { message: "Order ID is required" }),
   productName: z.string().min(1, { message: "Product name is required" }),
   quantity: z.coerce.number({ message: "Must be a number" }).int().min(1, { message: "Quantity must be at least 1" }),
-  paymentMethod: z.enum(["cash", "card", "check"], {
-    error: "Refund method is required",
-  }),
   reason: z.string().optional(),
 });
 
@@ -31,12 +25,11 @@ type FormValues = z.infer<typeof formSchema>;
 
 const ReturnOrder = () => {
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema) as any,
+    resolver: zodResolver(formSchema)as any,
     defaultValues: {
       orderId: "",
       productName: "",
       quantity: 0,
-      paymentMethod: "cash",
       reason: "",
     },
   });
@@ -47,7 +40,6 @@ const ReturnOrder = () => {
     try {
       await returnOrder({
         orderId: data.orderId,
-        paymentMethod: data.paymentMethod,
         itemsToReturn: [
           {
             productName: data.productName,
@@ -134,31 +126,6 @@ const ReturnOrder = () => {
               </FormItem>
             )} />
 
-            {/* Payment Method (refund method) */}
-            <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="flex items-center gap-2 text-indigo-700">
-                  <CreditCard size={14} /> Refund Method
-                </FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900 border-indigo-200 dark:border-zinc-700 rounded-lg">
-                      <SelectValue placeholder="Select refund method" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  How the customer should be refunded (can differ from original payment method)
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )} />
-
             {/* Reason (optional) */}
             <FormField control={form.control} name="reason" render={({ field }) => (
               <FormItem>
@@ -180,7 +147,7 @@ const ReturnOrder = () => {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-linear-to-r from-indigo-600 via-purple-600 to-blue-600 text-white hover:opacity-90 rounded-lg shadow-md"
+              className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white hover:opacity-90 rounded-lg shadow-md"
             >
               {isLoading ? "Processing..." : "Submit Return"}
             </Button>
