@@ -223,16 +223,35 @@ export const createReturn = CatchAsyncError(
     const sessionId: number = originalOrder.session_id?.[0];
 
     // 3. Get payment method id from original order
-    let paymentMethodId: number | false = false;
-    if (originalOrder.payment_ids?.length) {
-      const payments = await odooRequest(
-        "pos.payment",
-        "search_read",
-        [[["id", "in", originalOrder.payment_ids]]],
-        { fields: ["payment_method_id", "amount"], limit: 1 },
-      );
-      paymentMethodId = payments[0]?.payment_method_id?.[0] ?? false;
-    }
+ // 3. Resolve payment method: use what the client requested for the refund,
+// fall back to the original order's payment method if not specified
+let paymentMethodId: number | false = false;
+
+if (paymentMethod) {
+  const methods = await odooRequest(
+    "pos.payment.method",
+    "search_read",
+    [[["name", "=ilike", paymentMethod]]],
+    { fields: ["id", "name"], limit: 1 },
+  );
+  paymentMethodId = methods[0]?.id ?? false;
+}
+
+if (!paymentMethodId && originalOrder.payment_ids?.length) {
+  const payments = await odooRequest(
+    "pos.payment",
+    "search_read",
+    [[["id", "in", originalOrder.payment_ids]]],
+    { fields: ["payment_method_id", "amount"], limit: 1 },
+  );
+  paymentMethodId = payments[0]?.payment_method_id?.[0] ?? false;
+}
+
+if (paymentMethod && !paymentMethodId) {
+  return next(
+    new ErrorHandler(`Payment method "${paymentMethod}" not found in Odoo`, 400),
+  );
+}
 
     // 4. Fetch original lines to get refunded_orderline_id references
   const originalLines: any[] = originalOrder.lines?.length
