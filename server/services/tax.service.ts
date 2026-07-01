@@ -1,6 +1,6 @@
 import { odooRequest } from "../odoo/odoo.client.js";
 import TaxSettings from "../models/taxSettings.model.js";
-
+import CustomerTaxExemption from "../models/customerTaxExemption.model.js";
 // ─── Cache (in-memory, resets on server restart) ──────────────────────────────
 let _abctTaxId: number | null = null;
 let _taxExemptFiscalPositionId: number | null = null;
@@ -94,14 +94,13 @@ export const resolveTaxRate = async (
   customerId?: number,
 ): Promise<{ rate: number; reason: string }> => {
 
-  // 1. Customer exempt?
+  // 1. Customer exempt? (Mongo-backed — no Odoo field dependency)
   if (customerId) {
-    const partners = await odooRequest(
-      "res.partner", "search_read",
-      [[["id", "=", customerId]]],
-      { fields: ["x_tax_exempt"], limit: 1 },
-    );
-    if (partners?.[0]?.x_tax_exempt) {
+    const exemption = await CustomerTaxExemption.findOne({
+      odooPartnerId: customerId,
+      exempt: true,
+    });
+    if (exemption) {
       return { rate: 0, reason: "customer_exempt" };
     }
   }

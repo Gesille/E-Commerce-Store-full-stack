@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
-
+import CustomerTaxExemption from "../models/customerTaxExemption.model.js";
 import userModel from "../models/user.model.js";
 import CashierShiftLog, { ShiftState } from "../models/Cashiershiftlog.js";
 import POSOrder from "../models/POSOrder.js";
@@ -1867,6 +1867,8 @@ export const getProducts = CatchAsyncError(
   },
 );
 
+
+
 export const getCustomers = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const search = (req.query.search as string) ?? "";
@@ -1884,11 +1886,19 @@ export const getCustomers = CatchAsyncError(
           "commercial_company_name",
           "parent_id",
           "is_company",
-          "x_tax_exempt",  
         ],
         limit: 100,
       },
     );
+
+    const partnerIds = customers.map((c: any) => c.id);
+    const exemptions = partnerIds.length
+      ? await CustomerTaxExemption.find({
+          odooPartnerId: { $in: partnerIds },
+          exempt: true,
+        }).lean()
+      : [];
+    const exemptSet = new Set(exemptions.map((e) => e.odooPartnerId));
 
     const formatted = customers.map((c: any) => ({
       id: c.id,
@@ -1901,22 +1911,24 @@ export const getCustomers = CatchAsyncError(
       company: c.parent_id
         ? c.parent_id[1]
         : c.commercial_company_name || undefined,
-      isTaxExempt: !!c.x_tax_exempt,   // ← now matches resolveTaxRate()
+      isTaxExempt: exemptSet.has(c.id),
     }));
 
     res.status(200).json({ status: "success", count: formatted.length, customers: formatted });
   },
 );
 
+
+
 export const createCustomer = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const {
       name, phone, email, street, city, country, company,
-      isTaxExempt = false,   // ← NEW: boolean, default false
+      isTaxExempt = false,
     } = req.body;
- 
+
     if (!name) return next(new ErrorHandler("Customer name is required", 400));
- 
+
     // ── Country ────────────────────────────────────────────────────────────
     let countryId: number | false = false;
     if (country) {
@@ -1928,7 +1940,7 @@ export const createCustomer = CatchAsyncError(
       );
       countryId = countryMatch[0]?.id ?? false;
     }
- 
+
     // ── Parent company ─────────────────────────────────────────────────────
     let parentId: number | false = false;
     if (company) {
@@ -1938,7 +1950,7 @@ export const createCustomer = CatchAsyncError(
         [[["name", "=", company], ["is_company", "=", true]]],
         { fields: ["id"], limit: 1 },
       );
- 
+
       if (existingCompany.length > 0) {
         parentId = existingCompany[0].id;
       } else {
@@ -1947,15 +1959,8 @@ export const createCustomer = CatchAsyncError(
         ]);
       }
     }
- 
-    // ── Fiscal position for exempt customers ───────────────────────────────
-    let fiscalPositionId: number | false = false;
-    if (isTaxExempt) {
-      const fpId = await getTaxExemptFiscalPositionId();
-      if (fpId) fiscalPositionId = fpId;
-    }
- 
-    // ── Create partner in Odoo ─────────────────────────────────────────────
+
+    // ── Create partner in Odoo (no custom fields — plain res.partner) ──────
     const customerId = await odooRequest("res.partner", "create", [
       {
         name,
@@ -1966,19 +1971,19 @@ export const createCustomer = CatchAsyncError(
         country_id:   countryId,
         parent_id:    parentId,
         customer_rank: 1,
-        // ── Tax Exemption ────────────────────────────────────────────
-       
-        ...(fiscalPositionId && {
-          property_account_position_id: fiscalPositionId,
-        }),
       },
     ]);
- 
+
+    // ── Tax exemption lives in Mongo, not Odoo ──────────────────────────────
+    if (isTaxExempt) {
+      await CustomerTaxExemption.create({ odooPartnerId: customerId, exempt: true });
+    }
+
     res.status(201).json({
       status: "success",
       message: "Customer created successfully",
       customerId,
-      isTaxExempt,
+      isTaxExempt: !!isTaxExempt,
     });
   },
 );
