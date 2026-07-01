@@ -180,7 +180,7 @@ const ReturnOrder = () => {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white hover:opacity-90 rounded-lg shadow-md"
+              className="w-full bg-linear-to-r from-indigo-600 via-purple-600 to-blue-600 text-white hover:opacity-90 rounded-lg shadow-md"
             >
               {isLoading ? "Processing..." : "Submit Return"}
             </Button>
