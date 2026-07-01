@@ -572,14 +572,14 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
     });
     currentAbctRate = abctTax?.amount ? abctTax.amount / 100 : null;
   }
-
+ 
   const orders = await odooRequest(
     "pos.order",
     "search_read",
     [[["session_id", "=", sessionId]]],
     { fields: ["id", "pos_reference", "amount_total", "amount_tax", "state", "lines", "partner_id"] },
   );
-
+ 
   const allLineIds = orders.flatMap((o: any) => o.lines || []);
   const lines = allLineIds.length
     ? await odooRequest(
@@ -594,22 +594,22 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
         },
       )
     : [];
-
+ 
   const linesByOrder: Record<number, any[]> = {};
   for (const l of lines) {
     const oid = l.order_id[0];
     (linesByOrder[oid] ||= []).push(l);
   }
-
+ 
   // Orders in a state Odoo excludes from the accounting moves it posts.
   // Extend this set if your Odoo version also skips other states (e.g.
   // "draft" shouldn't reach here since closeSession resolves/blocks those
   // earlier, but it's harmless to include for safety).
   const STATES_EXCLUDED_FROM_POSTING = new Set(["cancel", "draft"]);
-
+ 
   const findings = orders.map((o: any) => {
     const orderLines = linesByOrder[o.id] || [];
-
+ 
     const lineFindings = orderLines
       .map((l: any) => {
         const storedTax = Math.round((l.price_subtotal_incl - l.price_subtotal) * 100) / 100;
@@ -619,7 +619,7 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
             ? Math.round(l.price_subtotal * currentAbctRate * 100) / 100
             : 0;
         const delta = Math.round((storedTax - expectedTax) * 100) / 100;
-
+ 
         return {
           lineId: l.id,
           product: l.product_id?.[1],
@@ -632,10 +632,10 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
         };
       })
       .filter((f: any) => f.mismatched);
-
+ 
     const orderTaxDelta = lineFindings.reduce((s: number, f: any) => s + f.delta, 0);
     const excludedFromTotal = STATES_EXCLUDED_FROM_POSTING.has(o.state);
-
+ 
     return {
       orderId: o.id,
       reference: o.pos_reference,
@@ -648,16 +648,16 @@ async function diagnoseSessionTaxDelta(sessionId: number) {
       lines: lineFindings,
     };
   });
-
+ 
   // Only sum orders Odoo would actually post — this is what needs to line
   // up against the wizard's amount_to_balance.
   const totalDelta = findings
     .filter((f: any) => !f.excludedFromTotal)
     .reduce((s: number, f: any) => s + f.orderTaxDelta, 0);
-
+ 
   const flaggedOrders = findings.filter((f: any) => f.mismatchedLineCount > 0);
   const excludedOrderCount = flaggedOrders.filter((f: any) => f.excludedFromTotal).length;
-
+ 
   return {
     currentAbctRate,
     totalOrders: orders.length,
