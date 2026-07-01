@@ -512,7 +512,55 @@ async function getOrCreateWalkInCustomer(): Promise<number> {
   cachedWalkInPartnerId = newId;
   return newId;
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Refund payment method resolver — a "Return of POS-XXXX" order created via
+// Odoo's return flow lands in draft with amount_total < 0 and amount_paid = 0
+// because no refund payment line was ever attached. We recover it by adding
+// a pos.payment matching the refund amount, preferring the same method used
+// on the original order (so a card refund doesn't get quietly repaid in cash).
+// ─────────────────────────────────────────────────────────────────────────────
+async function resolveRefundPaymentMethodId(order: any, sessionId: number): Promise<number> {
+  const match = /Return of (\S+)/.exec(order.pos_reference || order.name || "");
+  const originalRef = match?.[1];
 
+  if (originalRef) {
+    const [originalOrder] = await odooRequest(
+      "pos.order",
+      "search_read",
+      [[["pos_reference", "=", originalRef]]],
+      { fields: ["id", "payment_ids"], limit: 1 },
+    );
+
+    if (originalOrder?.payment_ids?.length) {
+      const [firstPayment] = await odooRequest(
+        "pos.payment",
+        "search_read",
+        [[["id", "in", originalOrder.payment_ids]]],
+        { fields: ["payment_method_id"], limit: 1 },
+      );
+      if (firstPayment?.payment_method_id?.[0]) {
+        return firstPayment.payment_method_id[0];
+      }
+    }
+  }
+
+  // Fallback: cash method on this session's config
+  const [sessionData] = await odooRequest("pos.session", "read", [[sessionId]], {
+    fields: ["config_id"],
+  });
+  const configId = sessionData?.config_id?.[0];
+
+  const methods = await odooRequest(
+    "pos.payment.method",
+    "search_read",
+    [[["config_ids", "in", configId ? [configId] : []]]],
+    { fields: ["id", "is_cash_count"] },
+  );
+  const cashMethod = methods.find((m: any) => m.is_cash_count);
+  if (cashMethod) return cashMethod.id;
+
+  throw new Error(`Could not resolve a payment method for refund order ${order.pos_reference}`);
+}
 export const closeSession = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { sessionId } = req.body;
@@ -615,91 +663,120 @@ export const closeSession = CatchAsyncError(
 
       const stillDraft: any[] = [];
 
-      for (const order of draftOrders) {
-        const diagnostic: any = {
-          reference:   order.pos_reference,
-          amountTotal: order.amount_total,
-          amountPaid:  order.amount_paid,
-        };
+     for (const order of draftOrders) {
+  const diagnostic: any = {
+    reference:   order.pos_reference,
+    amountTotal: order.amount_total,
+    amountPaid:  order.amount_paid,
+  };
 
-        try {
-          const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
-          const isExactPaid = order.amount_paid === order.amount_total && order.amount_total > 0;
+  try {
+    const isRefund = order.amount_total < 0;
 
-          if (isOverpaid) {
-            const payments = await odooRequest(
-              "pos.payment",
-              "search_read",
-              [[["id", "in", order.payment_ids]]],
-              { fields: ["id", "amount"] },
-            );
+    // ── Return/refund order missing its refund payment line ──────────────
+    if (isRefund && order.amount_paid === 0) {
+      const refundMethodId = await resolveRefundPaymentMethodId(order, Number(sessionId));
 
-            let remaining = order.amount_total;
-            const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
+      await odooRequest("pos.payment", "create", [{
+        pos_order_id:       order.id,
+        amount:              order.amount_total,
+        payment_method_id:   refundMethodId,
+      }]);
 
-            for (const p of sorted) {
-              const applied = Math.max(0, Math.min(p.amount, remaining));
-              remaining = Math.round((remaining - applied) * 100) / 100;
-              if (applied !== p.amount) {
-                await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
-              }
-            }
+      await odooRequest("pos.order", "write", [
+        [order.id],
+        { amount_paid: order.amount_total, amount_return: 0 },
+      ]);
 
-            const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
+      try {
+        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+        console.log("[CLOSE SESSION] Recovered refund order:", order.pos_reference);
+        continue;
+      } catch (payErr: any) {
+        const msg: string = payErr?.message || "";
 
-            await odooRequest("pos.order", "write", [
-              [order.id],
-              { amount_paid: order.amount_total, amount_return: change },
-            ]);
+        if (msg.includes("does not contain a customer")) {
+          if (!order.partner_id) {
+            const walkInId = await getOrCreateWalkInCustomer();
+            await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+            console.log("[CLOSE SESSION] Recovered refund order via walk-in customer:", order.pos_reference);
+            continue;
           }
-
-          if (isOverpaid || isExactPaid) {
-            try {
-              await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-              console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
-              continue; // resolved, don't add to stillDraft
-            } catch (payErr: any) {
-              const msg: string = payErr?.message || "";
-
-              // Payment method requires an identified customer.
-              if (msg.includes("does not contain a customer")) {
-                if (!order.partner_id) {
-                  const walkInId = await getOrCreateWalkInCustomer();
-                  await odooRequest("pos.order", "write", [
-                    [order.id],
-                    { partner_id: walkInId },
-                  ]);
-                  await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
-                  console.log(
-                    "[CLOSE SESSION] Recovered draft order via walk-in customer:",
-                    order.pos_reference,
-                  );
-                  continue; // resolved, don't add to stillDraft
-                }
-
-                diagnostic.reason = "missing_customer_for_account_payment";
-                diagnostic.detail = msg;
-                stillDraft.push(diagnostic);
-                continue;
-              }
-
-              // Unknown failure on an otherwise-paid order — surface as-is.
-              throw payErr;
-            }
-          }
-
-          diagnostic.reason = "underpaid_or_zero_total";
-        } catch (err: any) {
-          console.error(
-            "[CLOSE SESSION] Could not auto-resolve draft order:",
-            order.pos_reference,
-            err?.message,
-          );
-          diagnostic.reason = err?.message || "unknown_odoo_error";
+          diagnostic.reason = "missing_customer_for_account_payment";
+          diagnostic.detail = msg;
+          stillDraft.push(diagnostic);
+          continue;
         }
 
-        stillDraft.push(diagnostic);
+        throw payErr;
       }
+    }
+
+    const isOverpaid  = order.amount_paid > order.amount_total && order.amount_total > 0;
+    const isExactPaid = order.amount_paid === order.amount_total && order.amount_total !== 0;
+
+    if (isOverpaid) {
+      const payments = await odooRequest(
+        "pos.payment",
+        "search_read",
+        [[["id", "in", order.payment_ids]]],
+        { fields: ["id", "amount"] },
+      );
+
+      let remaining = order.amount_total;
+      const sorted = [...payments].sort((a: any, b: any) => b.amount - a.amount);
+
+      for (const p of sorted) {
+        const applied = Math.max(0, Math.min(p.amount, remaining));
+        remaining = Math.round((remaining - applied) * 100) / 100;
+        if (applied !== p.amount) {
+          await odooRequest("pos.payment", "write", [[p.id], { amount: applied }]);
+        }
+      }
+
+      const change = Math.round((order.amount_paid - order.amount_total) * 100) / 100;
+
+      await odooRequest("pos.order", "write", [
+        [order.id],
+        { amount_paid: order.amount_total, amount_return: change },
+      ]);
+    }
+
+    if (isOverpaid || isExactPaid) {
+      try {
+        await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+        console.log("[CLOSE SESSION] Recovered draft order:", order.pos_reference);
+        continue;
+      } catch (payErr: any) {
+        const msg: string = payErr?.message || "";
+
+        if (msg.includes("does not contain a customer")) {
+          if (!order.partner_id) {
+            const walkInId = await getOrCreateWalkInCustomer();
+            await odooRequest("pos.order", "write", [[order.id], { partner_id: walkInId }]);
+            await odooRequest("pos.order", "action_pos_order_paid", [[order.id]]);
+            console.log("[CLOSE SESSION] Recovered draft order via walk-in customer:", order.pos_reference);
+            continue;
+          }
+          diagnostic.reason = "missing_customer_for_account_payment";
+          diagnostic.detail = msg;
+          stillDraft.push(diagnostic);
+          continue;
+        }
+
+        throw payErr;
+      }
+    }
+
+    diagnostic.reason = "underpaid_or_zero_total";
+  } catch (err: any) {
+    console.error("[CLOSE SESSION] Could not auto-resolve draft order:", order.pos_reference, err?.message);
+    diagnostic.reason = err?.message || "unknown_odoo_error";
+  }
+
+  stillDraft.push(diagnostic);
+}
 
       if (stillDraft.length) {
         console.log("[CLOSE SESSION] Unresolved draft orders detail:", stillDraft);
