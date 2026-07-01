@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { CatchAsyncError } from "../middleware/catchAsyncError.js";
 import ErrorHandler from "../utils/ErrorHandler.js";
 import { odooRequest } from "../odoo/odoo.client.js";
+import { getOrCreateWalkInCustomer } from "./posSession.controller.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,9 +149,6 @@ export const lookupReceipt = CatchAsyncError(
 );
 
 // ─── Create Return ────────────────────────────────────────────────────────────
-// POST /returns
-// Uses pos.order _create_from_ui or direct create with refunded_orderline_id
-// which is the native Odoo way to mark a POS return
 
 export const createReturn = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -223,8 +221,6 @@ export const createReturn = CatchAsyncError(
     const sessionId: number = originalOrder.session_id?.[0];
 
     // 3. Get payment method id from original order
- // 3. Resolve payment method: use what the client requested for the refund,
-// fall back to the original order's payment method if not specified
 let paymentMethodId: number | false = false;
 
 if (paymentMethod) {
@@ -342,17 +338,36 @@ const returnLines = itemsWithRealTax.map((item) => {
       );
 
     // 8. Add the refund payment so it shows as paid in Odoo
-    if (paymentMethodId) {
-      await odooRequest("pos.payment", "create", [
-        {
-          pos_order_id: returnOrderId,
-          payment_method_id: paymentMethodId,
-          amount: -total,
-        },
-      ]).catch(() => {
-        // Non-fatal: order is created, payment line optional
-      });
+
+if (paymentMethodId) {
+  try {
+    await odooRequest("pos.payment", "create", [{
+      pos_order_id: returnOrderId,
+      payment_method_id: paymentMethodId,
+      amount: -total,
+    }]);
+
+    // Without this, the order stays in "draft" until closeSession's
+    // recovery logic runs later — see resolveRefundPaymentMethodId comment.
+    await odooRequest("pos.order", "write", [
+      [returnOrderId],
+      { amount_paid: -total, amount_return: 0 },
+    ]);
+
+    await odooRequest("pos.order", "action_pos_order_paid", [[returnOrderId]]);
+  } catch (err: any) {
+    const msg: string = err?.message || "";
+    if (msg.includes("does not contain a customer")) {
+      // same walk-in fallback closeSession uses for Customer Account methods
+      const walkInId = await getOrCreateWalkInCustomer();
+      await odooRequest("pos.order", "write", [[returnOrderId], { partner_id: walkInId }]);
+      await odooRequest("pos.order", "action_pos_order_paid", [[returnOrderId]]);
+    } else {
+      console.error("[CREATE RETURN] Could not mark return as paid:", msg);
+      // non-fatal — it'll still get caught by closeSession's recovery later
     }
+  }
+}
 
     // 9. Read back the created return order
     const [returnOrder] = await odooRequest(
@@ -397,9 +412,6 @@ const returnLines = itemsWithRealTax.map((item) => {
 );
 
 // ─── Get Returns ──────────────────────────────────────────────────────────────
-// GET /returns
-// A POS return in native Odoo = order whose lines have refunded_orderline_id set
-// We identify them by pos_reference containing "Return" OR by checking lines
 
 export const getReturns = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -652,43 +664,36 @@ export const voidReturn = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const id = Number(req.params.id);
     const { voidedBy, notes } = req.body;
-
     if (isNaN(id)) return next(new ErrorHandler("Invalid ID", 400));
 
     const orders: any[] = await odooRequest("pos.order", "read", [[id]], {
       fields: ["id", "name", "state", "pos_reference"],
     });
-
-    if (!orders?.length)
-      return next(new ErrorHandler("Return order not found", 404));
-
+    if (!orders?.length) return next(new ErrorHandler("Return order not found", 404));
     const order = orders[0];
 
     if (order.state === "cancel")
       return next(new ErrorHandler("Return order is already voided", 400));
 
-    // Try native cancel method first, fall back to direct write
-    await odooRequest("pos.order", "action_pos_order_cancel", [[id]]).catch(
-      async () => {
-        await odooRequest("pos.order", "write", [
-          [id],
-          {
-            state: "cancel",
-          },
-        ]);
-      },
-    );
+    if (order.state === "done" || order.state === "invoiced") {
+      return next(new ErrorHandler(
+        "This return's session has already been closed and its accounting " +
+        "entries posted — it can no longer be voided from here. It needs a " +
+        "reversing entry in the Odoo backend instead.",
+        409,
+      ));
+    }
+
+    try {
+      await odooRequest("pos.order", "action_pos_order_cancel", [[id]]);
+    } catch (err: any) {
+      return next(new ErrorHandler(err?.message || "Odoo rejected the void", 409));
+    }
 
     res.status(200).json({
       success: true,
       message: "Return order voided successfully",
-      return: {
-        _id: String(id),
-        returnNumber: order.name,
-        status: "voided",
-        voidedBy: voidedBy ?? "Unknown",
-        voidedAt: new Date().toISOString(),
-      },
+      return: { _id: String(id), returnNumber: order.name, status: "voided", voidedBy: voidedBy ?? "Unknown", voidedAt: new Date().toISOString() },
     });
   },
 );

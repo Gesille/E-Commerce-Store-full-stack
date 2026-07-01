@@ -486,7 +486,7 @@ export const confirmOpeningBalance = CatchAsyncError(
 
 let cachedWalkInPartnerId: number | null = null;
 
-async function getOrCreateWalkInCustomer(): Promise<number> {
+export async function getOrCreateWalkInCustomer(): Promise<number> {
   if (cachedWalkInPartnerId) return cachedWalkInPartnerId;
 
   const existing = await odooRequest(

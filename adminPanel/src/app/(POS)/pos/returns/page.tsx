@@ -22,6 +22,7 @@ import { useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
 import { format } from "date-fns";
 import { useCreateReturnMutation, useGetReturnsQuery, useLazyLookupReceiptQuery, useVoidReturnMutation } from "@/redux/returns/Returnsapi";
+import toast from "react-hot-toast";
 
 
 
@@ -608,17 +609,18 @@ function ReturnHistory() {
   };
   const totalPages = data?.pages ?? 1;
 
-  const handleVoid = async (id: string) => {
-    if (!confirm("Are you sure you want to void this return?")) return;
-    setVoidingId(id);
-    try {
-      await voidReturnMutation({ id, notes: "Voided by manager" }).unwrap();
-    } catch {
-      // error handled silently; RTK will invalidate cache so list refreshes
-    } finally {
-      setVoidingId(null);
-    }
-  };
+const handleVoid = async (id: string) => {
+  if (!confirm("Are you sure you want to void this return?")) return;
+  setVoidingId(id);
+  try {
+    await voidReturnMutation({ id, notes: "Voided by manager" }).unwrap();
+    toast("success");  
+  } catch (err: any) {
+   toast("error", err?.data?.message || "Could not void this return.");
+  } finally {
+    setVoidingId(null);
+  }
+};
 
   const clearFilters = () => {
     setSearch("");
