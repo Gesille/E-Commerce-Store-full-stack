@@ -15,14 +15,12 @@ import {
   Ban,
   Eye,
   RefreshCw,
-  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
 import { format } from "date-fns";
 import { useCreateReturnMutation, useGetReturnsQuery, useLazyLookupReceiptQuery, useVoidReturnMutation } from "@/redux/returns/Returnsapi";
-import toast from "react-hot-toast";
 
 
 
@@ -47,10 +45,6 @@ const RETURN_REASONS = [
   "Item not as described",
   "Other",
 ];
-
-// Refund methods the cashier can pick — independent of how the customer
-// originally paid. Keep this in sync with the payment methods configured in Odoo.
-const REFUND_METHODS = ["Cash", "Card", "Check", "Bank Transfer", "Store Credit"];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -124,7 +118,6 @@ function ProcessReturn({
   const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
-  const [refundMethod, setRefundMethod] = useState("");
   const [toast, setToast] = useState<{
     type: "success" | "error";
     msg: string;
@@ -141,8 +134,7 @@ function ProcessReturn({
     inputRef.current?.focus();
   }, []);
 
-  // Reset qty map whenever a new receipt loads, and default the refund
-  // method to whatever the customer originally paid with (cashier can change it)
+  // Reset qty map whenever a new receipt loads
   useEffect(() => {
     if (receipt) {
       const qtys: Record<number, number> = {};
@@ -150,7 +142,6 @@ function ProcessReturn({
         qtys[item.productId] = 0;
       });
       setReturnQtys(qtys);
-      setRefundMethod(receipt.paymentMethod || "Cash");
     }
   }, [receipt]);
 
@@ -192,7 +183,6 @@ function ProcessReturn({
     setReason("");
     setNotes("");
     setReturnQtys({});
-    setRefundMethod("");
   };
 
   // Computed totals
@@ -221,10 +211,6 @@ function ProcessReturn({
       showToast("error", "Please select a return reason.");
       return;
     }
-    if (!refundMethod) {
-      showToast("error", "Please select a refund method.");
-      return;
-    }
     if (!selectedItems.length) {
       showToast("error", "Select at least one item to return.");
       return;
@@ -237,7 +223,7 @@ function ProcessReturn({
         cashier: user?.name || "Unknown",
         cashierId: user?._id,
         reason,
-        paymentMethod: refundMethod,
+        paymentMethod: receipt.paymentMethod,
         notes,
         items: selectedItems.map((item:any) => ({
           productId: item.productId,
@@ -252,7 +238,7 @@ function ProcessReturn({
       const data = await createReturn(payload).unwrap();
       showToast(
         "success",
-        `Return ${data.return.returnNumber} processed — $${total.toFixed(2)} refunded via ${refundMethod}.`
+        `Return ${data.return.returnNumber} processed — $${total.toFixed(2)} refunded.`
       );
       clearReceipt();
       setTimeout(onSuccess, 1500);
@@ -353,7 +339,7 @@ function ProcessReturn({
                       ),
                     },
                     { label: "Cashier", value: receipt.cashier },
-                    { label: "Original payment", value: receipt.paymentMethod },
+                    { label: "Payment", value: receipt.paymentMethod },
                     {
                       label: "Original total",
                       value: `$${receipt.originalTotal.toFixed(2)}`,
@@ -477,7 +463,7 @@ function ProcessReturn({
 
           {/* Summary + Actions */}
           <div className="bg-background border rounded-xl p-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">
                   Return reason *
@@ -494,28 +480,6 @@ function ProcessReturn({
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-                  <CreditCard size={12} /> Refund method *
-                </label>
-                <select
-                  value={refundMethod}
-                  onChange={(e) => setRefundMethod(e.target.value)}
-                  className="w-full h-10 px-3 border rounded-lg text-sm bg-background focus:outline-none focus:ring-1 focus:ring-foreground"
-                >
-                  <option value="">Select refund method…</option>
-                  {REFUND_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                {refundMethod && refundMethod !== receipt.paymentMethod && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                    Differs from original payment ({receipt.paymentMethod})
-                  </p>
-                )}
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">
@@ -553,7 +517,7 @@ function ProcessReturn({
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={processReturn}
-                disabled={submitting || !selectedItems.length || !reason || !refundMethod}
+                disabled={submitting || !selectedItems.length || !reason}
                 className="flex-1 h-10 bg-foreground text-background rounded-lg text-sm flex items-center justify-center gap-1.5 hover:opacity-90 transition disabled:opacity-40"
               >
                 {submitting ? (
@@ -609,18 +573,17 @@ function ReturnHistory() {
   };
   const totalPages = data?.pages ?? 1;
 
-const handleVoid = async (id: string) => {
-  if (!confirm("Are you sure you want to void this return?")) return;
-  setVoidingId(id);
-  try {
-    await voidReturnMutation({ id, notes: "Voided by manager" }).unwrap();
-    toast("success");  
-  } catch (err: any) {
-   toast("error", err?.data?.message || "Could not void this return.");
-  } finally {
-    setVoidingId(null);
-  }
-};
+  const handleVoid = async (id: string) => {
+    if (!confirm("Are you sure you want to void this return?")) return;
+    setVoidingId(id);
+    try {
+      await voidReturnMutation({ id, notes: "Voided by manager" }).unwrap();
+    } catch {
+      // error handled silently; RTK will invalidate cache so list refreshes
+    } finally {
+      setVoidingId(null);
+    }
+  };
 
   const clearFilters = () => {
     setSearch("");
